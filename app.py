@@ -19,7 +19,7 @@ def processar_texto_copiado(texto_bruto):
     # Normaliza o texto removendo quebras de linha abruptas para leitura linear estável
     texto_limpo = " ".join(texto_bruto.split())
     
-    # PADRÃO 1: Se for um texto corrido contendo "confrontando com [Nome]"
+    # PADRÃO 1: Se for un texto corrido contendo "confrontando com [Nome]"
     if "confrontando com" in texto_limpo.lower():
         pattern = r"[Dd]o ponto (\d+)\s*\([^)]*N\(Y\):\s*([\d\.,\s]+)m;\s*E\(X\):\s*([\d\.,\s]+)m\)\s*segue na direção\s*([^,]+),\s*percorrendo uma distância de\s*([\d\.,\s]+)m\s*até o ponto (\d+),\s*confrontando com\s*([^,.]+)"
         matches = re.findall(pattern, texto_limpo)
@@ -41,6 +41,8 @@ def processar_texto_copiado(texto_bruto):
         linhas = texto_bruto.split('\n')
         for i, linha in enumerate(linhas):
             linha = linha.strip()
+            # Corrige o "M" grego oculto vindo de OCR de plantas para o "M" padrão
+            linha = linha.replace('Μ', 'M')
             
             match_vertices = re.match(r'^["\s]*(\d+)\s+["\s]*(\d+)', linha)
             if match_vertices:
@@ -49,7 +51,7 @@ def processar_texto_copiado(texto_bruto):
                 
                 coordenadas = re.findall(r'(\d[\d\.]*,\d{2})', linha)
                 if len(coordenadas) < 2 and (i + 1) < len(linhas):
-                    linha_seguinte = linhas[i+1].strip()
+                    linha_seguinte = linhas[i+1].strip().replace('Μ', 'M')
                     coordenadas += re.findall(r'(\d[\d\.]*,\d{2})', linha_seguinte)
                     linha = linha + " " + linha_seguinte
                     
@@ -70,16 +72,21 @@ def processar_texto_copiado(texto_bruto):
                     azimute = azimute.replace('^', '').replace('"', '').replace("'", "'")
                     azimute = re.sub(r'\s+', '', azimute)
                 
-                match_dist = re.search(r'(\d+,\d+|\d+\.\d+)\s*m', linha, re.IGNORECASE)
+                match_dist = re.search(r'(\d+, \d+|\d+\.\d+)\s*m', linha, re.IGNORECASE)
                 distancia = match_dist.group(1) if match_dist else ""
                 if distancia:
                     distancia = distancia.replace('.', ',')
                 
+                # --- ALTERAÇÃO E CORREÇÃO CRÍTICA AQUI ---
                 # Tenta capturar um nome no final da linha se existir, caso contrário usa "CONFRONTANTE"
                 nome_confrontante = "CONFRONTANTE"
-                match_conf_tabular = re.search(r'(?:confrontando com|com|vizinho)\s+([A-Za-zÀ-ÿ\s]+)$', linha, re.IGNORECASE)
+                match_conf_tabular = re.search(r'(?:confrontando com|com|vizinho)\s+(.+)$', linha, re.IGNORECASE)
                 if match_conf_tabular:
-                    nome_confrontante = match_conf_tabular.group(1).strip().upper()
+                    nome_limpo = match_conf_tabular.group(1).strip()
+                    # Remove aspas ou barras que possam ter sobrado grudadas no fim pelo parser do PDF
+                    nome_limpo = re.sub(r'["\s\\/]+$', '', nome_limpo)
+                    nome_confrontante = nome_limpo.upper()
+                # ----------------------------------------
                 
                 if ny and azimute and distancia:
                     segmentos.append({
