@@ -1,8 +1,3 @@
-Aqui está o código **completo, corrigido e totalmente atualizado** para o seu ficheiro do **Streamlit**.
-
-Esta versão já inclui o **processador inteligente flexível**, o que significa que ele vai aceitar as linhas da tabela tanto se terminarem com `m com NOME`, `m confrontando com NOME` ou apenas `m NOME`. Toda a "sujeira" de formatação (cifrões, aspas, chaves) é limpa antes de ler o confrontante para garantir que nenhum ponto fique como "CONFRONTANTE" por erro de leitura.
-
-```python
 import os
 import re
 import docx
@@ -256,5 +251,3 @@ if st.button('Processar Dados do Memorial', type='primary'):
                     )
             except Exception as e:
                 st.error(f"❌ Erro crítico no processamento: {str(e)}")
-
-```
