@@ -11,98 +11,88 @@ import streamlit as st
 st.set_page_config(page_title="Gerador de Memorial Descritivo", page_icon="📄", layout="wide")
 
 # ==========================================
-# 1. MAPEAMENTO FIXO DOS CONFRONTANTES (PLANTA)
-# ==========================================
-def obter_confrontantes_planta():
-    return [
-        {"de": 1, "para": 2, "nome": "WILSON SCHULTAIS"},
-        {"de": 2, "para": 3, "nome": "WILSON SCHULTAIS"},
-        {"de": 3, "para": 4, "nome": "ROSIMERE CAMPOS DELORTO LAGASSI"},
-        {"de": 4, "para": 5, "nome": "ROSIMERE CAMPOS DELORTO LAGASSI"},
-        {"de": 5, "para": 6, "nome": "ROSIMERE CAMPOS DELORTO LAGASSI"},
-        {"de": 6, "para": 7, "nome": "ESTRADA MUNICIPAL"},
-        {"de": 7, "para": 8, "nome": "ESTRADA MUNICIPAL"},
-        {"de": 8, "para": 9, "nome": "GILMAR CAMPOS DELORTO"},
-        {"de": 9, "para": 10, "nome": "GILMAR CAMPOS DELORTO"},
-        {"de": 10, "para": 1, "nome": "ESTRADA MUNICIPAL"}
-    ]
-
-# ==========================================
-# 2. PROCESSADOR DO TEXTO COLADO
+# 1. PROCESSADOR INTELIGENTE DE TEXTO COPIADO
 # ==========================================
 def processar_texto_copiado(texto_bruto):
-    regras = obter_confrontantes_planta()
     segmentos = []
     
-    linhas = texto_bruto.split('\n')
+    # Normaliza o texto removendo quebras de linha abruptas para leitura linear estável
+    texto_limpo = " ".join(texto_bruto.split())
     
-    for i, linha in enumerate(linhas):
-        linha = linha.strip()
+    # PADRÃO 1: Se for um texto corrido contendo "confrontando com [Nome]"
+    if "confrontando com" in texto_limpo.lower():
+        pattern = r"[Dd]o ponto (\d+)\s*\([^)]*N\(Y\):\s*([\d\.,\s]+)m;\s*E\(X\):\s*([\d\.,\s]+)m\)\s*segue na direção\s*([^,]+),\s*percorrendo uma distância de\s*([\d\.,\s]+)m\s*até o ponto (\d+),\s*confrontando com\s*([^,.]+)"
+        matches = re.findall(pattern, texto_limpo)
         
-        # Identifica o padrão de início com dois números (vértices)
-        match_vertices = re.match(r'^["\s]*(\d+)\s+["\s]*(\d+)', linha)
-        if match_vertices:
-            de = int(match_vertices.group(1))
-            para = int(match_vertices.group(2))
+        for m in matches:
+            de, ny, nx, az, dist, para, conf = m
+            segmentos.append({
+                "de": int(de),
+                "para": int(para),
+                "y": ny.strip(),
+                "x": nx.strip(),
+                "azimute": az.strip().replace('^', '').replace('"', '').replace("'", "'"),
+                "distancia": dist.strip().replace('.', ','),
+                "confrontante": conf.strip().upper()  # Força o nome do confrontante em maiúsculas
+            })
             
-            # Captura números no formato de coordenadas topográficas
-            coordenadas = re.findall(r'(\d[\d\.]*,\d{2})', linha)
+    # PADRÃO 2: Se for a tabela pura copiada linha por linha
+    else:
+        linhas = texto_bruto.split('\n')
+        for i, linha in enumerate(linhas):
+            linha = linha.strip()
             
-            # Se os dados quebraram de linha na cópia, junta com a linha de baixo
-            if len(coordenadas) < 2 and (i + 1) < len(linhas):
-                linha_seguinte = linhas[i+1].strip()
-                coordenadas += re.findall(r'(\d[\d\.]*,\d{2})', linha_seguinte)
-                linha = linha + " " + linha_seguinte
+            match_vertices = re.match(r'^["\s]*(\d+)\s+["\s]*(\d+)', linha)
+            if match_vertices:
+                de = int(match_vertices.group(1))
+                para = int(match_vertices.group(2))
                 
-            ny, nx = "", ""
-            for coord in coordenadas:
-                if coord.startswith('7'):
-                    ny = coord
-                elif coord.startswith('3'):
-                    nx = coord
-            
-            # Limpa e formata o Azimute (remove chaves e traduz LaTeX)
-            match_az = re.search(r'\$(.*?)\$', linha)
-            azimute = ""
-            if match_az:
-                azimute = match_az.group(1)
-                azimute = azimute.replace(r'\circ', '°').replace(r'\prime\prime', '"').replace(r'\prime', "'")
-                azimute = azimute.replace('{', '').replace('}', '')
-                azimute = re.sub(r'\s+', '', azimute)
-            else:
-                match_az_txt = re.search(r'(\d+°\d+[\'\"]\d+[\'\"]|\d+°\d+\'\d+\")', linha)
-                if match_az_txt:
-                    azimute = match_az_txt.group(1)
-            
-            # REMOÇÃO EXTRA DE CARACTERES POLUENTES
-            if azimute:
-                azimute = azimute.replace('^', '').replace('"', '').replace("'", "'")
-                azimute = re.sub(r'\s+', '', azimute)
-            
-            # Captura a Distância
-            match_dist = re.search(r'(\d+,\d+|\d+\.\d+)\s*m', linha, re.IGNORECASE)
-            distancia = match_dist.group(1) if match_dist else ""
-            if distancia:
-                distancia = distancia.replace('.', ',')
-            
-            if ny and azimute and distancia:
-                nome_confrontante = "ESTRADA MUNICIPAL"
-                for conf in regras:
-                    if conf["de"] == de and conf["para"] == para:
-                        nome_confrontante = conf["nome"]
-                        break
+                coordenadas = re.findall(r'(\d[\d\.]*,\d{2})', linha)
+                if len(coordenadas) < 2 and (i + 1) < len(linhas):
+                    linha_seguinte = linhas[i+1].strip()
+                    coordenadas += re.findall(r'(\d[\d\.]*,\d{2})', linha_seguinte)
+                    linha = linha + " " + linha_seguinte
+                    
+                ny, nx = "", ""
+                for coord in coordenadas:
+                    if coord.startswith('7'): ny = coord
+                    elif coord.startswith('3'): nx = coord
                 
-                segmentos.append({
-                    "de": de, "para": para, "y": ny, "x": nx if nx else "361.359,84",
-                    "azimute": azimute, "distancia": distancia,
-                    "confrontante": nome_confrontante
-                })
+                match_az = re.search(r'\$(.*?)\$', linha)
+                azimute = ""
+                if match_az:
+                    azimute = match_az.group(1).replace(r'\circ', '°').replace(r'\prime\prime', '"').replace(r'\prime', "'").replace('{', '').replace('}', '')
+                else:
+                    match_az_txt = re.search(r'(\d+°\d+[\'\"]\d+[\'\"]|\d+°\d+\'\d+\")', linha)
+                    if match_az_txt: azimute = match_az_txt.group(1)
                 
+                if azimute:
+                    azimute = azimute.replace('^', '').replace('"', '').replace("'", "'")
+                    azimute = re.sub(r'\s+', '', azimute)
+                
+                match_dist = re.search(r'(\d+,\d+|\d+\.\d+)\s*m', linha, re.IGNORECASE)
+                distancia = match_dist.group(1) if match_dist else ""
+                if distancia:
+                    distancia = distancia.replace('.', ',')
+                
+                # Tenta capturar um nome no final da linha se existir, caso contrário usa "CONFRONTANTE"
+                nome_confrontante = "CONFRONTANTE"
+                match_conf_tabular = re.search(r'(?:confrontando com|com|vizinho)\s+([A-Za-zÀ-ÿ\s]+)$', linha, re.IGNORECASE)
+                if match_conf_tabular:
+                    nome_confrontante = match_conf_tabular.group(1).strip().upper()
+                
+                if ny and azimute and distancia:
+                    segmentos.append({
+                        "de": de, "para": para, "y": ny, "x": nx if nx else "361.359,84",
+                        "azimute": azimute, "distancia": distancia,
+                        "confrontante": nome_confrontante
+                    })
+                    
     segmentos.sort(key=lambda x: x['de'])
     return segmentos
 
 # ==========================================
-# 3. GERADOR DO DOCUMENTO EM MEMÓRIA
+# 2. GERADOR DO DOCUMENTO EM MEMÓRIA
 # ==========================================
 def gerar_documento_word(segmentos, nome_proprietario, nome_municipio, area_total, perimetro_total):
     doc = docx.Document()
@@ -134,7 +124,7 @@ def gerar_documento_word(segmentos, nome_proprietario, nome_municipio, area_tota
     p_dados.add_run("Área: ").bold = True
     p_dados.add_run(f"{area_total}")
     
-    # Título da Descrição
+    # Título da Descrição (Centralizado)
     p_desc_tit = doc.add_paragraph()
     p_desc_tit.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p_desc_tit.add_run("\nDESCRIÇÃO").bold = True
@@ -179,7 +169,7 @@ def gerar_documento_word(segmentos, nome_proprietario, nome_municipio, area_tota
     p_data.alignment = WD_ALIGN_PARAGRAPH.LEFT
     p_data.add_run(f"\nVila Valério, {data_atual.day} de {nome_mes_pt} de {data_atual.year}")
     
-    # Bloco de Assinatura
+    # Bloco de Assinatura (Centralizado)
     p_assinatura = doc.add_paragraph()
     p_assinatura.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p_assinatura.add_run("\n______________________________\n").bold = True
@@ -187,19 +177,17 @@ def gerar_documento_word(segmentos, nome_proprietario, nome_municipio, area_tota
     p_assinatura.add_run("Resp. Técnico\n")
     p_assinatura.add_run("CFTA: 11198519711")
     
-    # Salva o documento em um objeto BytesIO (na memória RAM)
     conteudo_arquivo = io.BytesIO()
     doc.save(conteudo_arquivo)
     conteudo_arquivo.seek(0)
     return conteudo_arquivo
 
 # ==========================================
-# 4. INTERFACE WEB (STREAMLIT)
+# 3. INTERFACE WEB (STREAMLIT)
 # ==========================================
-st.title("📄 Gerador de Memorial Descritivo Estruturado")
-st.write("Preencha os dados abaixo e cole a tabela do roteiro perimétrico para gerar o arquivo Word.")
+st.title("📄 Gerador de Memorial Descritivo Dinâmico")
+st.write("Insira os dados abaixo. O sistema lerá os confrontantes reais diretamente do texto enviado!")
 
-# Organização dos campos em colunas
 col1, col2 = st.columns(2)
 with col1:
     txt_proprietario = st.text_input('Proprietário:', value='RONIVON CAMPOS DELORTO')
@@ -209,25 +197,29 @@ with col2:
     txt_area = st.text_input('Área Total:', value='47.863,57 m²')
 
 caixa_texto = st.text_area(
-    'Texto Tabela:', 
-    placeholder='Cole as linhas de texto da tabela do roteiro perimétrico aqui...',
-    height=200
+    'Texto da Tabela ou Memorial Corrido:', 
+    placeholder='Cole aqui os dados extraídos (aceita formato tabular ou o texto corrido do memorial com os confrontantes)...',
+    height=250
 )
 
-# Botão de processamento
 if st.button('Processar Dados do Memorial', type='primary'):
     texto_inserido = caixa_texto.strip()
     
     if not texto_inserido:
-        st.error("❌ Erro: O campo com o texto da tabela está vazio!")
+        st.error("❌ Erro: O campo de texto está vazio!")
     else:
-        with st.spinner("⏳ Processando dados estruturados..."):
+        with st.spinner("⏳ Analisando dados e extraindo confrontantes reais..."):
             try:
                 segmentos = processar_texto_copiado(texto_inserido)
                 if not segmentos:
-                    st.warning("⚠️ Erro: Não foi possível identificar os vértices no texto colado.")
+                    st.warning("⚠️ Erro: Não foi possível estruturar dados válidos com o texto enviado.")
                 else:
-                    # Gera o arquivo na memória
+                    # Mostra um resumo rápido na tela dos confrontantes capturados para validação
+                    st.write("### 🔍 Confrontantes detectados no texto:")
+                    for s in segmentos:
+                        st.info(f"Ponto {s['de']} ➔ Ponto {s['para']}: **{s['confrontante']}**")
+                    
+                    # Gera o documento
                     arquivo_word = gerar_documento_word(
                         segmentos, 
                         txt_proprietario.strip(), 
@@ -236,14 +228,12 @@ if st.button('Processar Dados do Memorial', type='primary'):
                         txt_perimetro.strip()
                     )
                     
-                    st.success("🎉 Concluído com sucesso! O documento foi gerado.")
+                    st.success("🎉 Concluído com sucesso!")
                     
-                    # Nome dinâmico para o download
                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                     nome_slug = re.sub(r'[\\/*?:"<>| ]', '_', txt_proprietario.upper()[:20])
                     nome_arquivo = f"MEMORIAL_{nome_slug}_{timestamp}.docx"
                     
-                    # Cria o botão oficial de baixar o arquivo no navegador
                     st.download_button(
                         label="📥 Baixar Arquivo Word (.docx)",
                         data=arquivo_word,
