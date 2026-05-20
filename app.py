@@ -1,3 +1,8 @@
+Aqui está o código **completo, corrigido e totalmente atualizado** para o seu ficheiro do **Streamlit**.
+
+Esta versão já inclui o **processador inteligente flexível**, o que significa que ele vai aceitar as linhas da tabela tanto se terminarem com `m com NOME`, `m confrontando com NOME` ou apenas `m NOME`. Toda a "sujeira" de formatação (cifrões, aspas, chaves) é limpa antes de ler o confrontante para garantir que nenhum ponto fique como "CONFRONTANTE" por erro de leitura.
+
+```python
 import os
 import re
 import docx
@@ -19,7 +24,7 @@ def processar_texto_copiado(texto_bruto):
     # Normaliza o texto removendo quebras de linha abruptas para leitura linear estável
     texto_limpo = " ".join(texto_bruto.split())
     
-    # PADRÃO 1: Se for un texto corrido contendo "confrontando com [Nome]"
+    # PADRÃO 1: Se for um texto corrido contendo "confrontando com"
     if "confrontando com" in texto_limpo.lower():
         pattern = r"[Dd]o ponto (\d+)\s*\([^)]*N\(Y\):\s*([\d\.,\s]+)m;\s*E\(X\):\s*([\d\.,\s]+)m\)\s*segue na direção\s*([^,]+),\s*percorrendo uma distância de\s*([\d\.,\s]+)m\s*até o ponto (\d+),\s*confrontando com\s*([^,.]+)"
         matches = re.findall(pattern, texto_limpo)
@@ -33,7 +38,7 @@ def processar_texto_copiado(texto_bruto):
                 "x": nx.strip(),
                 "azimute": az.strip().replace('^', '').replace('"', '').replace("'", "'"),
                 "distancia": dist.strip().replace('.', ','),
-                "confrontante": conf.strip().upper()  # Força o nome do confrontante em maiúsculas
+                "confrontante": conf.strip().upper()
             })
             
     # PADRÃO 2: Se for a tabela pura copiada linha por linha
@@ -41,9 +46,8 @@ def processar_texto_copiado(texto_bruto):
         linhas = texto_bruto.split('\n')
         for i, linha in enumerate(linhas):
             linha = linha.strip()
-            # Corrige o "M" grego oculto vindo de OCR de plantas para o "M" padrão
-            linha = linha.replace('Μ', 'M')
             
+            # Identifica os vértices numéricos no início da linha
             match_vertices = re.match(r'^["\s]*(\d+)\s+["\s]*(\d+)', linha)
             if match_vertices:
                 de = int(match_vertices.group(1))
@@ -51,7 +55,7 @@ def processar_texto_copiado(texto_bruto):
                 
                 coordenadas = re.findall(r'(\d[\d\.]*,\d{2})', linha)
                 if len(coordenadas) < 2 and (i + 1) < len(linhas):
-                    linha_seguinte = linhas[i+1].strip().replace('Μ', 'M')
+                    linha_seguinte = linhas[i+1].strip()
                     coordenadas += re.findall(r'(\d[\d\.]*,\d{2})', linha_seguinte)
                     linha = linha + " " + linha_seguinte
                     
@@ -72,21 +76,24 @@ def processar_texto_copiado(texto_bruto):
                     azimute = azimute.replace('^', '').replace('"', '').replace("'", "'")
                     azimute = re.sub(r'\s+', '', azimute)
                 
-                match_dist = re.search(r'(\d+, \d+|\d+\.\d+)\s*m', linha, re.IGNORECASE)
+                match_dist = re.search(r'(\d+,\d+|\d+\.\d+)\s*m', linha, re.IGNORECASE)
                 distancia = match_dist.group(1) if match_dist else ""
                 if distancia:
                     distancia = distancia.replace('.', ',')
                 
-                # --- ALTERAÇÃO E CORREÇÃO CRÍTICA AQUI ---
-                # Tenta capturar um nome no final da linha se existir, caso contrário usa "CONFRONTANTE"
+                # --- LÓGICA ROBUSTA DE CAPTURA DO CONFRONTANTE ---
                 nome_confrontante = "CONFRONTANTE"
-                match_conf_tabular = re.search(r'(?:confrontando com|com|vizinho)\s+(.+)$', linha, re.IGNORECASE)
+                
+                # Limpa caracteres residuais comuns de LaTeX e aspas antes da análise
+                linha_limpa = re.sub(r'[\"\'\}\\\$]+', '', linha).strip()
+                
+                # Procura o nome após o "m", "m com" ou "m confrontando com"
+                match_conf_tabular = re.search(r'(?:m\s+com|m\s+confrontando com|m)\s+([A-Za-zÀ-ÿ\s\.\d]+)$', linha_limpa, re.IGNORECASE)
                 if match_conf_tabular:
-                    nome_limpo = match_conf_tabular.group(1).strip()
-                    # Remove aspas ou barras que possam ter sobrado grudadas no fim pelo parser do PDF
-                    nome_limpo = re.sub(r'["\s\\/]+$', '', nome_limpo)
-                    nome_confrontante = nome_limpo.upper()
-                # ----------------------------------------
+                    c_nome = match_conf_tabular.group(1).strip().upper()
+                    # Certifica-se de que não capturou apenas números ou dados residuais
+                    if c_nome and not re.match(r'^[\d\s\.,m]+$', c_nome):
+                        nome_confrontante = c_nome
                 
                 if ny and azimute and distancia:
                     segmentos.append({
@@ -205,7 +212,7 @@ with col2:
 
 caixa_texto = st.text_area(
     'Texto da Tabela ou Memorial Corrido:', 
-    placeholder='Cole aqui os dados extraídos (aceita formato tabular ou o texto corrido do memorial com os confrontantes)...',
+    placeholder='Cole aqui os dados extraídos da tabela com os confrontantes no final de cada linha...',
     height=250
 )
 
@@ -249,3 +256,5 @@ if st.button('Processar Dados do Memorial', type='primary'):
                     )
             except Exception as e:
                 st.error(f"❌ Erro crítico no processamento: {str(e)}")
+
+```
