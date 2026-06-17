@@ -6,8 +6,10 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Pt
 from pypdf import PdfReader
 import streamlit as st
-import google.generativeai as genai
 from pydantic import BaseModel
+import os
+from google import genai
+from google.genai import types
 
 # Configuração da página do Streamlit
 st.set_page_config(
@@ -17,16 +19,13 @@ st.set_page_config(
 # ==========================================
 # 1. CONFIGURAÇÃO DA API DO GEMINI (NOVO SDK)
 # ==========================================
-import os
-from google import genai
-from google.genai import types
-
 # 1. Injeta a chave de autorização diretamente na memória do sistema (Variável de Ambiente)
 os.environ["GEMINI_API_KEY"] = "AQ.Ab8RN6IvGAjuzov7gtTG8VkVwtijXx_AofJJKgkJNnZVFCJtIQ"
 
 # 2. Inicializa o cliente SEM PASSAR a chave no argumento. 
 # O comando genai.Client() vai ler a chave automaticamente da memória, exatamente como o Google exige!
 client = genai.Client()
+
 # ==========================================
 # 2. EXTRATOR DE TEXTO DE PDF
 # ==========================================
@@ -100,7 +99,7 @@ def analisar_dados_com_gemini(texto_planta, texto_roteiro):
        - "confrontante": O nome do confrontante em letras maiúsculas associado àquele trecho específico.
     """
 
-    # Alterado para "gemini-2.5-flash"
+    # Chamada oficial utilizando o modelo "gemini-2.5-flash"
     response = client.models.generate_content(
         model="gemini-2.5-flash",
         contents=prompt,
@@ -108,7 +107,6 @@ def analisar_dados_com_gemini(texto_planta, texto_roteiro):
             response_mime_type="application/json",
             response_schema=DadosMemorial,
             temperature=0.1,
-    
         ),
     )
 
@@ -207,18 +205,8 @@ def gerar_documento_word(dados):
 
     # Data Atual Automatizada
     meses_pt = {
-        1: "janeiro",
-        2: "fevereiro",
-        3: "março",
-        4: "abril",
-        5: "maio",
-        6: "junho",
-        7: "julho",
-        8: "agosto",
-        9: "setembro",
-        10: "outubro",
-        11: "novembro",
-        12: "dezembro",
+        1: "janeiro", 2: "fevereiro", 3: "março", 4: "abril", 5: "maio", 6: "junho",
+        7: "julho", 8: "agosto", 9: "setembro", 10: "outubro", 11: "novembro", 12: "dezembro"
     }
     data_atual = datetime.now()
     nome_mes = meses_pt[data_atual.month]
@@ -274,7 +262,7 @@ if pdf_planta and pdf_roteiro:
                 texto_planta = extrair_texto_pdf(pdf_planta)
                 texto_roteiro = extrair_texto_pdf(pdf_roteiro)
 
-                # Processamento inteligente via SDK clássico do Gemini (Estável para chaves gcp/oauth)
+                # Processamento inteligente via SDK clássico do Gemini
                 dados_estruturados = analisar_dados_com_gemini(
                     texto_planta, texto_roteiro
                 )
