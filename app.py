@@ -24,7 +24,7 @@ os.environ["GEMINI_API_KEY"] = "AQ.Ab8RN6IvGAjuzov7gtTG8VkVwtijXx_AofJJKgkJNnZVF
 
 # 2. Inicializa o cliente SEM PASSAR a chave no argumento. 
 # O comando genai.Client() vai ler a chave automaticamente da memória, exatamente como o Google exige!
-client = genai.Client()
+client = genai.Client(vertexai=True)
 
 # ==========================================
 # 2. EXTRATOR DE TEXTO DE PDF
