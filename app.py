@@ -100,14 +100,15 @@ def analisar_dados_com_gemini(texto_planta, texto_roteiro):
        - "confrontante": O nome do confrontante em letras maiúsculas associado àquele trecho específico.
     """
 
-    # Chamada atualizada para o novo SDK que aceita chaves "AQ."
+    # Alterado para "gemini-2.5-flash"
     response = client.models.generate_content(
-        model="gemini-1.5-flash",
+        model="gemini-2.5-flash",
         contents=prompt,
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
             response_schema=DadosMemorial,
             temperature=0.1,
+    
         ),
     )
 
