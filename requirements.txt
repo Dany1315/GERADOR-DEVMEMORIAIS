@@ -1,6 +1,5 @@
-streamlit
-   python-docx
-streamlit
+streamlit 
 python-docx
 pypdf
 google-genai
+google-generativeai
