@@ -1,2 +1,6 @@
 streamlit
    python-docx
+streamlit
+python-docx
+pypdf
+google-genai
