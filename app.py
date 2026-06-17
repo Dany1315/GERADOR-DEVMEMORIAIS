@@ -6,8 +6,7 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Pt
 from pypdf import PdfReader
 import streamlit as st
-from google import genai
-from google.genai import types
+import google.generativeai as genai
 from pydantic import BaseModel
 
 # Configuração da página do Streamlit
@@ -19,7 +18,8 @@ st.set_page_config(
 # 1. CONFIGURAÇÃO DA API DO GEMINI
 # ==========================================
 GEMINI_API_KEY = "AQ.Ab8RN6LK4VOZSijNDEUarjSOaYyyY4STJ0UVeaSNL-ysxvrPvg"
-client = genai.Client(api_key=GEMINI_API_KEY)
+# Configuração compatível com o formato de credencial fornecido
+genai.configure(api_key=GEMINI_API_KEY)
 
 
 # ==========================================
@@ -66,7 +66,7 @@ def analisar_dados_com_gemini(texto_planta, texto_roteiro):
     """
     prompt = f"""
     Você é um assistente especialista em topografia, cartografia e engenharia agrimensura.
-    Seu objetivo é cruzar as informações de dois documentos para estruturar um Memorial Descritivo perfeito.
+    Seu objetivo é cruzar as informações de dois documentos para estruturar um Memorial Descritivo perfeito do imóvel (Gleba A).
 
     DOCUMENTO 1: DADOS DA PLANTA (Contém a relação de quais confrontantes pertencem a quais intervalos de pontos)
     {texto_planta}
@@ -80,7 +80,7 @@ def analisar_dados_com_gemini(texto_planta, texto_roteiro):
     - Se o Documento 1 diz que do 'ponto 7-21' é 'ES 230', significa que TODOS os segmentos individuais sequenciais entre o 7 e o 21 (7-8, 8-9, 9-10 ... até 20-21) terão como confrontante 'ES 230'.
     - Pegue o valor exato da Área (ex: 139.954,68 m² (14,00 ha)) e do Perímetro (ex: 1.655,00 m) localizados no final do Documento 2.
 
-    Retorne a resposta estritamente no formato JSON estruturado:
+    Retorne a resposta estritamente no formato JSON estruturado respeitando as chaves abaixo:
     1. "proprietario": Nome do proprietário (Procure no texto da planta ou use "SIDNEU CALLEGARI" se não indicado).
     2. "municipio": Nome do município e estado (ex: VILA VALÉRIO - ES).
     3. "comarca": Nome da comarca (ex: SÃO GABRIEL DA PALHA).
@@ -96,14 +96,16 @@ def analisar_dados_com_gemini(texto_planta, texto_roteiro):
        - "confrontante": O nome do confrontante em letras maiúsculas associado àquele trecho específico.
     """
 
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-            response_schema=DadosMemorial,
-            temperature=0.1,
-        ),
+    model = genai.GenerativeModel("gemini-1.5-flash")
+
+    # Chamada compatível com retorno de JSON estruturado na API tradicional
+    response = model.generate_content(
+        prompt,
+        generation_config={
+            "response_mime_type": "application/json",
+            "response_schema": DadosMemorial,
+            "temperature": 0.1,
+        },
     )
 
     import json
@@ -269,7 +271,7 @@ if pdf_planta and pdf_roteiro:
                 texto_planta = extrair_texto_pdf(pdf_planta)
                 texto_roteiro = extrair_texto_pdf(pdf_roteiro)
 
-                # Processamento inteligente via Gemini usando Pydantic nativo
+                # Processamento inteligente via SDK clássico do Gemini (Estável para chaves gcp/oauth)
                 dados_estruturados = analisar_dados_com_gemini(
                     texto_planta, texto_roteiro
                 )
