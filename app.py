@@ -15,12 +15,17 @@ st.set_page_config(
 )
 
 # ==========================================
-# 1. CONFIGURAÇÃO DA API DO GEMINI
+# 1. CONFIGURAÇÃO DA API DO GEMINI (NOVO SDK)
 # ==========================================
-GEMINI_API_KEY = "AQ.Ab8RN6LK4VOZSijNDEUarjSOaYyyY4STJ0UVeaSNL-ysxvrPvg"
-# Configuração compatível com o formato de credencial fornecido
-genai.configure(api_key=GEMINI_API_KEY)
+# Cole a sua chave AQ... aqui dentro
+GEMINI_API_KEY = "AQ.Ab8RN6IvGAjuzov7gtTG8VkVwtijXx_AofJJKgkJNnZVFCJtIQ"
 
+# Importa o novo cliente do Google GenAI
+from google import genai
+from google.genai import types
+
+# Inicializa o cliente com a nova chave de autorização
+client = genai.Client(api_key=GEMINI_API_KEY)
 
 # ==========================================
 # 2. EXTRATOR DE TEXTO DE PDF
@@ -61,7 +66,6 @@ class DadosMemorial(BaseModel):
 # ==========================================
 def analisar_dados_com_gemini(texto_planta, texto_roteiro):
     """Utiliza a API do Gemini para correlacionar os dados cadastrais da planta
-
     com os vértices técnicos e confrontantes da tabela de roteiro perimétrico.
     """
     prompt = f"""
@@ -96,20 +100,18 @@ def analisar_dados_com_gemini(texto_planta, texto_roteiro):
        - "confrontante": O nome do confrontante em letras maiúsculas associado àquele trecho específico.
     """
 
-    model = genai.GenerativeModel("gemini-1.5-flash")
-
-    # Chamada compatível com retorno de JSON estruturado na API tradicional
-    response = model.generate_content(
-        prompt,
-        generation_config={
-            "response_mime_type": "application/json",
-            "response_schema": DadosMemorial,
-            "temperature": 0.1,
-        },
+    # Chamada atualizada para o novo SDK que aceita chaves "AQ."
+    response = client.models.generate_content(
+        model="gemini-1.5-flash",
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=DadosMemorial,
+            temperature=0.1,
+        ),
     )
 
     import json
-
     return json.loads(response.text)
 
 
