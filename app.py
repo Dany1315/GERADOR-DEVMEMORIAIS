@@ -17,8 +17,11 @@ st.set_page_config(
     page_title="Gerador de Memorial Descritivo - Gleba A", page_icon="📄", layout="wide"
 )
 
-# Inicialização do Cliente Gemini (Busca a variável de ambiente GEMINI_API_KEY automaticamente)
-client = genai.Client()
+# ==========================================
+# CONEXÃO COM A API KEY DOS SECRETS DO STREAMLIT
+# ==========================================
+# Garante que o cliente do Gemini use exatamente a chave configurada na aba Secrets
+client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 
 # ==========================================
 # 1. EXTRATOR E PARSER DO ROTEIRO PERIMÉTRICO (VIA PYTHON - SEM ERROS)
@@ -74,11 +77,11 @@ class MapeamentoConfrontantes(BaseModel):
     regras: list[RegraConfrontante]
 
 # ==========================================
-# 3. INTEGRAÇÃO INTELIGENTE COM GEMINI PRO
+# 3. INTEGRAÇÃO INTELIGENTE COM GEMINI 3.5 FLASH
 # ==========================================
 def mapear_confrontantes_gemini(texto_planta, texto_roteiro):
     """
-    Utiliza o Gemini 2.5 Pro para interpretar a lógica de quais confrontantes pertencem 
+    Utiliza o Gemini 3.5 Flash para interpretar a lógica de quais confrontantes pertencem 
     aos respectivos intervalos de pontos e extrair os dados do cabeçalho.
     """
     prompt = f"""
@@ -91,31 +94,32 @@ def mapear_confrontantes_gemini(texto_planta, texto_roteiro):
     {texto_roteiro[:1200]} (Use também as linhas finais do texto para capturar os valores totais exatos de Área e Perímetro)
 
     Sua tarefa é extrair os dados cadastrais solicitados e criar as regras matemáticas de transição de confrontantes.
-    Exemplo: Se o documento diz 'Do ponto 7 - 21: ES 230', crie um item em regras com ponto_inicio: 7, ponto_fim: 21, nome_confrontante: 'ES 230'.
+    Exemplo: Se do ponto 7 ao 21 confronta com 'ES 230', crie um item em regras com ponto_inicio: 7, ponto_fim: 21, nome_confrontante: 'ES 230'.
     Se houver um ponto fechando a divisa de volta para o início como 'Do ponto 21 - 1: JEAN CARLOS CALLEGARI', salve ponto_inicio: 21, ponto_fim: 1, nome_confrontante: 'JEAN CARLOS CALLEGARI'.
 
     Retorne estritamente no formato JSON estruturado respeitando o schema fornecido.
     """
 
+    # ALTERADO AQUI: Atualizado para gemini-3.5-flash conforme solicitado
     response = client.models.generate_content(
-        model="gemini-2.5-pro", # <--- Mudado para o modelo Pro (Máxima Precisão)
+        model="gemini-3.5-flash", 
         contents=prompt,
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
             response_schema=MapeamentoConfrontantes,
-            temperature=0.0, # <--- Determinação estritamente factual sem margem de invenção
+            temperature=0.0, # Zero especulação, estritamente factual
         ),
     )
     return json.loads(response.text)
 
 # ==========================================
-# 4. GERADOR DO DOCUMENTO DOCX (CORRIGIDO E AMARRADO)
+# 4. GERADOR DO DOCUMENTO DOCX (AMARRADO DINAMICAMENTE)
 # ==========================================
 def gerar_documento_word(dados_finais):
-    """Gera o arquivo Word (.docx) idêntico ao padrão com amostragem correta de coordenadas destino."""
+    """Gera o arquivo Word (.docx) aplicando o encadeamento correto de coordenadas destino."""
     doc = docx.Document()
 
-    # Margens de 2.5 cm (Configuração Oficial de Engenharia)
+    # Margens de 2.5 cm (Configuração Oficial Padrão)
     for section in doc.sections:
         section.top_margin = docx.shared.Cm(2.5)
         section.bottom_margin = docx.shared.Cm(2.5)
@@ -185,13 +189,13 @@ def gerar_documento_word(dados_finais):
             f"Inicia-se a descrição deste perímetro no vértice {primeiro['de']}, de coordenadas N {primeiro['n_y']} e E {primeiro['e_x']}; "
         )
 
-        # Loop Inteligente: Vincula dinamicamente a coordenada de destino à origem do próximo segmento
+        # Loop de Amarração Geográfica Correta
         for i, s in enumerate(segmentos):
             if i + 1 < len(segmentos):
                 prox_coordenada_n = segmentos[i + 1]['n_y']
                 prox_coordenada_e = segmentos[i + 1]['e_x']
             else:
-                # O último ponto fecha de volta nas coordenadas do primeiro ponto do memorial
+                # Retorna ao marco inicial fechando o polígono de vértices
                 prox_coordenada_n = segmentos[0]['n_y']
                 prox_coordenada_e = segmentos[0]['e_x']
 
@@ -204,7 +208,7 @@ def gerar_documento_word(dados_finais):
         "ponto inicial da descrição deste perímetro. Todas as coordenadas aqui descritas estão georreferenciadas ao Sistema Geodésico Brasileiro, e encontram-se representadas no Sistema UTM, referenciadas ao Meridiano Central nº 39° WGr, tendo como datum o SIRGAS2000. Todos os azimutes e distâncias, área e perímetro foram calculados no plano de projeção UTM."
     )
 
-    # Data Atual Automatizada em Português
+    # Data Atual Automatizada
     meses_pt = {
         1: "janeiro", 2: "fevereiro", 3: "março", 4: "abril", 5: "maio", 6: "junho",
         7: "julho", 8: "agosto", 9: "setembro", 10: "outubro", 11: "novembro", 12: "dezembro"
@@ -216,7 +220,7 @@ def gerar_documento_word(dados_finais):
     p_data.paragraph_format.space_before = Pt(24)
     p_data.add_run(f"Vila Valério, {data_atual.day} de {nome_mes} de {data_atual.year}")
 
-    # Bloco de Responsabilidade Técnica
+    # Bloco de Assinatura Técnico
     p_assinatura = doc.add_paragraph()
     p_assinatura.paragraph_format.space_before = Pt(36)
     p_assinatura.add_run(
@@ -242,15 +246,15 @@ with col2:
 
 if pdf_planta and pdf_roteiro:
     if st.button("Analisar Documentos e Gerar Memorial", type="primary"):
-        with st.spinner("⏳ Analisando e amarrando dados com precisão cirúrgica via Gemini Pro..."):
+        with st.spinner("⏳ Conectando à API do Gemini 3.5 Flash e amarrando dados com precisão..."):
             try:
                 texto_planta = extrair_texto_pdf(pdf_planta)
                 texto_roteiro = extrair_texto_pdf(pdf_roteiro)
 
-                # 1. Extrai a tabela numérica real via Python (Imune a erros de digitação e alucinações)
+                # 1. Extrai a tabela numérica real via Python
                 segmentos_reais = parse_tabela_roteiro(texto_roteiro)
 
-                # 2. IA extrai apenas as regras lógicas de qual vizinho pertence a qual trecho
+                # 2. IA extrai o mapeamento lógico usando a chave secreta vinculada do Streamlit
                 mapeamento = mapear_confrontantes_gemini(texto_planta, texto_roteiro)
 
                 # 3. Vincula via código os confrontantes mapeados da IA para as linhas reais da tabela
@@ -260,11 +264,11 @@ if pdf_planta and pdf_roteiro:
                     
                     confrontante_encontrado = "CONFRONTACAO NAO ENCONTRADA"
                     for regra in mapeamento["regras"]:
-                        # Tratamento para faixas regulares (Ex: ponto_inicio=7 e ponto_fim=21)
+                        # Tratamento para faixas regulares
                         if regra.ponto_inicio <= v_de < regra.ponto_fim and regra.ponto_inicio < regra.ponto_fim:
                             confrontante_encontrado = regra.nome_confrontante.upper()
                             break
-                        # Tratamento para o nó de fechamento final do ciclo (Ex: de 21 para 1)
+                        # Tratamento para o fechamento final do ciclo perimétrico (Ex: de 21 para 1)
                         elif regra.ponto_inicio > regra.ponto_fim:
                             if v_de >= regra.ponto_inicio or v_para <= regra.ponto_fim:
                                 confrontante_encontrado = regra.nome_confrontante.upper()
@@ -282,7 +286,7 @@ if pdf_planta and pdf_roteiro:
                     "segmentos": segmentos_reais
                 }
 
-                # Feedback em tela para conferência rápida
+                # Feedback visual na interface do usuário
                 st.write("### 🔍 Resumo de Validação Gerado com Sucesso:")
                 st.info(f"**Proprietário Extraído:** {dados_finais['proprietario']}")
                 st.info(f"**Área Total:** {dados_finais['area']} | **Perímetro:** {dados_finais['perimetro']}")
@@ -291,10 +295,9 @@ if pdf_planta and pdf_roteiro:
                     for seg in dados_finais["segmentos"]:
                         st.write(f"Trecho {seg['de']} ➔ {seg['para']} | Confrontante: **{seg['confrontante']}**")
                 
-                # Criação do documento final estruturado
+                # Geração do arquivo Word final (.docx)
                 arquivo_docx = gerar_documento_word(dados_finais)
                 
-                # Disponibilização do download
                 st.success("🎉 Arquivo estruturado com sucesso!")
                 st.download_button(
                     label="📥 Baixar Arquivo Word (.docx) Corrigido",
