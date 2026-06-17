@@ -17,16 +17,16 @@ st.set_page_config(
 # ==========================================
 # 1. CONFIGURAÇÃO DA API DO GEMINI (NOVO SDK)
 # ==========================================
-# Cole a sua chave AQ... aqui dentro
-GEMINI_API_KEY = "AQ.Ab8RN6IvGAjuzov7gtTG8VkVwtijXx_AofJJKgkJNnZVFCJtIQ"
-
-# Importa o novo cliente do Google GenAI
+import os
 from google import genai
 from google.genai import types
 
-# Inicializa o cliente com a nova chave de autorização
-client = genai.Client(api_key=GEMINI_API_KEY)
+# 1. Injeta a chave de autorização diretamente na memória do sistema (Variável de Ambiente)
+os.environ["GEMINI_API_KEY"] = "AQ.Ab8RN6IvGAjuzov7gtTG8VkVwtijXx_AofJJKgkJNnZVFCJtIQ"
 
+# 2. Inicializa o cliente SEM PASSAR a chave no argumento. 
+# O comando genai.Client() vai ler a chave automaticamente da memória, exatamente como o Google exige!
+client = genai.Client()
 # ==========================================
 # 2. EXTRATOR DE TEXTO DE PDF
 # ==========================================
