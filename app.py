@@ -23,16 +23,13 @@ import os
 from google import genai
 from google.genai import types
 
-# 1. Injeta a chave de autorização diretamente na memória do sistema (Variável de Ambiente)
-os.environ["GEMINI_API_KEY"] = "AQ.Ab8RN6IvGAjuzov7gtTG8VkVwtijXx_AofJJKgkJNnZVFCJtIQ"
+# Segurança: É melhor NÃO deixar a chave exposta direto no código.
+# O os.environ abaixo serve para testar localmente, mas o ideal é preencher nos "Secrets" do GitHub/Streamlit.
+if "GEMINI_API_KEY" not in os.environ:
+    os.environ["GEMINI_API_KEY"] = "AQ.Ab8RN6IvGAjuzov7gtTG8VkVwtijXx_AofJJKgkJNnZVFCJtIQ"
 
-# 2. Inicializa o cliente apontando para a infraestrutura da Vertex AI informando o seu projeto
-client = genai.Client(
-    vertexai=True,
-    project="gen-lang-client-0796659366",
-    location="us-central1"
-)
-
+# Inicializa o cliente padrão para desenvolvedores (sem Vertex AI)
+client = genai.Client()
 # ==========================================
 # 2. EXTRATOR DE TEXTO DE PDF
 # ==========================================
