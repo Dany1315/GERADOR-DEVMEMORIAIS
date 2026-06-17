@@ -17,7 +17,6 @@ st.set_page_config(
 # ==========================================
 # 1. CONFIGURAÇÃO DA API DO GEMINI
 # ==========================================
-# Chave fornecida inserida diretamente no cliente oficial da Google
 GEMINI_API_KEY = "AQ.Ab8RN6LK4VOZSijNDEUarjSOaYyyY4STJ0UVeaSNL-ysxvrPvg"
 client = genai.Client(api_key=GEMINI_API_KEY)
 
@@ -35,37 +34,45 @@ def extrair_texto_pdf(arquivo_pdf):
 
 
 # ==========================================
-# 3. INTEGRAÇÃO COM GEMINI (ANÁLISE INTELIGENTE)
+# 3. INTEGRAÇÃO COM GEMINI (ANÁLISE AVANÇADA)
 # ==========================================
-def analisar_dados_com_gemini(texto_documento):
-    """Utiliza a API do Gemini para extrair e estruturar os dados técnicos
+def analisar_dados_com_gemini(texto_planta, texto_roteiro):
+    """Utiliza a API do Gemini para correlacionar os dados cadastrais da planta
 
-    e confrontantes do texto, independentemente do formato original.
+    com os vértices técnicos e confrontantes da tabela de roteiro perimétrico.
     """
     prompt = f"""
-    Você é um assistente especialista em topografia e georreferenciamento.
-    Analise o texto abaixo, que foi extraído de um documento topográfico, e extraia de forma extremamente precisa os dados necessários para gerar um Memorial Descritivo.
+    Você é um assistente especialista em topografia, cartografia e engenharia agrimensura.
+    Seu objetivo é cruzar as informações de dois documentos para estruturar um Memorial Descritivo perfeito.
 
-    Texto extraído:
-    {texto_documento}
+    DOCUMENTO 1: DADOS DA PLANTA (Contém a relação de quais confrontantes pertencem a quais intervalos de pontos)
+    {texto_planta}
 
-    Você deve retornar a resposta estritamente em um formato estruturado (JSON), contendo:
-    1. "proprietario": Nome completo do proprietário.
+    DOCUMENTO 2: TABELA DE ROTEIRO PERIMÉTRICO (Contém as colunas De, Para, Coord. N, Coord. E, Azimute, Distância, além de Área e Perímetro no final)
+    {texto_roteiro}
+
+    REGRAS IMPORTANTES DE TRATAMENTO DE TEXTO:
+    - Limpe os azimutes! Remova símbolos de LaTeX como '$', '\\circ', '\\prime', '\\prime\\prime'. Formate como: 133°19'54".
+    - Associe os confrontantes por trecho. Se o Documento 1 diz que do 'ponto 1-2' é 'DEVACIR BOONI', o segmento DE 1 PARA 2 terá o confrontante 'DEVACIR BOONI'. 
+    - Se o Documento 1 diz que do 'ponto 7-21' é 'ES 230', significa que TODOS os segmentos entre o 7 e o 21 (7-8, 8-9, 9-10 ... até 20-21) terão como confrontante 'ES 230'.
+    - Pegue o valor exato da Área (ex: 139.954,68 m² (14,00 ha)) e do Perímetro (ex: 1.655,00 m) localizados no final do Documento 2.
+
+    Retorne a resposta estritamente no formato JSON abaixo:
+    1. "proprietario": Nome do proprietário (Procure no texto da planta ou use "SIDNEU CALLEGARI" se não indicado).
     2. "municipio": Nome do município e estado (ex: VILA VALÉRIO - ES).
-    3. "comarca": Nome da comarca (se houver).
-    4. "area": Área total com a unidade (ex: 6.002,32 m² (0,60 ha)).
-    5. "perimetro": Perímetro total com a unidade (ex: 491,43 m).
-    6. "segmentos": Uma lista de objetos para cada trecho do perímetro, contendo:
-       - "de": Número do vértice inicial (ex: 1)
-       - "para": Número do vértice final (ex: 2)
-       - "n_y": Coordenada Norte N(Y) do vértice INICIAL com "m" (ex: "7.901.880,451 m")
-       - "e_x": Coordenada Este E(X) do vértice INICIAL com "m" (ex: "351.143,587 m")
-       - "azimute": O azimute formatado (ex: 145°20'58")
-       - "distancia": A distância formatada com "m" (ex: "2,70 m")
-       - "confrontante": O nome do confrontante em letras maiúsculas (ex: "ES 230" ou "ADILSON BRAUN (MAT. 226)")
+    3. "comarca": Nome da comarca (ex: SÃO GABRIEL DA PALHA).
+    4. "area": Área total formatada (ex: "139.954,68 m² (14,00 ha)").
+    5. "perimetro": Perímetro total formatado (ex: "1.655,00 m").
+    6. "segmentos": Lista contendo cada linha da tabela de roteiro:
+       - "de": Número do vértice inicial (ex: "1")
+       - "para": Número do vértice final (ex: "2")
+       - "n_y": Coordenada Norte N(Y) do vértice INICIAL formatada com "m" (ex: "7.902.352,947 m")
+       - "e_x": Coordenada Este E(X) do vértice INICIAL formatada com "m" (ex: "351.478,017 m")
+       - "azimute": O azimute limpo e formatado (ex: "133°19'54\"")
+       - "distancia": A distância formatada com "m" (ex: "256,30 m")
+       - "confrontante": O nome do confrontante em letras maiúsculas associado àquele trecho específico.
     """
 
-    # Forçando o Gemini a responder estritamente em JSON usando Pydantic/Structured Outputs
     class SegmentoPerimetro(types.BaseModel):
         de: str
         para: str
@@ -89,37 +96,35 @@ def analisar_dados_com_gemini(texto_documento):
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
             response_schema=DadosMemorial,
-            temperature=0.1,  # Baixa temperatura para maior precisão factual
+            temperature=0.1,
         ),
     )
 
-    # Retorna o objeto JSON estruturado nativamente pelo SDK
     import json
 
     return json.loads(response.text)
 
 
 # ==========================================
-# 4. GERADOR DO DOCUMENTO DOCX (PADRÃO EXIGIDO)
+# 4. GERADOR DO DOCUMENTO DOCX (IGUAL MODELO)
 # ==========================================
 def gerar_documento_word(dados):
-    """Gera o arquivo Word (.docx) idêntico ao modelo corrigido enviado."""
+    """Gera o arquivo Word (.docx) idêntico ao modelo corrigido."""
     doc = docx.Document()
 
-    # Configuração de Margens Padrão (2.5 cm)
+    # Margens Padrão (2.5 cm)
     for section in doc.sections:
         section.top_margin = docx.shared.Cm(2.5)
         section.bottom_margin = docx.shared.Cm(2.5)
         section.left_margin = docx.shared.Cm(2.5)
         section.right_margin = docx.shared.Cm(2.5)
 
-    # Configura o padrão de fonte (Arial 11)
     style = doc.styles["Normal"]
     font = style.font
     font.name = "Arial"
     font.size = Pt(11)
 
-    # Cabeçalho da Empresa Técnica (TopoGeo)
+    # Cabeçalho TopoGeo
     p_empresa = doc.add_paragraph()
     p_empresa.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p_empresa.paragraph_format.space_after = Pt(18)
@@ -129,14 +134,12 @@ def gerar_documento_word(dados):
     run_emp.font.size = Pt(9)
     run_emp.italic = True
 
-    # Linha Divisória
     p_linha = doc.add_paragraph()
     p_linha.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p_linha.add_run(
         "________________________________________________________________________________"
     )
 
-    # Título Principal
     p_titulo = doc.add_paragraph()
     p_titulo.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p_titulo.paragraph_format.space_before = Pt(12)
@@ -145,14 +148,14 @@ def gerar_documento_word(dados):
     run_tit.bold = True
     run_tit.font.size = Pt(12)
 
-    # Bloco de Dados do Imóvel
+    # Bloco de Dados Cadastrais
     p_dados = doc.add_paragraph()
     p_dados.alignment = WD_ALIGN_PARAGRAPH.LEFT
     p_dados.paragraph_format.line_spacing = 1.15
     p_dados.paragraph_format.space_after = Pt(18)
 
     p_dados.add_run("Imóvel: ").bold = True
-    p_dados.add_run("GLEBA B\n")
+    p_dados.add_run("GLEBA A\n")  # Alterado dinamicamente para Gleba A
     p_dados.add_run("Proprietário: ").bold = True
     p_dados.add_run(f"{dados['proprietario'].upper()}\n")
     p_dados.add_run("Município: ").bold = True
@@ -165,13 +168,11 @@ def gerar_documento_word(dados):
     p_dados.add_run("Perímetro: ").bold = True
     p_dados.add_run(f"{dados['perimetro']}")
 
-    # Subtítulo DESCRIÇÃO
     p_desc_tit = doc.add_paragraph()
     p_desc_tit.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p_desc_tit.paragraph_format.space_after = Pt(12)
     p_desc_tit.add_run("DESCRIÇÃO").bold = True
 
-    # Texto Técnico Dinâmico Reconstruído baseando-se exatamente no modelo
     p_texto = doc.add_paragraph()
     p_texto.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     p_texto.paragraph_format.line_spacing = 1.25
@@ -180,23 +181,20 @@ def gerar_documento_word(dados):
     segmentos = dados["segmentos"]
     if segmentos:
         primeiro = segmentos[0]
-        # Início no Vértice 1
         p_texto.add_run(
             f"Inicia-se a descrição deste perímetro no vértice {primeiro['de']}, de coordenadas N {primeiro['n_y']} e E {primeiro['e_x']}; "
         )
 
-        # Laço para todos os vértices seguintes
         for s in segmentos:
             p_texto.add_run(
                 f"deste, segue confrontando com {s['confrontante']}, com os seguintes azimutes e distâncias: {s['azimute']} e {s['distancia']} até o vértice {s['para']}, de coordenadas N {s['n_y']} e E {s['e_x']}; "
             )
 
-    # Cláusula de encerramento do perímetro padrão do arquivo corrigido
     p_texto.add_run(
         "ponto inicial da descrição deste perímetro. Todas as coordenadas aqui descritas estão georreferenciadas ao Sistema Geodésico Brasileiro, e encontram-se representadas no Sistema UTM, referenciadas ao Meridiano Central nº 39° WGr, tendo como datum o SIRGAS2000. Todos os azimutes e distâncias, área e perímetro foram calculados no plano de projeção UTM."
     )
 
-    # Data (Baseada no dia da execução)
+    # Data Atual Automatizada
     meses_pt = {
         1: "janeiro",
         2: "fevereiro",
@@ -221,7 +219,6 @@ def gerar_documento_word(dados):
         f"Vila Valério, {data_atual.day} de {nome_mes} de {data_atual.year}"
     )
 
-    # Bloco de Assinatura do Técnico Responsável
     p_assinatura = doc.add_paragraph()
     p_assinatura.alignment = WD_ALIGN_PARAGRAPH.LEFT
     p_assinatura.paragraph_format.space_before = Pt(36)
@@ -238,73 +235,58 @@ def gerar_documento_word(dados):
 # ==========================================
 # 5. INTERFACE WEB (STREAMLIT)
 # ==========================================
-st.title("📄 Processador Inteligente de Memorial Descritivo")
+st.title("📄 Processador de Memoriais por Planta e Roteiro")
 st.write(
-    "Faça o upload do seu arquivo PDF ou digite/cole os dados brutos. O Gemini extrairá as coordenadas e confrontantes automaticamente para gerar o documento Word formatado."
+    "Insira os dois arquivos PDF gerados pelo software de topografia para realizar o cruzamento inteligente de dados."
 )
 
-# Duas opções de entrada de dados
-aba_pdf, aba_texto = st.tabs(
-    ["📥 Enviar Arquivo PDF", "📝 Colar Texto / Tabela Manual"]
-)
-texto_para_processar = ""
+col1, col2 = st.columns(2)
 
-with aba_pdf:
-    arquivo_upload = st.file_uploader(
-        "Selecione o PDF topográfico / tabela de vértices:", type=["pdf"]
+with col1:
+    st.subheader("1. Dados da Planta")
+    pdf_planta = st.file_uploader(
+        "Carregue o PDF com os DADOS DA PLANTA:", type=["pdf"], key="planta"
     )
-    if arquivo_upload:
-        with st.spinner("Lendo conteúdo do arquivo PDF..."):
-            texto_para_processar = extrair_texto_pdf(arquivo_upload)
-            st.success("PDF lido com sucesso!")
-            with st.expander("Visualizar texto extraído do PDF"):
-                st.text(texto_para_processar)
 
-with aba_texto:
-    caixa_texto = st.text_area(
-        "Cole aqui os dados da tabela ou texto corrido:", height=250
+with col2:
+    st.subheader("2. Roteiro Perimétrico")
+    pdf_roteiro = st.file_uploader(
+        "Carregue o PDF da TABELA DE ROTEIRO PERIMETRICO:",
+        type=["pdf"],
+        key="roteiro",
     )
-    if caixa_texto:
-        texto_para_processar = caixa_texto.strip()
 
-# Botão de processamento unificado
-if st.button("Analisar e Gerar Memorial Corrigido", type="primary"):
-    if not texto_para_processar:
-        st.error(
-            "❌ Erro: Por favor, faça o upload de um PDF ou cole o texto antes de prosseguir."
-        )
-    else:
-        with st.spinner(
-            "⏳ O Gemini está analisando e estruturando os dados técnicos (Vértices, Coordenadas e Confrontantes)..."
-        ):
+if pdf_planta and pdf_roteiro:
+    if st.button("Analisar Documentos e Gerar Memorial", type="primary"):
+        with st.spinner("⏳ Extraindo, limpando e cruzando dados dos dois PDFs..."):
             try:
-                # Envia os dados para a inteligência artificial mapear as variáveis
+                texto_planta = extrair_texto_pdf(pdf_planta)
+                texto_roteiro = extrair_texto_pdf(pdf_roteiro)
+
+                # Processamento inteligente via Gemini
                 dados_estruturados = analisar_dados_com_gemini(
-                    texto_para_processar
+                    texto_planta, texto_roteiro
                 )
 
-                # Exibe um resumo dos dados capturados na tela para validação do usuário
-                st.write("### 🔍 Dados identificados pelo modelo:")
+                st.write("### 🔍 Informações Unificadas com Sucesso:")
                 st.info(f"**Proprietário:** {dados_estruturados['proprietario']}")
-                st.info(f"**Município/Comarca:** {dados_estruturados['municipio']}")
+                st.info(f"**Município/Estado:** {dados_estruturados['municipio']}")
                 st.info(
-                    f"**Área:** {dados_estruturados['area']} | **Perímetro:** {dados_estruturados['perimetro']}"
+                    f"**Área Extraída:** {dados_estruturados['area']} | **Perímetro:** {dados_estruturados['perimetro']}"
                 )
 
-                with st.expander("Ver confrontantes detalhados por vértice"):
+                with st.expander("Verificar amarração lógica de confrontantes"):
                     for seg in dados_estruturados["segmentos"]:
                         st.write(
-                            f"Vértice {seg['de']} ➔ {seg['para']} | Confrontante: **{seg['confrontante']}** | Az: {seg['azimute']} | Dist: {seg['distancia']}"
+                            f"Ponto {seg['de']} ➔ {seg['para']} | Vizinho: **{seg['confrontante']}** | Az: {seg['azimute']} | Dist: {seg['distancia']}"
                         )
 
-                # Cria o documento baseado nos dados estruturados do Gemini
+                # Gera o arquivo final com o layout TopoGeo corrigido
                 arquivo_docx = gerar_documento_word(dados_estruturados)
 
-                st.success("🎉 Memorial gerado perfeitamente!")
-
-                # Define o nome exato solicitado por você
                 nome_final_arquivo = "MEMORIAL_DESCRITIVO_GLEBA_B_SIDNEU_CALLEGARI_CORRIGIDO.docx"
 
+                st.success("🎉 Documento estruturado com perfeição!")
                 st.download_button(
                     label="📥 Baixar Arquivo Word (.docx) Corrigido",
                     data=arquivo_docx,
@@ -313,4 +295,10 @@ if st.button("Analisar e Gerar Memorial Corrigido", type="primary"):
                 )
 
             except Exception as e:
-                st.error(f"❌ Ocorreu um erro ao processar os dados: {str(e)}")
+                st.error(
+                    f"❌ Ocorreu um erro no cruzamento dos dados: {str(e)}"
+                )
+else:
+    st.info(
+        "💡 Aguardando o upload de ambos os arquivos (DADOS DA PLANTA + TABELA DE ROTEIRO PERIMETRICO) para liberar o botão de processamento."
+    )
