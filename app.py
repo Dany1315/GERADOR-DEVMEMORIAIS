@@ -8,6 +8,7 @@ from pypdf import PdfReader
 import streamlit as st
 from google import genai
 from google.genai import types
+from pydantic import BaseModel
 
 # Configuração da página do Streamlit
 st.set_page_config(
@@ -34,7 +35,29 @@ def extrair_texto_pdf(arquivo_pdf):
 
 
 # ==========================================
-# 3. INTEGRAÇÃO COM GEMINI (ANÁLISE AVANÇADA)
+# 3. MODELOS DE ESTRUTURAÇÃO (PYDANTIC)
+# ==========================================
+class SegmentoPerimetro(BaseModel):
+    de: str
+    para: str
+    n_y: str
+    e_x: str
+    azimute: str
+    distancia: str
+    confrontante: str
+
+
+class DadosMemorial(BaseModel):
+    proprietario: str
+    municipio: str
+    comarca: str
+    area: str
+    perimetro: str
+    segmentos: list[SegmentoPerimetro]
+
+
+# ==========================================
+# 4. INTEGRAÇÃO COM GEMINI (ANÁLISE AVANÇADA)
 # ==========================================
 def analisar_dados_com_gemini(texto_planta, texto_roteiro):
     """Utiliza a API do Gemini para correlacionar os dados cadastrais da planta
@@ -52,12 +75,12 @@ def analisar_dados_com_gemini(texto_planta, texto_roteiro):
     {texto_roteiro}
 
     REGRAS IMPORTANTES DE TRATAMENTO DE TEXTO:
-    - Limpe os azimutes! Remova símbolos de LaTeX como '$', '\\circ', '\\prime', '\\prime\\prime'. Formate como: 133°19'54".
+    - Limpe os azimutes! Remova símbolos de LaTeX como '$', '\\circ', '\\prime', '\\prime\\prime'. Formate exatamente assim como o exemplo: 133°19'54".
     - Associe os confrontantes por trecho. Se o Documento 1 diz que do 'ponto 1-2' é 'DEVACIR BOONI', o segmento DE 1 PARA 2 terá o confrontante 'DEVACIR BOONI'. 
-    - Se o Documento 1 diz que do 'ponto 7-21' é 'ES 230', significa que TODOS os segmentos entre o 7 e o 21 (7-8, 8-9, 9-10 ... até 20-21) terão como confrontante 'ES 230'.
+    - Se o Documento 1 diz que do 'ponto 7-21' é 'ES 230', significa que TODOS os segmentos individuais sequenciais entre o 7 e o 21 (7-8, 8-9, 9-10 ... até 20-21) terão como confrontante 'ES 230'.
     - Pegue o valor exato da Área (ex: 139.954,68 m² (14,00 ha)) e do Perímetro (ex: 1.655,00 m) localizados no final do Documento 2.
 
-    Retorne a resposta estritamente no formato JSON abaixo:
+    Retorne a resposta estritamente no formato JSON estruturado:
     1. "proprietario": Nome do proprietário (Procure no texto da planta ou use "SIDNEU CALLEGARI" se não indicado).
     2. "municipio": Nome do município e estado (ex: VILA VALÉRIO - ES).
     3. "comarca": Nome da comarca (ex: SÃO GABRIEL DA PALHA).
@@ -72,23 +95,6 @@ def analisar_dados_com_gemini(texto_planta, texto_roteiro):
        - "distancia": A distância formatada com "m" (ex: "256,30 m")
        - "confrontante": O nome do confrontante em letras maiúsculas associado àquele trecho específico.
     """
-
-    class SegmentoPerimetro(types.BaseModel):
-        de: str
-        para: str
-        n_y: str
-        e_x: str
-        azimute: str
-        distancia: str
-        confrontante: str
-
-    class DadosMemorial(types.BaseModel):
-        proprietario: str
-        municipio: str
-        comarca: str
-        area: str
-        perimetro: str
-        segmentos: list[SegmentoPerimetro]
 
     response = client.models.generate_content(
         model="gemini-2.5-flash",
@@ -106,7 +112,7 @@ def analisar_dados_com_gemini(texto_planta, texto_roteiro):
 
 
 # ==========================================
-# 4. GERADOR DO DOCUMENTO DOCX (IGUAL MODELO)
+# 5. GERADOR DO DOCUMENTO DOCX (IGUAL MODELO)
 # ==========================================
 def gerar_documento_word(dados):
     """Gera o arquivo Word (.docx) idêntico ao modelo corrigido."""
@@ -155,7 +161,7 @@ def gerar_documento_word(dados):
     p_dados.paragraph_format.space_after = Pt(18)
 
     p_dados.add_run("Imóvel: ").bold = True
-    p_dados.add_run("GLEBA A\n")  # Alterado dinamicamente para Gleba A
+    p_dados.add_run("GLEBA A\n")
     p_dados.add_run("Proprietário: ").bold = True
     p_dados.add_run(f"{dados['proprietario'].upper()}\n")
     p_dados.add_run("Município: ").bold = True
@@ -233,7 +239,7 @@ def gerar_documento_word(dados):
 
 
 # ==========================================
-# 5. INTERFACE WEB (STREAMLIT)
+# 6. INTERFACE WEB (STREAMLIT)
 # ==========================================
 st.title("📄 Processador de Memoriais por Planta e Roteiro")
 st.write(
@@ -263,7 +269,7 @@ if pdf_planta and pdf_roteiro:
                 texto_planta = extrair_texto_pdf(pdf_planta)
                 texto_roteiro = extrair_texto_pdf(pdf_roteiro)
 
-                # Processamento inteligente via Gemini
+                # Processamento inteligente via Gemini usando Pydantic nativo
                 dados_estruturados = analisar_dados_com_gemini(
                     texto_planta, texto_roteiro
                 )
