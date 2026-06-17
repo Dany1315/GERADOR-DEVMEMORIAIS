@@ -19,12 +19,19 @@ st.set_page_config(
 # ==========================================
 # 1. CONFIGURAÇÃO DA API DO GEMINI (NOVO SDK)
 # ==========================================
+import os
+from google import genai
+from google.genai import types
+
 # 1. Injeta a chave de autorização diretamente na memória do sistema (Variável de Ambiente)
 os.environ["GEMINI_API_KEY"] = "AQ.Ab8RN6IvGAjuzov7gtTG8VkVwtijXx_AofJJKgkJNnZVFCJtIQ"
 
-# 2. Inicializa o cliente SEM PASSAR a chave no argumento. 
-# O comando genai.Client() vai ler a chave automaticamente da memória, exatamente como o Google exige!
-client = genai.Client(vertexai=True)
+# 2. Inicializa o cliente apontando para a infraestrutura da Vertex AI informando o seu projeto
+client = genai.Client(
+    vertexai=True,
+    project="gen-lang-client-0796659366",
+    location="us-central1"
+)
 
 # ==========================================
 # 2. EXTRATOR DE TEXTO DE PDF
@@ -64,7 +71,7 @@ class DadosMemorial(BaseModel):
 # 4. INTEGRAÇÃO COM GEMINI (ANÁLISE AVANÇADA)
 # ==========================================
 def analisar_dados_com_gemini(texto_planta, texto_roteiro):
-    """Utiliza a API do Gemini para correlacionar os dados cadastrais da planta
+    """Utiliza a API do Gemini via Vertex AI para correlacionar os dados cadastrais da planta
     com os vértices técnicos e confrontantes da tabela de roteiro perimétrico.
     """
     prompt = f"""
@@ -99,7 +106,7 @@ def analisar_dados_com_gemini(texto_planta, texto_roteiro):
        - "confrontante": O nome do confrontante em letras maiúsculas associado àquele trecho específico.
     """
 
-    # Chamada oficial utilizando o modelo "gemini-2.5-flash"
+    # Chamada adaptada para o ambiente Vertex AI com suporte à chave de autorização
     response = client.models.generate_content(
         model="gemini-2.5-flash",
         contents=prompt,
@@ -112,7 +119,6 @@ def analisar_dados_com_gemini(texto_planta, texto_roteiro):
 
     import json
     return json.loads(response.text)
-
 
 # ==========================================
 # 5. GERADOR DO DOCUMENTO DOCX (IGUAL MODELO)
