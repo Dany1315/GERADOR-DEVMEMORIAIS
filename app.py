@@ -23,12 +23,7 @@ import os
 from google import genai
 from google.genai import types
 
-# Segurança: É melhor NÃO deixar a chave exposta direto no código.
-# O os.environ abaixo serve para testar localmente, mas o ideal é preencher nos "Secrets" do GitHub/Streamlit.
-if "GEMINI_API_KEY" not in os.environ:
-    os.environ["GEMINI_API_KEY"] = "AQ.Ab8RN6IvGAjuzov7gtTG8VkVwtijXx_AofJJKgkJNnZVFCJtIQ"
-
-# Inicializa o cliente padrão para desenvolvedores (sem Vertex AI)
+# O cliente vai buscar automaticamente a variável de ambiente chamada GEMINI_API_KEY
 client = genai.Client()
 # ==========================================
 # 2. EXTRATOR DE TEXTO DE PDF
