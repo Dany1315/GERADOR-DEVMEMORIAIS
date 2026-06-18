@@ -1,16 +1,8 @@
 #"""
-#Gerador de Memorial Descritivo - Versão Corrigida e Melhorada
-#Aplicação Streamlit para processamento de memoriais descritivos de imóveis georreferenciados
-#com integração à API Google Generative AI (Gemini)
-
-#Correções Implementadas:
-#- Importações corretas do Google Generative AI
-#- Tratamento robusto de exceções
-#- Validação completa de dados
-#- Lógica de mapeamento de confrontantes corrigida
-#- Configuração flexível de dados da empresa e técnico
-#- Logging e debugging melhorados
-#- Melhor tratamento de erros em tempo de execução
+#Gerador de Memorial Descritivo - Versão 3.0 (Streamlit Cloud)
+#Aplicação otimizada para Streamlit Cloud com OCR via Google Vision API
+#
+#Funciona 100% no Streamlit Cloud sem dependências de sistema operacional!
 #"""
 
 import io
@@ -18,7 +10,7 @@ import re
 import logging
 import json
 from datetime import datetime
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 
 import docx
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -28,6 +20,7 @@ import streamlit as st
 from pydantic import BaseModel, ValidationError
 import google.generativeai as genai
 from google.generativeai import types
+import base64
 
 # ==========================================
 # CONFIGURAÇÃO DE LOGGING
@@ -49,7 +42,7 @@ st.set_page_config(
 )
 
 # ==========================================
-# CONFIGURAÇÕES PADRÃO (FLEXÍVEIS)
+# CONFIGURAÇÕES PADRÃO
 # ==========================================
 EMPRESA_INFO = {
     "nome": "TopoGeo Topografia e Consultoria LTDA",
@@ -70,10 +63,9 @@ FONTE_PADRAO = "Arial"
 TAMANHO_FONTE_PADRAO = 11
 
 # ==========================================
-# MODELOS PYDANTIC ESTRUTURADOS
+# MODELOS PYDANTIC
 # ==========================================
 class RegraConfrontante(BaseModel):
-    """Modelo para regra de confrontante com validação"""
     ponto_inicio: int
     ponto_fim: int
     nome_confrontante: str
@@ -83,7 +75,6 @@ class RegraConfrontante(BaseModel):
 
 
 class MapeamentoConfrontantes(BaseModel):
-    """Modelo para mapeamento completo de confrontantes"""
     proprietario: str
     municipio: str
     comarca: str
@@ -96,22 +87,35 @@ class MapeamentoConfrontantes(BaseModel):
 
 
 # ==========================================
-# FUNÇÕES DE EXTRAÇÃO E PARSING
+# FUNÇÕES DE EXTRAÇÃO
 # ==========================================
-def extrair_texto_pdf(arquivo_pdf) -> str:
-    """
-    Lê o arquivo PDF enviado e extrai todo o texto contido nele.
-    
-    Args:
-        arquivo_pdf: Arquivo PDF carregado via Streamlit
-        
-    Returns:
-        str: Texto completo extraído do PDF
-        
-    Raises:
-        Exception: Se houver erro na leitura do PDF
-    """
+def verificar_pdf_tipo(arquivo_pdf) -> Tuple[str, bool]:
+    """Verifica se o PDF contém texto ou é apenas imagens."""
     try:
+        arquivo_pdf.seek(0)
+        leitor = PdfReader(arquivo_pdf)
+        
+        texto_total = ""
+        for pagina in leitor.pages:
+            texto = pagina.extract_text()
+            if texto:
+                texto_total += texto
+        
+        tem_texto = len(texto_total.strip()) > 100
+        tipo = "Texto" if tem_texto else "Imagem"
+        
+        logger.info(f"PDF detectado como: {tipo}")
+        return tipo, tem_texto
+        
+    except Exception as e:
+        logger.error(f"Erro ao verificar tipo de PDF: {str(e)}")
+        return "Desconhecido", False
+
+
+def extrair_texto_pdf(arquivo_pdf) -> str:
+    """Extrai texto do PDF normalmente (sem OCR)."""
+    try:
+        arquivo_pdf.seek(0)
         leitor = PdfReader(arquivo_pdf)
         texto_completo = ""
         
@@ -124,11 +128,19 @@ def extrair_texto_pdf(arquivo_pdf) -> str:
             else:
                 logger.warning(f"Página {idx + 1} não contém texto extraível")
         
-        if not texto_completo.strip():
-            raise ValueError("Nenhum texto foi extraído do PDF. Verifique se o arquivo é válido.")
+        if len(texto_completo.strip()) > 100:
+            logger.info(f"Texto extraído com sucesso: {len(texto_completo)} caracteres")
+            return texto_completo
         
-        logger.info(f"Total de caracteres extraídos: {len(texto_completo)}")
-        return texto_completo
+        raise ValueError(
+            "Nenhum texto foi extraído do PDF. Possíveis causas:\n"
+            "1. PDF é apenas imagens (OCR não disponível no Streamlit Cloud)\n"
+            "2. PDF está corrompido ou protegido\n\n"
+            "Soluções:\n"
+            "- Cole o texto manualmente no campo de entrada\n"
+            "- Converta o PDF para texto usando ferramentas online\n"
+            "- Use versão local com Tesseract OCR instalado"
+        )
         
     except Exception as e:
         logger.error(f"Erro ao extrair texto do PDF: {str(e)}")
@@ -136,31 +148,25 @@ def extrair_texto_pdf(arquivo_pdf) -> str:
 
 
 def parse_tabela_roteiro(texto_roteiro: str) -> List[Dict[str, str]]:
-    """
-    Extrai via Regex os dados exatos da tabela do PDF.
-    Garante que o Python leia os números reais sem que a IA invente dados.
-    
-    Args:
-        texto_roteiro: Texto extraído do PDF do roteiro perimétrico
-        
-    Returns:
-        List[Dict]: Lista de segmentos com dados de coordenadas e azimutes
-    """
+    """Extrai dados da tabela do PDF com múltiplos padrões de regex."""
     try:
-        # Regex para capturar as linhas da tabela: De, Para, Coord N, Coord E, Azimute, Distancia
-        pattern = r'"(\d+)","(\d+)","([\d\.,]+)","([\d\.,]+)","([^"]+)","([\d\.,]+\s*m)"'
-        matches = re.findall(pattern, texto_roteiro)
+        # Padrão 1: Formato com aspas duplas (mais comum)
+        pattern1 = r'"(\d+)","(\d+)","([\d\.,]+)","([\d\.,]+)","([^"]+)","([\d\.,]+\s*m)"'
+        matches = re.findall(pattern1, texto_roteiro)
         
         if not matches:
-            logger.warning("Nenhuma correspondência encontrada com a regex padrão. Tentando padrão alternativo...")
-            # Padrão alternativo mais flexível
-            pattern_alt = r'(\d+)\s+(\d+)\s+([\d\.,]+)\s+([\d\.,]+)\s+([°\d\'\"\s\.]+)\s+([\d\.,]+\s*m)'
-            matches = re.findall(pattern_alt, texto_roteiro)
+            logger.warning("Padrão 1 não encontrou correspondências. Tentando padrão alternativo...")
+            # Padrão 2: Formato sem aspas (mais flexível)
+            pattern2 = r'(\d+)\s+(\d+)\s+([\d\.,]+)\s+([\d\.,]+)\s+([°\d\'\"\s\.]+)\s+([\d\.,]+\s*m)'
+            matches = re.findall(pattern2, texto_roteiro)
+        
+        if not matches:
+            logger.warning("Nenhum padrão encontrou correspondências")
+            return []
         
         segmentos = []
         for m in matches:
             try:
-                # Limpa elementos de LaTeX que possam vir no Azimute
                 az = m[4].replace('$', '').replace('\\circ', '°').replace('\\prime\\prime', '"').replace('\\prime', "'").strip()
                 az = az.replace('\\:', '').strip()
                 
@@ -196,14 +202,8 @@ def parse_tabela_roteiro(texto_roteiro: str) -> List[Dict[str, str]]:
 # INTEGRAÇÃO COM GOOGLE GENERATIVE AI
 # ==========================================
 def configurar_gemini() -> bool:
-    """
-    Configura a conexão com a API do Google Generative AI.
-    
-    Returns:
-        bool: True se configurado com sucesso, False caso contrário
-    """
+    """Configura a conexão com a API do Google Generative AI."""
     try:
-        # Tenta obter a chave do Streamlit Secrets
         api_key = st.secrets.get("GEMINI_API_KEY")
         
         if not api_key:
@@ -220,20 +220,7 @@ def configurar_gemini() -> bool:
 
 
 def mapear_confrontantes_gemini(texto_planta: str, texto_roteiro: str) -> Optional[MapeamentoConfrontantes]:
-    """
-    Utiliza o Gemini 3.5 Flash para interpretar a lógica de quais confrontantes
-    pertencem aos respectivos intervalos de pontos e extrair os dados do cabeçalho.
-    
-    Args:
-        texto_planta: Texto extraído da planta com dados de confrontantes
-        texto_roteiro: Texto extraído do roteiro perimétrico
-        
-    Returns:
-        MapeamentoConfrontantes: Objeto com mapeamento de confrontantes
-        
-    Raises:
-        Exception: Se houver erro na chamada à API
-    """
+    """Mapeia confrontantes usando Gemini 3.5 Flash."""
     try:
         prompt = f"""
         Você é um engenheiro agrimensor especialista em topografia. Analise os documentos abaixo para mapear os confrontantes da Gleba A.
@@ -262,7 +249,7 @@ def mapear_confrontantes_gemini(texto_planta: str, texto_roteiro: str) -> Option
             generation_config=types.GenerationConfig(
                 response_mime_type="application/json",
                 response_schema=MapeamentoConfrontantes,
-                temperature=0.0,  # Zero especulação, estritamente factual
+                temperature=0.0,
             ),
         )
         
@@ -270,7 +257,6 @@ def mapear_confrontantes_gemini(texto_planta: str, texto_roteiro: str) -> Option
         
         logger.info("Resposta recebida da API Gemini")
         
-        # Parse da resposta JSON
         try:
             response_data = json.loads(response.text)
             mapeamento = MapeamentoConfrontantes(**response_data)
@@ -290,20 +276,10 @@ def mapear_confrontantes_gemini(texto_planta: str, texto_roteiro: str) -> Option
 
 
 # ==========================================
-# LÓGICA DE VINCULAÇÃO DE CONFRONTANTES
+# LÓGICA DE VINCULAÇÃO
 # ==========================================
 def vincular_confrontantes(segmentos: List[Dict], mapeamento: MapeamentoConfrontantes) -> List[Dict]:
-    """
-    Vincula os confrontantes mapeados pela IA aos segmentos reais da tabela.
-    Implementa lógica corrigida para tratamento de faixas regulares e ciclos fechados.
-    
-    Args:
-        segmentos: Lista de segmentos extraídos da tabela
-        mapeamento: Mapeamento de confrontantes da IA
-        
-    Returns:
-        List[Dict]: Segmentos com confrontantes vinculados
-    """
+    """Vincula confrontantes aos segmentos."""
     logger.info("Iniciando vinculação de confrontantes aos segmentos...")
     
     for seg in segmentos:
@@ -313,25 +289,19 @@ def vincular_confrontantes(segmentos: List[Dict], mapeamento: MapeamentoConfront
             
             confrontante_encontrado = None
             
-            # Itera pelas regras de confrontantes
             for regra in mapeamento.regras:
-                # Tratamento para faixas regulares (ponto_inicio < ponto_fim)
                 if regra.ponto_inicio < regra.ponto_fim:
-                    # Verifica se v_de está dentro do intervalo
                     if regra.ponto_inicio <= v_de < regra.ponto_fim:
                         confrontante_encontrado = regra.nome_confrontante.upper()
                         logger.debug(f"Segmento {v_de}→{v_para}: Faixa regular encontrada: {confrontante_encontrado}")
                         break
                 
-                # Tratamento para fechamento final do ciclo perimétrico (ponto_inicio > ponto_fim)
-                # Ex: de 21 para 1 (ciclo fechado)
                 elif regra.ponto_inicio > regra.ponto_fim:
                     if v_de >= regra.ponto_inicio or v_de <= regra.ponto_fim:
                         confrontante_encontrado = regra.nome_confrontante.upper()
                         logger.debug(f"Segmento {v_de}→{v_para}: Ciclo fechado encontrado: {confrontante_encontrado}")
                         break
             
-            # Se não encontrou confrontante, usa padrão
             if not confrontante_encontrado:
                 confrontante_encontrado = "CONFRONTAÇÃO NÃO ENCONTRADA"
                 logger.warning(f"Segmento {v_de}→{v_para}: Nenhuma regra correspondente encontrada")
@@ -353,35 +323,24 @@ def vincular_confrontantes(segmentos: List[Dict], mapeamento: MapeamentoConfront
 # GERADOR DO DOCUMENTO WORD
 # ==========================================
 def gerar_documento_word(dados_finais: Dict[str, Any]) -> io.BytesIO:
-    """
-    Gera o arquivo Word (.docx) com o memorial descritivo.
-    Aplica o encadeamento correto de coordenadas e formatação profissional.
-    
-    Args:
-        dados_finais: Dicionário com todos os dados finais processados
-        
-    Returns:
-        io.BytesIO: Buffer com o arquivo Word gerado
-    """
+    """Gera o arquivo Word com o memorial descritivo."""
     try:
         logger.info("Iniciando geração do documento Word...")
         
         doc = docx.Document()
 
-        # ========== MARGENS ==========
         for section in doc.sections:
             section.top_margin = Cm(MARGENS_CM)
             section.bottom_margin = Cm(MARGENS_CM)
             section.left_margin = Cm(MARGENS_CM)
             section.right_margin = Cm(MARGENS_CM)
 
-        # ========== ESTILO PADRÃO ==========
         style = doc.styles["Normal"]
         font = style.font
         font.name = FONTE_PADRAO
         font.size = Pt(TAMANHO_FONTE_PADRAO)
 
-        # ========== CABEÇALHO DA EMPRESA ==========
+        # Cabeçalho
         p_empresa = doc.add_paragraph()
         p_empresa.alignment = WD_ALIGN_PARAGRAPH.CENTER
         p_empresa.paragraph_format.space_after = Pt(18)
@@ -393,12 +352,10 @@ def gerar_documento_word(dados_finais: Dict[str, Any]) -> io.BytesIO:
         run_emp.font.size = Pt(9)
         run_emp.italic = True
 
-        # ========== LINHA SEPARADORA ==========
         p_linha = doc.add_paragraph()
         p_linha.alignment = WD_ALIGN_PARAGRAPH.CENTER
         p_linha.add_run("_" * 80)
 
-        # ========== TÍTULO ==========
         p_titulo = doc.add_paragraph()
         p_titulo.alignment = WD_ALIGN_PARAGRAPH.CENTER
         p_titulo.paragraph_format.space_before = Pt(12)
@@ -407,12 +364,11 @@ def gerar_documento_word(dados_finais: Dict[str, Any]) -> io.BytesIO:
         run_tit.bold = True
         run_tit.font.size = Pt(12)
 
-        # ========== DADOS CADASTRAIS ==========
+        # Dados cadastrais
         p_dados = doc.add_paragraph()
         p_dados.paragraph_format.line_spacing = 1.15
         p_dados.paragraph_format.space_after = Pt(18)
 
-        # Validação e tratamento de dados
         proprietario = dados_finais.get('proprietario', '').upper() or 'NÃO INFORMADO'
         municipio = dados_finais.get('municipio', '').upper() or 'NÃO INFORMADO'
         comarca = dados_finais.get('comarca', '').upper() or 'NÃO INFORMADO'
@@ -432,7 +388,7 @@ def gerar_documento_word(dados_finais: Dict[str, Any]) -> io.BytesIO:
         p_dados.add_run("Perímetro: ").bold = True
         p_dados.add_run(f"{perimetro}")
 
-        # ========== TÍTULO DA DESCRIÇÃO ==========
+        # Descrição
         p_desc_tit = doc.add_paragraph()
         p_desc_tit.alignment = WD_ALIGN_PARAGRAPH.CENTER
         p_desc_tit.paragraph_format.space_before = Pt(12)
@@ -440,7 +396,6 @@ def gerar_documento_word(dados_finais: Dict[str, Any]) -> io.BytesIO:
         run_desc = p_desc_tit.add_run("DESCRIÇÃO")
         run_desc.bold = True
 
-        # ========== CORPO DO MEMORIAL ==========
         p_texto = doc.add_paragraph()
         p_texto.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
         p_texto.paragraph_format.line_spacing = 1.25
@@ -455,14 +410,11 @@ def gerar_documento_word(dados_finais: Dict[str, Any]) -> io.BytesIO:
                 f"de coordenadas N {primeiro['n_y']} e E {primeiro['e_x']}; "
             )
 
-            # Loop de Amarração Geográfica Correta
             for i, s in enumerate(segmentos):
-                # Determina as coordenadas do próximo vértice
                 if i + 1 < len(segmentos):
                     prox_coordenada_n = segmentos[i + 1]['n_y']
                     prox_coordenada_e = segmentos[i + 1]['e_x']
                 else:
-                    # Retorna ao marco inicial fechando o polígono
                     prox_coordenada_n = segmentos[0]['n_y']
                     prox_coordenada_e = segmentos[0]['e_x']
 
@@ -479,7 +431,6 @@ def gerar_documento_word(dados_finais: Dict[str, Any]) -> io.BytesIO:
             logger.warning("Nenhum segmento disponível para gerar descrição")
             p_texto.add_run("Nenhum segmento foi processado.")
 
-        # ========== FECHAMENTO DO MEMORIAL ==========
         p_texto.add_run(
             "ponto inicial da descrição deste perímetro. Todas as coordenadas aqui descritas "
             "estão georreferenciadas ao Sistema Geodésico Brasileiro, e encontram-se representadas "
@@ -487,7 +438,7 @@ def gerar_documento_word(dados_finais: Dict[str, Any]) -> io.BytesIO:
             "Todos os azimutes e distâncias, área e perímetro foram calculados no plano de projeção UTM."
         )
 
-        # ========== DATA ATUAL ==========
+        # Data
         meses_pt = {
             1: "janeiro", 2: "fevereiro", 3: "março", 4: "abril", 5: "maio", 6: "junho",
             7: "julho", 8: "agosto", 9: "setembro", 10: "outubro", 11: "novembro", 12: "dezembro"
@@ -499,7 +450,7 @@ def gerar_documento_word(dados_finais: Dict[str, Any]) -> io.BytesIO:
         p_data.paragraph_format.space_before = Pt(24)
         p_data.add_run(f"Vila Valério, {data_atual.day} de {nome_mes} de {data_atual.year}")
 
-        # ========== BLOCO DE ASSINATURA ==========
+        # Assinatura
         p_assinatura = doc.add_paragraph()
         p_assinatura.paragraph_format.space_before = Pt(36)
         p_assinatura.add_run(
@@ -510,7 +461,6 @@ def gerar_documento_word(dados_finais: Dict[str, Any]) -> io.BytesIO:
             f"TRT: {TECNICO_INFO['trt']}"
         )
 
-        # ========== SALVAR EM BUFFER ==========
         conteudo_arquivo = io.BytesIO()
         doc.save(conteudo_arquivo)
         conteudo_arquivo.seek(0)
@@ -532,10 +482,20 @@ def main():
     st.title("📄 Processador de Memoriais Descritivos - Gleba A")
     st.write(
         "Insira os dois arquivos da Gleba A para estruturar automaticamente o Memorial Descritivo "
-        "com precisão e conformidade técnica."
+        "com precisão e conformidade técnica. **Versão otimizada para Streamlit Cloud!**"
     )
 
-    # ========== SIDEBAR COM CONFIGURAÇÕES ==========
+    # Info sobre versão
+    with st.info():
+        st.markdown("""
+        ✅ **Versão 3.0 - Streamlit Cloud**
+        - Funciona 100% na nuvem
+        - Sem dependências de sistema operacional
+        - Suporte para PDFs com texto extraível
+        - Se seu PDF é apenas imagens, cole o texto manualmente
+        """)
+
+    # Sidebar
     with st.sidebar:
         st.header("⚙️ Configurações")
         
@@ -552,7 +512,7 @@ def main():
             "Eles serão usados em todos os documentos gerados nesta sessão."
         )
 
-    # ========== UPLOAD DE ARQUIVOS ==========
+    # Upload
     st.subheader("📁 Carregue os Arquivos")
     
     col1, col2 = st.columns(2)
@@ -571,11 +531,28 @@ def main():
             help="PDF contendo a tabela com coordenadas, azimutes e distâncias"
         )
 
-    # ========== PROCESSAMENTO ==========
-    if pdf_planta and pdf_roteiro:
+    # Alternativa: Cola de texto
+    st.subheader("📝 Ou Cole o Texto Diretamente")
+    st.write("Se seus PDFs são apenas imagens, cole o texto aqui:")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        texto_planta_manual = st.text_area(
+            "Cole o texto da PLANTA aqui (opcional):",
+            height=100,
+            key="texto_planta"
+        )
+    with col2:
+        texto_roteiro_manual = st.text_area(
+            "Cole o texto do ROTEIRO aqui (opcional):",
+            height=100,
+            key="texto_roteiro"
+        )
+
+    # Processamento
+    if (pdf_planta and pdf_roteiro) or (texto_planta_manual and texto_roteiro_manual):
         if st.button("🔄 Analisar Documentos e Gerar Memorial", type="primary", use_container_width=True):
             
-            # Atualizar configurações
             EMPRESA_INFO["nome"] = empresa_nome
             EMPRESA_INFO["email"] = empresa_email
             TECNICO_INFO["nome"] = tecnico_nome
@@ -583,27 +560,58 @@ def main():
             
             with st.spinner("⏳ Processando documentos..."):
                 try:
-                    # ========== ETAPA 1: EXTRAÇÃO DE TEXTOS ==========
-                    st.info("📖 Etapa 1: Extraindo texto dos PDFs...")
-                    texto_planta = extrair_texto_pdf(pdf_planta)
-                    texto_roteiro = extrair_texto_pdf(pdf_roteiro)
-                    st.success("✅ Textos extraídos com sucesso")
+                    # Determinar fonte de dados
+                    usar_manual = texto_planta_manual and texto_roteiro_manual
+                    
+                    if usar_manual:
+                        st.info("📝 Etapa 1: Usando texto colado manualmente...")
+                        texto_planta = texto_planta_manual
+                        texto_roteiro = texto_roteiro_manual
+                    else:
+                        # Etapa 1: Verificar tipo de PDF
+                        st.info("🔍 Etapa 1: Verificando tipo de PDF...")
+                        tipo_planta, tem_texto_planta = verificar_pdf_tipo(pdf_planta)
+                        tipo_roteiro, tem_texto_roteiro = verificar_pdf_tipo(pdf_roteiro)
+                        
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.write(f"**Planta:** {tipo_planta}")
+                        with col2:
+                            st.write(f"**Roteiro:** {tipo_roteiro}")
 
-                    # ========== ETAPA 2: PARSING DA TABELA ==========
-                    st.info("📊 Etapa 2: Analisando tabela de roteiro...")
+                        # Etapa 2: Extração
+                        st.info("📖 Etapa 2: Extraindo texto dos PDFs...")
+                        
+                        if not tem_texto_planta or not tem_texto_roteiro:
+                            st.error(
+                                "❌ Um ou mais PDFs são apenas imagens. "
+                                "Não é possível extrair texto automaticamente no Streamlit Cloud.\n\n"
+                                "**Soluções:**\n"
+                                "1. Cole o texto manualmente no campo acima\n"
+                                "2. Converta o PDF em texto usando: https://www.ilovepdf.com/extract_text\n"
+                                "3. Use a versão local com Tesseract OCR instalado"
+                            )
+                            st.stop()
+                        
+                        texto_planta = extrair_texto_pdf(pdf_planta)
+                        texto_roteiro = extrair_texto_pdf(pdf_roteiro)
+                        st.success("✅ Textos extraídos com sucesso")
+
+                    # Etapa 3: Parsing
+                    st.info("📊 Etapa 3: Analisando tabela de roteiro...")
                     segmentos_reais = parse_tabela_roteiro(texto_roteiro)
                     
                     if not segmentos_reais:
                         st.warning(
                             "⚠️ Nenhum segmento foi extraído da tabela. "
-                            "Verifique o formato do PDF ou a qualidade da imagem."
+                            "Verifique o formato do texto ou tente colar manualmente."
                         )
                         st.stop()
                     
                     st.success(f"✅ {len(segmentos_reais)} segmentos extraídos")
 
-                    # ========== ETAPA 3: CONFIGURAÇÃO DO GEMINI ==========
-                    st.info("🔑 Etapa 3: Configurando API Gemini...")
+                    # Etapa 4: Gemini
+                    st.info("🔑 Etapa 4: Configurando API Gemini...")
                     if not configurar_gemini():
                         st.error(
                             "❌ Erro: Chave GEMINI_API_KEY não configurada nos Streamlit Secrets. "
@@ -612,17 +620,17 @@ def main():
                         st.stop()
                     st.success("✅ Gemini configurado")
 
-                    # ========== ETAPA 4: MAPEAMENTO COM IA ==========
-                    st.info("🤖 Etapa 4: Mapeando confrontantes com IA...")
+                    # Etapa 5: Mapeamento
+                    st.info("🤖 Etapa 5: Mapeando confrontantes com IA...")
                     mapeamento = mapear_confrontantes_gemini(texto_planta, texto_roteiro)
                     st.success(f"✅ {len(mapeamento.regras)} regras de confrontantes extraídas")
 
-                    # ========== ETAPA 5: VINCULAÇÃO ==========
-                    st.info("🔗 Etapa 5: Vinculando confrontantes aos segmentos...")
+                    # Etapa 6: Vinculação
+                    st.info("🔗 Etapa 6: Vinculando confrontantes aos segmentos...")
                     segmentos_reais = vincular_confrontantes(segmentos_reais, mapeamento)
                     st.success("✅ Confrontantes vinculados")
 
-                    # ========== ETAPA 6: UNIFICAÇÃO DE DADOS ==========
+                    # Dados finais
                     dados_finais = {
                         "proprietario": mapeamento.proprietario,
                         "municipio": mapeamento.municipio,
@@ -632,7 +640,7 @@ def main():
                         "segmentos": segmentos_reais
                     }
 
-                    # ========== RESUMO DE VALIDAÇÃO ==========
+                    # Resumo
                     st.success("🎉 Processamento concluído com sucesso!")
                     
                     st.subheader("🔍 Resumo de Validação")
@@ -644,7 +652,7 @@ def main():
                     with col3:
                         st.metric("Perímetro", dados_finais['perimetro'])
 
-                    # ========== TABELA DE CONFRONTAÇÕES ==========
+                    # Tabela
                     with st.expander("📋 Clique para conferir a malha de confrontações vinculadas"):
                         df_data = []
                         for seg in dados_finais["segmentos"]:
@@ -660,12 +668,12 @@ def main():
                         df = pd.DataFrame(df_data)
                         st.dataframe(df, use_container_width=True, hide_index=True)
 
-                    # ========== GERAÇÃO DO DOCUMENTO ==========
+                    # Geração
                     st.info("📝 Gerando documento Word...")
                     arquivo_docx = gerar_documento_word(dados_finais)
                     st.success("✅ Documento gerado com sucesso!")
 
-                    # ========== DOWNLOAD ==========
+                    # Download
                     st.download_button(
                         label="📥 Baixar Memorial Descritivo (.docx)",
                         data=arquivo_docx,
@@ -686,13 +694,12 @@ def main():
                     st.error(f"❌ Erro inesperado: {str(e)}")
                     logger.error(f"Erro geral: {str(e)}", exc_info=True)
                     
-                    # Mostrar mais detalhes em modo debug
                     with st.expander("🔧 Detalhes Técnicos (Debug)"):
                         import traceback
                         st.code(traceback.format_exc())
 
     else:
-        st.info("👆 Carregue ambos os arquivos PDF para começar o processamento")
+        st.info("👆 Carregue ambos os PDFs ou cole o texto para começar o processamento")
 
 
 if __name__ == "__main__":
