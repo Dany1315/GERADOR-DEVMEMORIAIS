@@ -46,8 +46,8 @@ st.set_page_config(
 # ==========================================
 EMPRESA_INFO = {
     "nome": "TopoGeo Topografia e Consultoria LTDA",
-    "endereco": "Rua Natalino Cossi, Nº 114, sala 2 - Vila Valério, CEP 29785-000",
-    "telefone": "27 99837-1164",
+    "endereco": "xxxxxxxxxxxxxxxxxxx",
+    "telefone": "xxxxxxxxxxxxxxx",
     "email": "topogeo2014@gmail.com"
 }
 
