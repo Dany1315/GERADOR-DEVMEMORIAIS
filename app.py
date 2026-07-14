@@ -1,18 +1,16 @@
 #"""
-#Gerador de Memorial Descritivo - Versão 5.1 (Streamlit Cloud - Melhorado)
+#Gerador de Memorial Descritivo - Versão 5.0 (Streamlit Cloud)
 #Lê PDFs de topografia (inclusive desenhos de CAD sem camada de texto, como
 #exportações VectorDraw) convertendo as páginas em imagem e usando a visão
 #multimodal do Gemini para extrair a tabela de roteiro perimétrico e os
 #dados/confrontantes da planta (matrícula + nome dos vizinhos, sem CPF).
 #
-#Novidades v5.1:
-#  - Retry automático com backoff exponencial para chamadas à API Gemini
-#  - Validação rigorosa de entrada de dados do cliente (área, perímetro)
-#  - Tratamento melhorado de erros de vértice inválido (vinculação de confrontantes)
-#  - Limite inteligente de DPI (máximo 300) para evitar timeouts
-#  - Sanitização de logs para não vazar dados sensíveis
-#  - Docstrings detalhadas em modelos Pydantic
-#  - Remoção de variável não utilizada (nome_mes)
+#Novidades v5.0:
+#  - Dados do cliente (Imóvel, Proprietário, Local, Área, Perímetro) na sidebar
+#  - Formato do memorial atualizado: coordenadas N/E por vértice, matrícula e
+#    nome dos vizinhos, distâncias percorridas, texto final conforme modelo oficial
+#  - Nomes dos modelos Gemini corrigidos (gemini-1.5-flash, gemini-1.5-pro, etc.)
+#  - Assinatura no formato do memorial de referência (Resp. Técnico + INCRA)
 #
 #Funciona 100% no Streamlit Cloud sem dependências de sistema operacional
 #(usa PyMuPDF puro-Python para rasterizar o PDF, sem precisar de Poppler/Tesseract).
@@ -22,7 +20,6 @@ import io
 import re
 import logging
 import json
-import time
 from datetime import datetime
 from typing import Optional, List, Dict, Any, Tuple
 
@@ -33,10 +30,9 @@ from pypdf import PdfReader
 import fitz  # PyMuPDF - rasteriza PDF em imagem sem depender de Poppler
 from PIL import Image
 import streamlit as st
-from pydantic import BaseModel, ValidationError, Field
+from pydantic import BaseModel, ValidationError
 import google.generativeai as genai
 from google.generativeai import types
-from google.api_core import exceptions as google_exceptions
 
 # ==========================================
 # CONFIGURAÇÃO DE LOGGING
@@ -86,21 +82,10 @@ MARGENS_CM = 2.5
 FONTE_PADRAO = "Arial"
 TAMANHO_FONTE_PADRAO = 11
 
-# Configurações de retry
-MAX_RETRIES = 3
-INITIAL_RETRY_DELAY = 2  # segundos
-
 # ==========================================
 # MODELOS PYDANTIC
 # ==========================================
 class RegraConfrontante(BaseModel):
-    """Regra de mapeamento de confrontantes entre pontos.
-    
-    Atributos:
-        ponto_inicio: Número do vértice onde a regra começa
-        ponto_fim: Número do vértice onde a regra termina
-        nome_confrontante: Descrição do confrontante (ex: "Matrícula nº 1234 propriedade de JOÃO")
-    """
     ponto_inicio: int
     ponto_fim: int
     nome_confrontante: str
@@ -110,24 +95,13 @@ class RegraConfrontante(BaseModel):
 
 
 class MapeamentoConfrontantes(BaseModel):
-    """Conjunto de regras de mapeamento de confrontantes."""
-    regras: List[RegraConfrontante] = Field(default_factory=list)
+    regras: List[RegraConfrontante]
 
     class Config:
         str_strip_whitespace = True
 
 
 class SegmentoRoteiro(BaseModel):
-    """Representa um segmento da tabela de roteiro perimétrico.
-    
-    Atributos:
-        de: Número do vértice de origem (string)
-        para: Número do vértice de destino (string)
-        n_y: Coordenada Norte (Y), ex: "1234,567 m"
-        e_x: Coordenada Este (X), ex: "5678,901 m"
-        azimute: Azimute em graus/minutos/segundos, ex: "45°12'33\""
-        distancia: Distância em metros, ex: "123,45 m"
-    """
     de: str
     para: str
     n_y: str
@@ -140,99 +114,10 @@ class SegmentoRoteiro(BaseModel):
 
 
 class ExtracaoRoteiro(BaseModel):
-    """Lista de segmentos extraídos da tabela de roteiro perimétrico."""
-    segmentos: List[SegmentoRoteiro] = Field(default_factory=list)
+    segmentos: List[SegmentoRoteiro]
 
     class Config:
         str_strip_whitespace = True
-
-
-# ==========================================
-# FUNÇÕES UTILITÁRIAS
-# ==========================================
-def sanitize_log_message(message: str) -> str:
-    """Remove informações sensíveis de mensagens de log."""
-    # Remove números de ponto flutuante que podem ser dados sensíveis
-    # em favor de descrição genérica
-    return message if len(message) < 200 else message[:200] + "..."
-
-
-def validar_numero_positivo(valor: str, nome_campo: str) -> Tuple[bool, str]:
-    """Valida se um valor é um número positivo válido.
-    
-    Args:
-        valor: String com o valor a validar
-        nome_campo: Nome do campo para mensagem de erro
-        
-    Returns:
-        Tupla (é_válido, mensagem_erro)
-    """
-    try:
-        # Remove espaços em branco
-        valor_limpo = valor.strip()
-        
-        if not valor_limpo:
-            return False, f"{nome_campo} não pode estar vazio"
-        
-        # Tenta converter para float (aceita vírgula ou ponto)
-        num_valor = float(valor_limpo.replace(',', '.'))
-        
-        if num_valor <= 0:
-            return False, f"{nome_campo} deve ser maior que zero"
-        
-        return True, ""
-        
-    except (ValueError, AttributeError):
-        return False, f"{nome_campo} deve ser um número válido (ex: 0,16 ou 0.16)"
-
-
-def retry_com_backoff(funcao, *args, max_tentativas=MAX_RETRIES, **kwargs):
-    """Executa uma função com retry automático e backoff exponencial.
-    
-    Útil para chamar a API Gemini, que pode sofrer rate limiting.
-    """
-    for tentativa in range(1, max_tentativas + 1):
-        try:
-            return funcao(*args, **kwargs)
-            
-        except google_exceptions.ResourceExhausted as e:
-            # Rate limit atingido
-            if tentativa < max_tentativas:
-                delay = INITIAL_RETRY_DELAY * (2 ** (tentativa - 1))
-                logger.warning(
-                    f"Rate limit da API atingido. Tentativa {tentativa}/{max_tentativas}. "
-                    f"Aguardando {delay}s antes de retry..."
-                )
-                time.sleep(delay)
-            else:
-                raise ValueError(
-                    "API Gemini atingiu o limite de requisições. "
-                    "Tente novamente em alguns minutos."
-                )
-                
-        except google_exceptions.DeadlineExceeded as e:
-            # Timeout
-            if tentativa < max_tentativas:
-                delay = INITIAL_RETRY_DELAY * (2 ** (tentativa - 1))
-                logger.warning(
-                    f"Timeout na API. Tentativa {tentativa}/{max_tentativas}. "
-                    f"Aguardando {delay}s antes de retry..."
-                )
-                time.sleep(delay)
-            else:
-                raise ValueError(
-                    "API Gemini respondeu muito lentamente. "
-                    "Tente aumentar o DPI ou usar menos páginas."
-                )
-        
-        except google_exceptions.GoogleAPIError as e:
-            # Outro erro genérico da API
-            logger.error(f"Erro na API Gemini (tentativa {tentativa}): {sanitize_log_message(str(e))}")
-            if tentativa < max_tentativas:
-                delay = INITIAL_RETRY_DELAY * (2 ** (tentativa - 1))
-                time.sleep(delay)
-            else:
-                raise
 
 
 # ==========================================
@@ -257,7 +142,7 @@ def verificar_pdf_tipo(arquivo_pdf) -> Tuple[str, bool]:
         return tipo, tem_texto
         
     except Exception as e:
-        logger.error(f"Erro ao verificar tipo de PDF: {sanitize_log_message(str(e))}")
+        logger.error(f"Erro ao verificar tipo de PDF: {str(e)}")
         return "Desconhecido", False
 
 
@@ -282,7 +167,7 @@ def extrair_texto_pdf(arquivo_pdf) -> str:
         return texto_completo
         
     except Exception as e:
-        logger.error(f"Erro ao extrair texto do PDF: {sanitize_log_message(str(e))}")
+        logger.error(f"Erro ao extrair texto do PDF: {str(e)}")
         raise
 
 
@@ -294,13 +179,6 @@ def pdf_paginas_para_imagens(arquivo_pdf, dpi: int = 200) -> List[Image.Image]:
     onde o texto é desenhado como vetor e não existe camada de texto real —
     por isso pypdf/pdftotext retornam vazio mesmo a fonte aparecendo listada
     nos metadados do PDF.
-    
-    Args:
-        arquivo_pdf: Arquivo PDF carregado
-        dpi: Resolução em DPI (padrão 200)
-        
-    Returns:
-        Lista de imagens PIL convertidas do PDF
     """
     try:
         arquivo_pdf.seek(0)
@@ -321,7 +199,7 @@ def pdf_paginas_para_imagens(arquivo_pdf, dpi: int = 200) -> List[Image.Image]:
         return imagens
 
     except Exception as e:
-        logger.error(f"Erro ao rasterizar PDF: {sanitize_log_message(str(e))}")
+        logger.error(f"Erro ao rasterizar PDF: {str(e)}")
         raise ValueError(f"Não foi possível abrir o PDF para leitura visual: {str(e)}")
 
 
@@ -363,7 +241,7 @@ def parse_tabela_roteiro(texto_roteiro: str) -> List[Dict[str, str]]:
                 logger.debug(f"Segmento extraído: {m[0]} → {m[1]}")
                 
             except Exception as e:
-                logger.warning(f"Erro ao processar segmento {m}: {sanitize_log_message(str(e))}")
+                logger.warning(f"Erro ao processar segmento {m}: {str(e)}")
                 continue
         
         if not segmentos:
@@ -374,7 +252,7 @@ def parse_tabela_roteiro(texto_roteiro: str) -> List[Dict[str, str]]:
         return segmentos
         
     except Exception as e:
-        logger.error(f"Erro ao fazer parse da tabela de roteiro: {sanitize_log_message(str(e))}")
+        logger.error(f"Erro ao fazer parse da tabela de roteiro: {str(e)}")
         raise
 
 
@@ -382,8 +260,7 @@ def extrair_roteiro_com_ia(imagens_roteiro: List[Image.Image], nome_modelo: str)
     """Lê a(s) imagem(ns) da TABELA DE ROTEIRO PERIMÉTRICO usando a visão do
     Gemini e retorna a lista de segmentos (de/para/coordenadas/azimute/distância).
     Necessário porque tabelas exportadas de CAD (ex.: VectorDraw) não têm
-    camada de texto real — o texto é desenhado como vetor.
-    """
+    camada de texto real — o texto é desenhado como vetor."""
     try:
         prompt = """
         Você é um especialista em leitura de plantas e tabelas topográficas. A(s) imagem(ns)
@@ -407,22 +284,17 @@ def extrair_roteiro_com_ia(imagens_roteiro: List[Image.Image], nome_modelo: str)
 
         logger.info("Chamando API Gemini (visão) para extrair a tabela de roteiro...")
 
-        def _chamar_gemini():
-            model = genai.GenerativeModel(
-                model_name=nome_modelo,
-                generation_config=types.GenerationConfig(
-                    response_mime_type="application/json",
-                    response_schema=ExtracaoRoteiro,
-                    temperature=0.0,
-                ),
-            )
+        model = genai.GenerativeModel(
+            model_name=nome_modelo,
+            generation_config=types.GenerationConfig(
+                response_mime_type="application/json",
+                response_schema=ExtracaoRoteiro,
+                temperature=0.0,
+            ),
+        )
 
-            conteudo = list(imagens_roteiro) + [prompt]
-            response = model.generate_content(conteudo)
-            return response
-
-        # Usar retry com backoff
-        response = retry_com_backoff(_chamar_gemini)
+        conteudo = list(imagens_roteiro) + [prompt]
+        response = model.generate_content(conteudo)
 
         dados = json.loads(response.text)
         extracao = ExtracaoRoteiro(**dados)
@@ -437,19 +309,13 @@ def extrair_roteiro_com_ia(imagens_roteiro: List[Image.Image], nome_modelo: str)
         return segmentos
 
     except ValidationError as e:
-        logger.error(f"Erro de validação ao processar tabela de roteiro: {sanitize_log_message(str(e))}")
-        raise ValueError(
-            f"Resposta da IA inválida ao ler a tabela de roteiro. "
-            f"Campos esperados faltando ou inválidos. Tente novamente com melhor qualidade de imagem."
-        )
+        logger.error(f"Erro de validação ao processar tabela de roteiro: {str(e)}")
+        raise ValueError(f"Resposta da IA inválida ao ler a tabela de roteiro: {str(e)}")
     except json.JSONDecodeError as e:
-        logger.error(f"Erro ao fazer parse JSON da tabela de roteiro: {sanitize_log_message(str(e))}")
-        raise ValueError(
-            f"Resposta da IA não é JSON válido ao ler a tabela de roteiro. "
-            f"Tente novamente ou aumente o DPI para melhor leitura."
-        )
+        logger.error(f"Erro ao fazer parse JSON da tabela de roteiro: {str(e)}")
+        raise ValueError(f"Resposta da IA não é JSON válido ao ler a tabela de roteiro: {str(e)}")
     except Exception as e:
-        logger.error(f"Erro ao extrair tabela de roteiro com IA: {sanitize_log_message(str(e))}")
+        logger.error(f"Erro ao extrair tabela de roteiro com IA: {str(e)}")
         raise
 
 
@@ -470,7 +336,7 @@ def configurar_gemini() -> bool:
         return True
         
     except Exception as e:
-        logger.error(f"Erro ao configurar Gemini (verifique sua chave API)")
+        logger.error(f"Erro ao configurar Gemini: {str(e)}")
         return False
 
 
@@ -481,8 +347,7 @@ def mapear_confrontantes_gemini(
     texto_roteiro: Optional[str] = None,
 ) -> Optional[MapeamentoConfrontantes]:
     """Mapeia confrontantes usando Gemini. Aceita a planta como imagem(ns)
-    (caso de PDFs de CAD sem texto) e/ou como texto (caso de colagem manual).
-    """
+    (caso de PDFs de CAD sem texto) e/ou como texto (caso de colagem manual)."""
     try:
         prompt = """
         Você é um engenheiro agrimensor especialista em topografia. Analise o(s) documento(s)
@@ -496,7 +361,7 @@ def mapear_confrontantes_gemini(
         3. Se houver fechamento do ciclo (ex: de ponto 21 para 1), use: ponto_inicio: 21, ponto_fim: 1
         4. Tente incluir a matrícula e os nomes dos vizinhos, não é necessário o CPF.
         5. Retorne ESTRITAMENTE no formato JSON estruturado fornecido
-        6. NÃO invente dados. Se não conseguir extrair um campo, deixe como string vazia "" ou retorne lista vazia
+        6. NÃO invente dados. Se não conseguir extrair um campo, deixe como string vazia ""
         """
 
         if texto_planta:
@@ -506,22 +371,17 @@ def mapear_confrontantes_gemini(
 
         logger.info("Chamando API Gemini para mapeamento de confrontantes...")
 
-        def _chamar_gemini():
-            model = genai.GenerativeModel(
-                model_name=nome_modelo,
-                generation_config=types.GenerationConfig(
-                    response_mime_type="application/json",
-                    response_schema=MapeamentoConfrontantes,
-                    temperature=0.0,
-                ),
-            )
+        model = genai.GenerativeModel(
+            model_name=nome_modelo,
+            generation_config=types.GenerationConfig(
+                response_mime_type="application/json",
+                response_schema=MapeamentoConfrontantes,
+                temperature=0.0,
+            ),
+        )
 
-            conteudo = list(imagens_planta or []) + [prompt]
-            response = model.generate_content(conteudo)
-            return response
-
-        # Usar retry com backoff
-        response = retry_com_backoff(_chamar_gemini)
+        conteudo = list(imagens_planta or []) + [prompt]
+        response = model.generate_content(conteudo)
         
         logger.info("Resposta recebida da API Gemini")
         
@@ -532,19 +392,14 @@ def mapear_confrontantes_gemini(
             return mapeamento
             
         except ValidationError as e:
-            logger.error(f"Erro de validação ao processar resposta do Gemini: {sanitize_log_message(str(e))}")
-            raise ValueError(
-                f"Resposta da IA com formato inválido. "
-                f"Campos esperados: ponto_inicio, ponto_fim, nome_confrontante"
-            )
+            logger.error(f"Erro de validação ao processar resposta do Gemini: {str(e)}")
+            raise ValueError(f"Resposta da IA inválida: {str(e)}")
         except json.JSONDecodeError as e:
-            logger.error(f"Erro ao fazer parse JSON da resposta: {sanitize_log_message(str(e))}")
-            raise ValueError(
-                f"Resposta da IA não é JSON válido. Tente novamente com melhor qualidade de imagem."
-            )
+            logger.error(f"Erro ao fazer parse JSON da resposta: {str(e)}")
+            raise ValueError(f"Resposta da IA não é JSON válido: {str(e)}")
         
     except Exception as e:
-        logger.error(f"Erro ao mapear confrontantes com Gemini: {sanitize_log_message(str(e))}")
+        logger.error(f"Erro ao mapear confrontantes com Gemini: {str(e)}")
         raise
 
 
@@ -552,40 +407,24 @@ def mapear_confrontantes_gemini(
 # LÓGICA DE VINCULAÇÃO
 # ==========================================
 def vincular_confrontantes(segmentos: List[Dict], mapeamento: MapeamentoConfrontantes) -> List[Dict]:
-    """Vincula confrontantes aos segmentos com validação rigorosa."""
+    """Vincula confrontantes aos segmentos."""
     logger.info("Iniciando vinculação de confrontantes aos segmentos...")
     
     for seg in segmentos:
         try:
-            # Validação rigorosa de vértices
-            de_str = seg.get("de", "").strip()
-            para_str = seg.get("para", "").strip()
-            
-            if not de_str or not para_str:
-                logger.warning(f"Segmento com vértice vazio detectado: {seg}")
-                seg["confrontante"] = "VÉRTICE INVÁLIDO (vazio)"
-                continue
-            
-            try:
-                v_de = int(de_str)
-                v_para = int(para_str)
-            except ValueError:
-                logger.warning(f"Vértices não-numéricos: de={de_str}, para={para_str}")
-                seg["confrontante"] = f"VÉRTICE INVÁLIDO ({de_str}→{para_str})"
-                continue
+            v_de = int(seg["de"])
+            v_para = int(seg["para"])
             
             confrontante_encontrado = None
             
             for regra in mapeamento.regras:
                 if regra.ponto_inicio < regra.ponto_fim:
-                    # Faixa normal (ex: 1 até 5)
                     if regra.ponto_inicio <= v_de < regra.ponto_fim:
                         confrontante_encontrado = regra.nome_confrontante.upper()
                         logger.debug(f"Segmento {v_de}→{v_para}: Faixa regular encontrada: {confrontante_encontrado}")
                         break
                 
                 elif regra.ponto_inicio > regra.ponto_fim:
-                    # Ciclo fechado (ex: 21 até 1, fechando o polígono)
                     if v_de >= regra.ponto_inicio or v_de <= regra.ponto_fim:
                         confrontante_encontrado = regra.nome_confrontante.upper()
                         logger.debug(f"Segmento {v_de}→{v_para}: Ciclo fechado encontrado: {confrontante_encontrado}")
@@ -597,8 +436,11 @@ def vincular_confrontantes(segmentos: List[Dict], mapeamento: MapeamentoConfront
             
             seg["confrontante"] = confrontante_encontrado
             
+        except ValueError as e:
+            logger.error(f"Erro ao converter vértices para inteiro: {str(e)}")
+            seg["confrontante"] = "ERRO NA CONVERSÃO"
         except Exception as e:
-            logger.error(f"Erro inesperado ao vincular confrontante: {sanitize_log_message(str(e))}")
+            logger.error(f"Erro ao vincular confrontante ao segmento {seg}: {str(e)}")
             seg["confrontante"] = "ERRO NO PROCESSAMENTO"
     
     logger.info("Vinculação de confrontantes concluída")
@@ -631,18 +473,24 @@ def gerar_documento_word(dados_finais: Dict[str, Any]) -> io.BytesIO:
         header = section.header
         header.is_linked_to_previous = False # Garante que o cabeçalho não seja o mesmo da seção anterior
 
-        p_header_empresa = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
-        p_header_empresa.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p_header_empresa.paragraph_format.space_after = Pt(6)
+        # Parágrafo para "TopoGeo"
+        p_topogeo = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
+        p_topogeo.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_topogeo.paragraph_format.space_after = Pt(0) # Sem espaço depois para a próxima linha ficar mais próxima
 
-        run_topogeo = p_header_empresa.add_run("TopoGeo")
+        run_topogeo = p_topogeo.add_run("TopoGeo")
         run_topogeo.font.size = Pt(14)
         run_topogeo.bold = True
         run_topogeo.font.color.rgb = RGBColor(0, 128, 0) # Verde
 
-        p_header_empresa.add_run(" Topografia e Consultoria LTDA\n")
-        p_header_empresa.add_run(f"{EMPRESA_INFO["endereco"]}\n")
-        p_header_empresa.add_run(f"Fone {EMPRESA_INFO["telefone"]} - {EMPRESA_INFO["email"]}")
+        # Parágrafo para o restante das informações da empresa
+        p_empresa_info = header.add_paragraph()
+        p_empresa_info.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_empresa_info.paragraph_format.space_after = Pt(6) # Espaço após este bloco
+
+        p_empresa_info.add_run("Topografia e Consultoria LTDA\n")
+        p_empresa_info.add_run(f"{EMPRESA_INFO["endereco"]}\n")
+        p_empresa_info.add_run(f"Fone {EMPRESA_INFO["telefone"]} - {EMPRESA_INFO["email"]}")
 
         # Adiciona uma linha separadora no cabeçalho
         p_header_linha = header.add_paragraph()
@@ -738,7 +586,12 @@ def gerar_documento_word(dados_finais: Dict[str, Any]) -> io.BytesIO:
         )
 
         # Data
+        meses_pt = {
+            1: "janeiro", 2: "fevereiro", 3: "março", 4: "abril", 5: "maio", 6: "junho",
+            7: "julho", 8: "agosto", 9: "setembro", 10: "outubro", 11: "novembro", 12: "dezembro"
+        }
         data_atual = datetime.now()
+        nome_mes = meses_pt[data_atual.month]
 
         p_data = doc.add_paragraph()
         p_data.paragraph_format.space_before = Pt(24)
@@ -764,7 +617,7 @@ def gerar_documento_word(dados_finais: Dict[str, Any]) -> io.BytesIO:
         return conteudo_arquivo
         
     except Exception as e:
-        logger.error(f"Erro ao gerar documento Word: {sanitize_log_message(str(e))}")
+        logger.error(f"Erro ao gerar documento Word: {str(e)}")
         raise
 
 
@@ -782,13 +635,10 @@ def main():
 
     # Info sobre versão
     st.info("""
-    ✅ **Versão 5.1 - Leitura visual via IA + Validações Rigorosas**
+    ✅ **Versão 5.0 - Leitura visual via IA + Dados do Cliente**
     - Funciona 100% na nuvem, sem Poppler/Tesseract
     - Lê PDFs de CAD (ex.: VectorDraw) que não têm texto extraível, convertendo
       as páginas em imagem e usando a visão do Gemini para ler as tabelas
-    - Retry automático com backoff para chamadas à API Gemini (rate limiting)
-    - Validação de área/perímetro e vértices inválidos
-    - Limite inteligente de DPI para evitar timeouts
     - Extrai matrícula e nome dos vizinhos (sem CPF) da planta
     - Dados do cliente (Imóvel, Proprietário, Local, Área, Perímetro) configurados na barra lateral
     - Se preferir, ainda é possível colar o texto manualmente
@@ -822,14 +672,9 @@ def main():
         cliente_local = st.text_input("Local", value=CLIENTE_INFO["local"])
         cliente_area = st.text_input("Área (ha)", value=CLIENTE_INFO["area"])
         cliente_perimetro = st.text_input("Perímetro (m)", value=CLIENTE_INFO["perimetro"])
-        
         dpi_conversao = st.slider(
-            "Qualidade da imagem (DPI)", 
-            min_value=150, 
-            max_value=300,  # Limitado a 300 para evitar timeouts
-            value=200, 
-            step=50,
-            help="⚠️ DPI entre 150-300 recomendado. Valores altos melhoram leitura mas são mais lentos."
+            "Qualidade da imagem (DPI)", min_value=150, max_value=400, value=250, step=50,
+            help="DPI mais alto = leitura mais precisa dos números, porém mais lenta."
         )
 
         st.info(
@@ -880,25 +725,6 @@ def main():
     if pdf_planta and pdf_roteiro or (texto_planta_manual and texto_roteiro_manual):
         if st.button("🔄 Analisar Documentos e Gerar Memorial", type="primary", use_container_width=True):
 
-            # Validações de entrada
-            erros_validacao = []
-            
-            # Validar área
-            area_valida, msg_area = validar_numero_positivo(cliente_area, "Área")
-            if not area_valida:
-                erros_validacao.append(msg_area)
-            
-            # Validar perímetro
-            perimetro_valido, msg_perimetro = validar_numero_positivo(cliente_perimetro, "Perímetro")
-            if not perimetro_valido:
-                erros_validacao.append(msg_perimetro)
-            
-            if erros_validacao:
-                st.error("❌ Erros de validação encontrados:")
-                for erro in erros_validacao:
-                    st.error(f"  • {erro}")
-                st.stop()
-
             EMPRESA_INFO["nome"] = empresa_nome
             EMPRESA_INFO["endereco"] = empresa_endereco
             EMPRESA_INFO["telefone"] = empresa_telefone
@@ -932,12 +758,14 @@ def main():
                         "Gemini 2.5 Pro": "gemini-2.5-pro",
                         "Gemini 2.5 Flash": "gemini-2.5-flash",
                     }
-                    nome_modelo_api = model_mapping.get(nome_modelo, "gemini-3.5-flash")
+                    nome_modelo_api = model_mapping.get(nome_modelo, "gemini-3.5-flash") # Default para flash se não encontrar
+
 
                     imagens_planta: List[Image.Image] = []
                     imagens_roteiro: List[Image.Image] = []
 
-                    # Etapa 2: Preparar as páginas dos PDFs como imagens
+                    # Etapa 2: Preparar as páginas dos PDFs como imagens (funciona também
+                    # para PDFs de CAD sem texto real, como exportações VectorDraw)
                     if pdf_planta:
                         st.info("🖼️ Etapa 2: Convertendo o PDF da planta em imagem...")
                         imagens_planta = pdf_paginas_para_imagens(pdf_planta, dpi=dpi_conversao)
@@ -950,7 +778,7 @@ def main():
                         st.success("✅ Páginas convertidas em imagem")
 
                     # Etapa 3: Extrair a tabela de roteiro (via visão, se houver PDF; senão via texto colado)
-                    st.info("📊 Etapa 3: Lendo a tabela de roteiro perimétrico...")
+                        st.info("📊 Etapa 3: Lendo a tabela de roteiro perimétrico...")
                     if imagens_roteiro:
                         segmentos_reais = extrair_roteiro_com_ia(imagens_roteiro, nome_modelo_api)
                     else:
@@ -966,7 +794,7 @@ def main():
 
                     st.success(f"✅ {len(segmentos_reais)} segmentos extraídos")
 
-                    # Etapa 4: Mapear confrontantes e dados cadastrais
+                    # Etapa 4: Mapear confrontantes e dados cadastrais (via visão da planta e/ou texto colado)
                     st.info("🤖 Etapa 4: Mapeando confrontantes e dados cadastrais com IA...")
                     mapeamento = mapear_confrontantes_gemini(
                         nome_modelo=nome_modelo_api,
@@ -1042,15 +870,15 @@ def main():
 
                 except ValueError as e:
                     st.error(f"❌ Erro de Validação: {str(e)}")
-                    logger.error(f"Erro de validação: {sanitize_log_message(str(e))}")
+                    logger.error(f"Erro de validação: {str(e)}")
 
                 except json.JSONDecodeError as e:
                     st.error(f"❌ Erro ao processar resposta da IA: {str(e)}")
-                    logger.error(f"Erro JSON: {sanitize_log_message(str(e))}")
+                    logger.error(f"Erro JSON: {str(e)}")
 
                 except Exception as e:
                     st.error(f"❌ Erro inesperado: {str(e)}")
-                    logger.error(f"Erro geral: {sanitize_log_message(str(e))}", exc_info=True)
+                    logger.error(f"Erro geral: {str(e)}", exc_info=True)
 
                     with st.expander("🔧 Detalhes Técnicos (Debug)"):
                         import traceback
