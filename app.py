@@ -1,5 +1,5 @@
-#GERADOR DE MEMORIAL DESCRITIVO - Versão 6.2 (UI/UX Premium All-Green Edition com Módulo de Anuências)
-#Refatoração visual focada em experiência do usuário e design corporativo com paleta verde escuro integral.
+# GERADOR DE MEMORIAL DESCRITIVO - Versão 6.2 (UI/UX Premium All-Green Edition com Módulo de Anuências)
+# Refatoração visual focada em experiência do usuário e design corporativo com paleta verde escuro integral.
 
 import io
 import logging
@@ -491,7 +491,7 @@ def main():
                         )
                     st.success("✅ Renderização concluída!")
 
-                    st.info("📊 **Etapa 3:** Analisando a planilha de roteiro por vetorização...")
+                    st.info("📊 **Etapa 3:** Analizando a planilha de roteiro por vetorização...")
                     if imagens_roteiro:
                         segmentos = processador.extrair_roteiro_com_ia(imagens_roteiro)
                     else:
@@ -709,23 +709,24 @@ def main():
                         "local": local_principal,
                         "imovel": dados_memoriais.get("imovel", cliente_imovel),
                         "confrontante": conf,
-                        "intervalos": intervals_texto,
-                        "segmentos": segmentos_deste_confrontante  # ✅ Corrigido
+                        "intervalos": intervalos_texto, # ✅ Corrigido erro de digitação do original
+                        "segmentos": segmentos_deste_confrontante  # ✅ Injetado
                     }
                     
                     try:
                         arquivo_anuencia = gerador_anuencia_modulo.gerar_documento(dados_anuencia)
                         nome_arq_conf = sanitizar_nome_arquivo(conf)
+                        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
                         
                         st.download_button(
-                            label=f"📥 Baixar Anuência - {conf} (.docx)",
+                            label=f"📥 BAIXAR ANUÊNCIA — {conf}",
                             data=arquivo_anuencia,
-                            file_name=f"ANUENCIA_{nome_arq_conf}.docx",
+                            file_name=f"ANUENCIA_{nome_arq_conf}_{timestamp}.docx",
                             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                            key=f"btn_down_{idx}"
+                            key=f"btn_down_anuencia_{idx}_{nome_arq_conf}"
                         )
-                    except Exception as e:
-                        st.error(f"Erro ao gerar documento para {conf}: {str(e)}")
+                    except Exception as ex_anuencia:
+                        st.error(f"Erro ao gerar termo para {conf}: {str(ex_anuencia)}")
 
 if __name__ == "__main__":
     main()
