@@ -25,7 +25,7 @@ from typing import Optional, List, Dict, Any, Tuple
 
 import docx
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.shared import Pt, Cm
+from docx.shared import Pt, Cm, RGBColor
 from pypdf import PdfReader
 import fitz  # PyMuPDF - rasteriza PDF em imagem sem depender de Poppler
 from PIL import Image
@@ -58,8 +58,8 @@ st.set_page_config(
 # ==========================================
 EMPRESA_INFO = {
     "nome": "TopoGeo Topografia e Consultoria LTDA",
-    "endereco": "xxxxxxxxxxxxxxxxxxx",
-    "telefone": "xxxxxxxxxxxxxxx",
+    "endereco": "Rua Natalino Cossi, No 114, sala 2 - Vila Valério, CEP 29785-000",
+    "telefone": "27 99837-1164",
     "email": "topogeo2014@gmail.com"
 }
 
@@ -468,21 +468,29 @@ def gerar_documento_word(dados_finais: Dict[str, Any]) -> io.BytesIO:
         font.name = FONTE_PADRAO
         font.size = Pt(TAMANHO_FONTE_PADRAO)
 
-        # Cabeçalho
-        p_empresa = doc.add_paragraph()
-        p_empresa.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p_empresa.paragraph_format.space_after = Pt(18)
-        run_emp = p_empresa.add_run(
-            f"{EMPRESA_INFO['nome']}\n"
-            f"{EMPRESA_INFO['endereco']}\n"
-            f"Fone {EMPRESA_INFO['telefone']} - {EMPRESA_INFO['email']}"
-        )
-        run_emp.font.size = Pt(9)
-        run_emp.italic = True
+        # Cabeçalho (Header)
+        section = doc.sections[0]
+        header = section.header
+        header.is_linked_to_previous = False # Garante que o cabeçalho não seja o mesmo da seção anterior
 
-        p_linha = doc.add_paragraph()
-        p_linha.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p_linha.add_run("_" * 80)
+        p_header_empresa = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
+        p_header_empresa.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_header_empresa.paragraph_format.space_after = Pt(6)
+
+        run_topogeo = p_header_empresa.add_run("TopoGeo")
+        run_topogeo.font.size = Pt(14)
+        run_topogeo.bold = True
+        run_topogeo.font.color.rgb = RGBColor(0, 128, 0) # Verde
+
+        p_header_empresa.add_run(" Topografia e Consultoria LTDA\n")
+        p_header_empresa.add_run(f"{EMPRESA_INFO["endereco"]}\n")
+        p_header_empresa.add_run(f"Fone {EMPRESA_INFO["telefone"]} - {EMPRESA_INFO["email"]}")
+
+        # Adiciona uma linha separadora no cabeçalho
+        p_header_linha = header.add_paragraph()
+        p_header_linha.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_header_linha.add_run("_" * 80)
+        p_header_linha.paragraph_format.space_after = Pt(12)
 
         p_titulo = doc.add_paragraph()
         p_titulo.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -636,6 +644,8 @@ def main():
 
         st.subheader("Dados da Empresa")
         empresa_nome = st.text_input("Nome da Empresa", value=EMPRESA_INFO["nome"])
+        empresa_endereco = st.text_input("Endereço", value=EMPRESA_INFO["endereco"])
+        empresa_telefone = st.text_input("Telefone", value=EMPRESA_INFO["telefone"])
         empresa_email = st.text_input("Email", value=EMPRESA_INFO["email"])
 
         st.subheader("Dados do Técnico Responsável")
@@ -710,6 +720,8 @@ def main():
         if st.button("🔄 Analisar Documentos e Gerar Memorial", type="primary", use_container_width=True):
 
             EMPRESA_INFO["nome"] = empresa_nome
+            EMPRESA_INFO["endereco"] = empresa_endereco
+            EMPRESA_INFO["telefone"] = empresa_telefone
             EMPRESA_INFO["email"] = empresa_email
             TECNICO_INFO["nome"] = tecnico_nome
             TECNICO_INFO["cfta"] = tecnico_cfta
