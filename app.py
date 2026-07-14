@@ -1,7 +1,7 @@
-#"""
-#GERADOR DE MEMORIAL DESCRITIVO - Versão 6.0 (UI/UX Premium Dark Green Edition)
-#Refatoração visual focada em experiência do usuário e design corporativo com paleta verde escuro.
-#"""
+"""
+GERADOR DE MEMORIAL DESCRITIVO - Versão 6.1 (UI/UX Premium All-Green Edition)
+Refatoração visual focada em experiência do usuário e design corporativo com paleta verde escuro integral.
+"""
 
 import io
 import logging
@@ -81,7 +81,7 @@ def main():
     st.markdown("""
         <style>
             /* Importar fonte moderna */
-            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght=300;400;600;700&display=swap');
             
             html, body, [class*="css"] {
                 font-family: 'Inter', sans-serif;
@@ -133,10 +133,45 @@ def main():
                 border: none !important;
             }
             
-            /* Sidebar Elegante */
+            /* 🟢 SIDEBAR PREMIUM VERDE ESCURO 🟢 */
             section[data-testid="stSidebar"] {
-                background-color: #f8fafc;
-                border-right: 1px solid #e2e8f0;
+                background: linear-gradient(180deg, #022c22 0%, #064e3b 100%) !important;
+                border-right: 1px solid #047857;
+            }
+            
+            /* Forçar textos, labels e títulos da sidebar a ficarem claros */
+            section[data-testid="stSidebar"] .stMarkdown, 
+            section[data-testid="stSidebar"] p, 
+            section[data-testid="stSidebar"] label, 
+            section[data-testid="stSidebar"] h1, 
+            section[data-testid="stSidebar"] h2, 
+            section[data-testid="stSidebar"] h3, 
+            section[data-testid="stSidebar"] h4, 
+            section[data-testid="stSidebar"] h5, 
+            section[data-testid="stSidebar"] h6,
+            section[data-testid="stSidebar"] span {
+                color: #f8fafc !important;
+            }
+
+            /* Pequeno ajuste nos subtítulos explicativos da sidebar */
+            section[data-testid="stSidebar"] div[style*="color:#64748b"] {
+                color: #a7f3d0 !important;
+            }
+
+            /* Estilo dos inputs dentro da sidebar para melhor contraste */
+            section[data-testid="stSidebar"] input {
+                background-color: #042f2e !important;
+                color: #ffffff !important;
+                border: 1px solid #115e59 !important;
+            }
+
+            /* Customização das Abas (Tabs) internas da sidebar */
+            section[data-testid="stSidebar"] button[data-baseweb="tab"] {
+                color: #a7f3d0 !important;
+            }
+            section[data-testid="stSidebar"] button[aria-selected="true"] {
+                color: #ffffff !important;
+                border-bottom-color: #10b981 !important;
             }
             
             /* Estilização para métricas de validação */
@@ -170,7 +205,7 @@ def main():
     # ==========================================
     
     with st.sidebar:
-        st.markdown("<h2 style='font-size: 1.5rem; color: #0f172a; margin-bottom: 1.5rem;'>⚙️ Painel de Controle</h2>", unsafe_allow_html=True)
+        st.markdown("<h2 style='font-size: 1.5rem; margin-bottom: 1.5rem;'>⚙️ Painel de Controle</h2>", unsafe_allow_html=True)
 
         # Usando abas na sidebar para reduzir a rolagem vertical infinita
         tab_side_empresa, tab_side_cliente = st.tabs(["🏢 Empresa / Técnico", "👥 Cliente & Imóvel"])
@@ -273,7 +308,7 @@ def main():
             )
 
         st.markdown(
-            "<div style='font-size:0.8rem; color:#64748b; margin-top:1.5rem;'>💡 As definições acima serão replicadas em todos os documentos processados no decorrer desta sessão ativa.</div>",
+            "<div style='font-size:0.8rem; color:#a7f3d0; margin-top:1.5rem;'>💡 As definições acima serão replicadas em todos os documentos processados no decorrer desta sessão ativa.</div>",
             unsafe_allow_html=True
         )
 
