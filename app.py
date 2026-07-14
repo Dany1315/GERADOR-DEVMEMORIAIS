@@ -269,13 +269,13 @@ def extrair_roteiro_com_ia(imagens_roteiro: List[Image.Image], nome_modelo: str)
         próximo).
 
         Leia a tabela LINHA POR LINHA, na ordem em que aparecem, sem pular nenhuma, e para
-        cada linha/segmento extraia:
-        - de: número do vértice de origem
-        - para: número do vértice de destino (próximo vértice da linha)
-        - n_y: coordenada N (Norte/Y) do vértice de origem, incluindo a unidade "m" se houver
-        - e_x: coordenada E (Este/X) do vértice de origem, incluindo a unidade "m" se houver
-        - azimute: azimute do segmento no formato graus/minutos/segundos (ex: 45°12'33")
-        - distancia: distância do segmento, incluindo a unidade "m"
+        cada linha/segmento extraia os seguintes campos, **todos são obrigatórios e devem estar presentes no JSON, mesmo que vazios se não puderem ser lidos**:
+        - de: número do vértice de origem (string)
+        - para: número do vértice de destino (próximo vértice da linha) (string)
+        - n_y: coordenada N (Norte/Y) do vértice de origem, incluindo a unidade "m" se houver (string)
+        - e_x: coordenada E (Este/X) do vértice de origem, incluindo a unidade "m" se houver (string)
+        - azimute: azimute do segmento no formato graus/minutos/segundos (ex: 45°12'33") (string)
+        - distancia: distância do segmento, incluindo a unidade "m" (string)
 
         Transcreva EXATAMENTE os valores que aparecem na imagem. Não invente, arredonde ou
         preencha valores que não conseguir ler com certeza — nesse caso deixe o campo como
