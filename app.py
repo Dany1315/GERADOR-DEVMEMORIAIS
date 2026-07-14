@@ -645,11 +645,9 @@ def main():
         st.subheader("Modelo de IA")
         nome_modelo = st.selectbox(
             "Modelo Gemini",
-            options=["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash", "gemini-2.5-pro"],
+            options=["Gemini 3.5 Flash", "Gemini 3.1 Pro", "Gemini 3.1 Flash Lite", "Gemini 2.5 Pro", "Gemini 2.5 Flash"],
             index=0,
-            help="'gemini-1.5-flash' é o modelo atual recomendado (rápido e GA). "
-                 "'gemini-1.5-pro' tem raciocínio mais forte para leitura de tabelas/desenhos "
-                 "complexos, porém é mais lento e mais caro."
+            help="Escolha o modelo Gemini mais adequado. Modelos 'Flash' são mais rápidos e econômicos, 'Pro' oferecem maior capacidade de raciocínio para documentos complexos."
         )
 
         st.subheader("Dados do Cliente")
@@ -734,6 +732,17 @@ def main():
                         st.stop()
                     st.success("✅ Gemini configurado")
 
+                    # Mapeamento de nomes amigáveis para nomes de API
+                    model_mapping = {
+                        "Gemini 3.5 Flash": "gemini-3.5-flash",
+                        "Gemini 3.1 Pro": "gemini-3.1-pro",
+                        "Gemini 3.1 Flash Lite": "gemini-3.1-flash-lite",
+                        "Gemini 2.5 Pro": "gemini-2.5-pro",
+                        "Gemini 2.5 Flash": "gemini-2.5-flash",
+                    }
+                    nome_modelo_api = model_mapping.get(nome_modelo, "gemini-3.5-flash") # Default para flash se não encontrar
+
+
                     imagens_planta: List[Image.Image] = []
                     imagens_roteiro: List[Image.Image] = []
 
@@ -751,9 +760,9 @@ def main():
                         st.success("✅ Páginas convertidas em imagem")
 
                     # Etapa 3: Extrair a tabela de roteiro (via visão, se houver PDF; senão via texto colado)
-                    st.info("📊 Etapa 3: Lendo a tabela de roteiro perimétrico...")
+                        st.info("📊 Etapa 3: Lendo a tabela de roteiro perimétrico...")
                     if imagens_roteiro:
-                        segmentos_reais = extrair_roteiro_com_ia(imagens_roteiro, nome_modelo)
+                        segmentos_reais = extrair_roteiro_com_ia(imagens_roteiro, nome_modelo_api)
                     else:
                         segmentos_reais = parse_tabela_roteiro(texto_roteiro_manual)
 
@@ -770,7 +779,7 @@ def main():
                     # Etapa 4: Mapear confrontantes e dados cadastrais (via visão da planta e/ou texto colado)
                     st.info("🤖 Etapa 4: Mapeando confrontantes e dados cadastrais com IA...")
                     mapeamento = mapear_confrontantes_gemini(
-                        nome_modelo=nome_modelo,
+                        nome_modelo=nome_modelo_api,
                         imagens_planta=imagens_planta,
                         texto_planta=texto_planta_manual or None,
                         texto_roteiro=texto_roteiro_manual or None,
