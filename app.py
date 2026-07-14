@@ -1,7 +1,5 @@
-#"""
 #GERADOR DE MEMORIAL DESCRITIVO - Versão 6.2 (UI/UX Premium All-Green Edition com Módulo de Anuências)
 #Refatoração visual focada em experiência do usuário e design corporativo com paleta verde escuro integral.
-#"""
 
 import io
 import logging
@@ -244,7 +242,7 @@ def main():
                 top: 15px;
                 left: 118px;
                 color: #047857;
-                animation: spin-counter 7.27s linear infinite; /* Velocidade proporcional ao tamanho */
+                animation: spin-counter 7.27s linear infinite;
             }
 
             /* Engrenagem Pequena (Direita Inferior - Verde Claro - Horário) */
@@ -254,7 +252,7 @@ def main():
                 top: 85px;
                 left: 175px;
                 color: #10b981;
-                animation: spin-clockwise 5s linear infinite; /* Mais rápida */
+                animation: spin-clockwise 5s linear infinite;
             }
         </style>
     """, unsafe_allow_html=True)
@@ -268,18 +266,16 @@ def main():
     """, unsafe_allow_html=True)
 
     # ==========================================
-    # CRIAÇÃO DAS ABAS PRINCIPAIS DO SISTEMA (BEM NO TOPO)
+    # CRIAÇÃO DAS ABAS PRINCIPAIS DO SISTEMA
     # ==========================================
     tab_memorial, tab_anuencias = st.tabs(["📝 Memorial Descritivo", "🤝 Anuências"])
 
     # ==========================================
     # SIDEBAR COM CONFIGURAÇÕES
     # ==========================================
-    
     with st.sidebar:
         st.markdown("<h2 style='font-size: 1.5rem; margin-bottom: 1.5rem;'>⚙️ Painel de Controle</h2>", unsafe_allow_html=True)
 
-        # Usando abas na sidebar para reduzir a rolagem vertical infinita
         tab_side_empresa, tab_side_cliente = st.tabs(["🏢 Empresa / Técnico", "👥 Cliente & Imóvel"])
 
         with tab_side_empresa:
@@ -361,14 +357,14 @@ def main():
             help="Modelos 'Flash': rápidos e econômicos. Modelos 'Pro': maior capacidade analítica."
         )
 
-        with st.expander("🖼️ Parâmetros Técnicos de Imagem", expanded=False):
+        with st.expander("🖼️ Parâmetros Técnico de Imagem", expanded=False):
             dpi_conversao = st.slider(
                 "Resolução de Leitura (DPI)",
                 min_value=PROCESSAMENTO_CONFIG.DPI_MINIMO,
                 max_value=PROCESSAMENTO_CONFIG.DPI_MAXIMO,
                 value=PROCESSAMENTO_CONFIG.DPI_PADRAO,
                 step=50,
-                help="DPI maior aumenta a precisão da leitura, mas torna o processamento mais lento. Padrão: 250 DPI."
+                help="DPI maior aumenta a precisão da leitura, mas torna o processamento mais lento."
             )
             tamanho_max = st.slider(
                 "Upload Máximo (MB)",
@@ -388,18 +384,16 @@ def main():
     # ABA 1: MEMORIAL DESCRITIVO
     # ------------------------------------------
     with tab_memorial:
-        # Info sobre versão recolhida em aba ou expander limpo
         with st.expander("ℹ️ Detalhes da Plataforma & Recursos Ativos", expanded=False):
             st.markdown(f"""
             **Gleba A Processor** — `Versão {VERSAO_APP}` — *{DESCRICAO_VERSAO}*
-            * **Visão Computacional:** Processamento multimodal via IA (sem dependências locais pesadas).
-            * **Infraestrutura:** Execução direta em nuvem com tolerância a falhas (*exponential backoff*).
-            * **Saída:** Geração automatizada de relatórios técnicos de alta precisão em formato Microsoft Word (`.docx`).
+            * **Visão Computacional:** Processamento multimodal via IA.
+            * **Infraestrutura:** Execução direta em nuvem com tolerância a falhas.
+            * **Saída:** Geração automatizada de relatórios técnicos em formato Microsoft Word (`.docx`).
             """)
 
         st.markdown("### 📥 Entrada de Dados do Memorial")
         
-        # Separando o upload de PDF e a colagem manual por abas para limpar a tela
         tab_pdf, tab_manual = st.tabs(["📁 Processamento de Arquivos PDF", "📝 Colagem de Texto Manual"])
 
         with tab_pdf:
@@ -456,7 +450,6 @@ def main():
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # DETECÇÃO DE ENTRADA & PROCESSAMENTO
         tem_pdfs = pdf_planta and pdf_roteiro
         tem_textos = texto_planta_manual and texto_roteiro_manual
         
@@ -467,17 +460,14 @@ def main():
             if st.button("🔄 ANALISAR DOCUMENTOS E GERAR MEMORIAL DESCRITIVO", type="primary", use_container_width=True):
                 tempo_inicio_geral = time.time()
                 try:
-                    # Etapa 1: Configurar Gemini
                     st.info("🔑 **Etapa 1:** Inicializando conexão com os servidores do Google Gemini...")
                     if not configurar_gemini():
-                        st.error("❌ Erro crítico: A variável de ambiente GEMINI_API_KEY não foi encontrada nas configurações do Streamlit.")
+                        st.error("❌ Erro crítico: A variável de ambiente GEMINI_API_KEY não foi encontrada.")
                         st.stop()
                     st.success("✅ Conexão com o motor de IA estabelecida!")
 
-                    # Mapear nome amigável para API
                     nome_modelo_api = GEMINI_CONFIG.MODELOS_DISPONIVEIS.get(nome_modelo, "gemini-3.5-flash")
 
-                    # Etapa 2: Converter PDFs em imagens
                     st.info("🖼️ **Etapa 2:** Executando renderização de alta definição das páginas...")
                     processador = ProcessadorMemorial(nome_modelo_api)
                     
@@ -501,7 +491,6 @@ def main():
                         )
                     st.success("✅ Renderização concluída!")
 
-                    # Etapa 3: Extrair tabela de roteiro
                     st.info("📊 **Etapa 3:** Analisando a planilha de roteiro por vetorização...")
                     if imagens_roteiro:
                         segmentos = processador.extrair_roteiro_com_ia(imagens_roteiro)
@@ -509,11 +498,10 @@ def main():
                         segmentos = processador.parse_tabela_roteiro_texto(texto_roteiro_manual)
 
                     if not segmentos:
-                        st.warning("⚠️ Atenção: Não conseguimos extrair segmentos legíveis do roteiro perimétrico. Revise a qualidade de conversão ou aumente a taxa de DPI.")
+                        st.warning("⚠️ Atenção: Não conseguimos extrair segmentos legíveis do roteiro perimétrico.")
                         st.stop()
                     st.success(f"✅ Sucesso! {len(segmentos)} segmentos georreferenciados identificados.")
 
-                    # Etapa 4: Mapear confrontantes
                     st.info("🤖 **Etapa 4:** Mapeando relações espaciais e limites territoriais...")
                     mapeamento = processador.mapear_confrontantes(
                         imagens_planta=imagens_planta if imagens_planta else None,
@@ -522,18 +510,15 @@ def main():
                     )
                     st.success(f"✅ {len(mapeamento.regras)} polígonos de confrontação mapeados com sucesso!")
 
-                    # Etapa 5: Vincular confrontantes
                     st.info("🔗 **Etapa 5:** Consolidando dados topográficos e confrontações...")
                     segmentos_vinculados = processador.vincular_confrontantes()
                     st.success("✅ Consolidação de vértices realizada!")
 
-                    # Validar resultado
                     valido, avisos = processador.validar_resultado()
                     if avisos:
                         for aviso in avisos:
                             st.warning(aviso)
 
-                    # Preparar dados finais
                     dados_finais = {
                         "imovel": cliente_imovel,
                         "proprietario": cliente_proprietario,
@@ -543,10 +528,9 @@ def main():
                         "segmentos": segmentos_vinculados
                     }
 
-                    # Salvar dados na sessão para que fiquem disponíveis para o módulo de Anuências
+                    # Salvar em session_state de forma correta e abrangente
                     st.session_state["dados_memoriais_processados"] = dados_finais
 
-                    # Resumo de validação
                     st.balloons()
                     st.success("🎉 Memorial estruturado com sucesso!")
                     st.markdown("### 🔍 Validação e Auditoria dos Dados")
@@ -575,9 +559,8 @@ def main():
                             })
                         df = pd.DataFrame(df_data)
                         st.dataframe(df, use_container_width=True, hide_index=True)
-                        st.caption("⚠️ Nota de Responsabilidade: Os dados acima foram estruturados por algoritmos de visão de IA. Sempre revise os resultados antes de protocolar a peça técnica.")
+                        st.caption("⚠️ Nota de Responsabilidade: Os dados acima foram estruturados por algoritmos de visão de IA.")
 
-                    # Gerar documento Word
                     st.info("📝 Redigindo arquivo final no padrão Word (.docx)...")
                     dados_empresa = {"nome": empresa_nome, "endereco": empresa_endereco, "telefone": empresa_telefone, "email": empresa_email}
                     dados_tecnico = {"nome": tecnico_nome, "cfta": tecnico_cfta}
@@ -636,17 +619,19 @@ def main():
                 </div>
             """, unsafe_allow_html=True)
 
-   # =========================================================================
-    # ABA 2: ANUÊNCIAS (INTEGRAÇÃO DIRETA E AUTOMÁTICA)
+    # =========================================================================
+    # ABA 2: ANUÊNCIAS (INTEGRAÇÃO DIRETA E AUTOMÁTICA CORRIGIDA)
     # =========================================================================
     with tab_anuencias:
         st.markdown("### 🤝 Geração Automatizada de Declarações de Anuência")
         st.write("Gere as declarações individuais de reconhecimento de limites baseadas nos confrontantes do Memorial processado.")
 
-        # 1. Verifica se existem dados processados vindos do Processador da Aba 1
-        # O processador armazena o resultado no st.session_state (ex: st.session_state.dados_finais ou similar)
-        # Ajuste a chave abaixo para bater exatamente com a variável onde você guarda os dados finais do memorial
-        dados_memoriais = st.session_state.get("dados_finais") or st.session_state.get("dados_processados")
+        # Busca unificada cruzando chaves para garantir captura de dados válidos
+        dados_memoriais = (
+            st.session_state.get("dados_memoriais_processados") or 
+            st.session_state.get("dados_finais") or 
+            st.session_state.get("dados_processados")
+        )
 
         if not dados_memoriais or "segmentos" not in dados_memoriais:
             st.warning("⚠️ Nenhum dado de memorial foi localizado. Por favor, carregue e processe os PDFs na aba 'Memorial Descritivo' primeiro.")
@@ -655,7 +640,7 @@ def main():
             proprietario_principal = dados_memoriais.get("proprietario", CLIENTE_CONFIG.PROPRIETARIO)
             local_principal = dados_memoriais.get("local", CLIENTE_CONFIG.LOCAL)
 
-            # 2. Filtragem inteligente dos confrontantes legítimos (ignora ruas e avenidas)
+            # Filtragem inteligente dos confrontantes legítimos
             termos_ignorados = ["AV.", "RUA", "AVENIDA", "ESTRADA", "PROJEÇÃO", "VALA", "CORREGO"]
             confrontantes_validos = []
             
@@ -672,82 +657,67 @@ def main():
             else:
                 st.success(f"🔍 Identificado(s) **{len(confrontantes_validos)}** confrontante(s) apto(s) para assinatura de anuência!")
                 
-                # Inputs complementares para o termo técnico exigido no modelo físico
                 st.markdown("#### 📄 Informações do Termo de Responsabilidade")
                 col_trt1, col_trt2 = st.columns(2)
                 with col_trt1:
-                    trt_numero = st.text_input("Número da TRT / ART correspondente:", value=TECNICO_CONFIG.TRT, key="trt_anuencia_input")
+                    trt_numero = st.text_input("Número da TRT / ART correspondente:", value=getattr(TECNICO_CONFIG, 'TRT', ''), key="trt_anuencia_input")
                 with col_trt2:
                     cpf_tecnico = st.text_input("CPF do Responsável Técnico:", value="111.985.197-11", key="cpf_tecnico_anuencia")
 
                 st.markdown("---")
                 st.write("### 🗂️ Documentos Prontos para Emissão:")
 
-                # Importa o módulo isolado que gerencia a inteligência artificial do Gemini e o Word
                 from gerador_anuencias import GeradorAnuenciaWord
 
-                # Instancia o gerador passando os dicionários de configuração padrão do seu site
                 dados_empresa_dict = {
-                    "nome": EMPRESA_CONFIG.NOME,
-                    "endereco": EMPRESA_CONFIG.ENDERECO,
-                    "telefone": EMPRESA_CONFIG.TELEFONE,
-                    "email": EMPRESA_CONFIG.EMAIL
+                    "nome": empresa_nome,
+                    "endereco": empresa_endereco,
+                    "telefone": empresa_telefone,
+                    "email": empresa_email
                 }
                 dados_tecnico_dict = {
-                    "nome": TECNICO_CONFIG.NOME,
-                    "cfta": TECNICO_CONFIG.CFTA,
+                    "nome": tecnico_nome,
+                    "cfta": tecnico_cfta,
                     "trt": trt_numero,
                     "cpf": cpf_tecnico
                 }
                 
                 gerador_anuencia_modulo = GeradorAnuenciaWord(dados_empresa_dict, dados_tecnico_dict)
 
-                # Loop dinâmico criando um painel de controle individual para cada confrontante
+                # Loop dinâmico corrigido e fechado
                 for idx, conf in enumerate(confrontantes_validos):
-                    # Filtra apenas a malha vetorial que pertence àquele confrontante específico
-                    segmentos_do_confrontante = [s for s in segmentos if str(s.get("confrontante", "")).strip().upper() == conf]
+                    st.markdown(f"#### 👤 {conf}")
                     
-                    with st.expander(f"👤 Declaração de Limites: {conf}", expanded=True):
-                        col_dados, col_acao = st.columns([3, 1])
+                    pontos_confronta = [
+                        f"{seg['de']} ao {seg['para']}" 
+                        for seg in segmentos 
+                        if str(seg.get("confrontante", "")).strip().upper() == conf
+                    ]
+                    intervalos_texto = ", ".join(pontos_confronta)
+                    
+                    st.write(f"**Intervalos de confrontação:** Vértices {intervalos_texto}")
+                    
+                    dados_anuencia = {
+                        "proprietario": proprietario_principal,
+                        "local": local_principal,
+                        "imovel": dados_memoriais.get("imovel", cliente_imovel),
+                        "confrontante": conf,
+                        "intervalos": intervalos_texto
+                    }
+                    
+                    try:
+                        arquivo_anuencia = gerador_anuencia_modulo.gerar_documento(dados_anuencia)
+                        nome_arq_conf = sanitizar_nome_arquivo(conf)
                         
-                        with col_dados:
-                            st.markdown(f"**Vértices abrangidos:** Do `{segmentos_do_confrontante[0]['de']}` ao `{segmentos_do_confrontante[-1]['para']}`")
-                            
-                            # Mostra uma mini-tabela técnica do trecho no próprio site
-                            df_trecho = pd.DataFrame([{
-                                "De": s.get('de'), 
-                                "Para": s.get('para'), 
-                                "Azimute": s.get('azimute'), 
-                                "Distância (m)": s.get('distancia')
-                            } for s in segmentos_do_confrontante])
-                            st.dataframe(df_trecho, use_container_width=True, hide_index=True)
-                        
-                        with col_acao:
-                            st.write("") # Ajuste de alinhamento vertical
-                            
-                            # Executa a chamada do Gemini e gera o .docx binário ao clicar
-                            if st.button(f"⚡ Estruturar via Gemini", key=f"btn_gemini_an_{idx}"):
-                                with st.spinner("🤖 O Gemini está analisando o perímetro e redigindo o trecho..."):
-                                    dados_anuencia_payload = {
-                                        "proprietario": proprietario_principal,
-                                        "confrontante": conf,
-                                        "local": local_principal,
-                                        "segmentos": segmentos_do_confrontante
-                                    }
-                                    
-                                    # Invoca a lógica do gerador_anuencias.py
-                                    buffer_docx = gerador_anuencia_modulo.gerar_documento(dados_anuencia_payload)
-                                    st.session_state[f"buffer_anuencia_{idx}"] = buffer_docx.getvalue()
-                                    st.success("Redação técnica concluída!")
+                        st.download_button(
+                            label=f"📥 Baixar Anuência - {conf} (.docx)",
+                            data=arquivo_anuencia,
+                            file_name=f"ANUENCIA_{nome_arq_conf}.docx",
+                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            key=f"btn_down_{idx}"
+                        )
+                    except Exception as e:
+                        st.error(f"Erro ao gerar documento para {conf}: {str(e)}")
 
-                            # Se o documento já foi gerado na memória do site, habilita o botão de Download
-                            if f"buffer_anuencia_{idx}" in st.session_state:
-                                nome_arquivo_limpo = sanitizar_nome_arquivo(conf).upper()
-                                st.download_button(
-                                    label="📥 Baixar Word (.docx)",
-                                    data=st.session_state[f"buffer_anuencia_{idx}"],
-                                    file_name=f"ANUENCIA_{nome_arquivo_limpo}.docx",
-                                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                                    key=f"download_an_btn_{idx}",
-                                    use_container_width=True
-                                )
+if __name__ == "__main__":
+    main()
