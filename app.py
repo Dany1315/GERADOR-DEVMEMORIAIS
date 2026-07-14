@@ -636,41 +636,118 @@ def main():
                 </div>
             """, unsafe_allow_html=True)
 
-    # ------------------------------------------
-    # ABA 2: ANUÊNCIAS (EM CONSTRUÇÃO COM ENGRENAGENS INTERLIGADAS)
-    # ------------------------------------------
+   # =========================================================================
+    # ABA 2: ANUÊNCIAS (INTEGRAÇÃO DIRETA E AUTOMÁTICA)
+    # =========================================================================
     with tab_anuencias:
-        # SVG Path Comum para as Engrenagens
-        gear_path = "M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.5.5 0 0 0 .12-.61l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.5.5 0 0 0-.5-.44H9.28a.5.5 0 0 0-.5.44L8.42 5.8c-.59.24-1.13.57-1.62.94l-2.39-.96a.5.5 0 0 0-.6.22L3.5 9.32a.5.5 0 0 0 .12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.5.5 0 0 0-.12.61l1.92 3.32c.12.22.37.29.6.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.44.5.44h3.84c.25 0 .45-.2.5-.44l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .6-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"
+        st.markdown("### 🤝 Geração Automatizada de Declarações de Anuência")
+        st.write("Gere as declarações individuais de reconhecimento de limites baseadas nos confrontantes do Memorial processado.")
 
-        st.markdown(f"""
-            <div class="construction-container">
-                <!-- Wrapper do Sistema de Engrenagens Mecânicas -->
-                <div class="gears-wrapper">
-                    <!-- Engrenagem Grande -->
-                    <svg class="gear gear-large" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="{gear_path}" fill="currentColor"/>
-                    </svg>
-                    <!-- Engrenagem Média -->
-                    <svg class="gear gear-medium" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="{gear_path}" fill="currentColor"/>
-                    </svg>
-                    <!-- Engrenagem Pequena -->
-                    <svg class="gear gear-small" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="{gear_path}" fill="currentColor"/>
-                    </svg>
-                </div>
+        # 1. Verifica se existem dados processados vindos do Processador da Aba 1
+        # O processador armazena o resultado no st.session_state (ex: st.session_state.dados_finais ou similar)
+        # Ajuste a chave abaixo para bater exatamente com a variável onde você guarda os dados finais do memorial
+        dados_memoriais = st.session_state.get("dados_finais") or st.session_state.get("dados_processados")
+
+        if not dados_memoriais or "segmentos" not in dados_memoriais:
+            st.warning("⚠️ Nenhum dado de memorial foi localizado. Por favor, carregue e processe os PDFs na aba 'Memorial Descritivo' primeiro.")
+        else:
+            segmentos = dados_memoriais.get("segmentos", [])
+            proprietario_principal = dados_memoriais.get("proprietario", CLIENTE_CONFIG.PROPRIETARIO)
+            local_principal = dados_memoriais.get("local", CLIENTE_CONFIG.LOCAL)
+
+            # 2. Filtragem inteligente dos confrontantes legítimos (ignora ruas e avenidas)
+            termos_ignorados = ["AV.", "RUA", "AVENIDA", "ESTRADA", "PROJEÇÃO", "VALA", "CORREGO"]
+            confrontantes_validos = []
+            
+            for seg in segmentos:
+                conf_nome = str(seg.get("confrontante", "")).strip().upper()
+                if conf_nome and not any(termo in conf_nome for termo in termos_ignorados):
+                    if conf_nome not in confrontantes_validos and "ERRO" not in conf_nome and "NÃO ENCONTRADA" not in conf_nome:
+                        confrontantes_validos.append(conf_nome)
+            
+            confrontantes_validos = sorted(confrontantes_validos)
+
+            if not confrontantes_validos:
+                st.info("ℹ️ Nenhum proprietário confrontante nominal elegível foi localizado nos segmentos deste memorial.")
+            else:
+                st.success(f"🔍 Identificado(s) **{len(confrontantes_validos)}** confrontante(s) apto(s) para assinatura de anuência!")
                 
-                <h2 style="color: #022c22; margin-top: 1rem; font-weight: 700;">Módulo em Desenvolvimento</h2>
-                <p style="color: #475569; font-size: 1.1rem; max-width: 600px; margin: 0.5rem auto 0 auto;">
-                    Estamos ajustando as engrenagens finais para esta seção do site. O sistema está pronto para conectar a malha de confrontantes gerada na primeira aba!
-                </p>
-                <p style="color: #64748b; font-size: 0.95rem; margin-top: 1.2rem;">
-                    🛠️ <i>Aguardando o envio do modelo de documento das anuências para prosseguir com a automação...</i>
-                </p>
-            </div>
-        """, unsafe_allow_html=True)
+                # Inputs complementares para o termo técnico exigido no modelo físico
+                st.markdown("#### 📄 Informações do Termo de Responsabilidade")
+                col_trt1, col_trt2 = st.columns(2)
+                with col_trt1:
+                    trt_numero = st.text_input("Número da TRT / ART correspondente:", value=TECNICO_CONFIG.TRT, key="trt_anuencia_input")
+                with col_trt2:
+                    cpf_tecnico = st.text_input("CPF do Responsável Técnico:", value="111.985.197-11", key="cpf_tecnico_anuencia")
 
+                st.markdown("---")
+                st.write("### 🗂️ Documentos Prontos para Emissão:")
 
-if __name__ == "__main__":
-    main()
+                # Importa o módulo isolado que gerencia a inteligência artificial do Gemini e o Word
+                from gerador_anuencias import GeradorAnuenciaWord
+
+                # Instancia o gerador passando os dicionários de configuração padrão do seu site
+                dados_empresa_dict = {
+                    "nome": EMPRESA_CONFIG.NOME,
+                    "endereco": EMPRESA_CONFIG.ENDERECO,
+                    "telefone": EMPRESA_CONFIG.TELEFONE,
+                    "email": EMPRESA_CONFIG.EMAIL
+                }
+                dados_tecnico_dict = {
+                    "nome": TECNICO_CONFIG.NOME,
+                    "cfta": TECNICO_CONFIG.CFTA,
+                    "trt": trt_numero,
+                    "cpf": cpf_tecnico
+                }
+                
+                gerador_anuencia_modulo = GeradorAnuenciaWord(dados_empresa_dict, dados_tecnico_dict)
+
+                # Loop dinâmico criando um painel de controle individual para cada confrontante
+                for idx, conf in enumerate(confrontantes_validos):
+                    # Filtra apenas a malha vetorial que pertence àquele confrontante específico
+                    segmentos_do_confrontante = [s for s in segmentos if str(s.get("confrontante", "")).strip().upper() == conf]
+                    
+                    with st.expander(f"👤 Declaração de Limites: {conf}", expanded=True):
+                        col_dados, col_acao = st.columns([3, 1])
+                        
+                        with col_dados:
+                            st.markdown(f"**Vértices abrangidos:** Do `{segmentos_do_confrontante[0]['de']}` ao `{segmentos_do_confrontante[-1]['para']}`")
+                            
+                            # Mostra uma mini-tabela técnica do trecho no próprio site
+                            df_trecho = pd.DataFrame([{
+                                "De": s.get('de'), 
+                                "Para": s.get('para'), 
+                                "Azimute": s.get('azimute'), 
+                                "Distância (m)": s.get('distancia')
+                            } for s in segmentos_do_confrontante])
+                            st.dataframe(df_trecho, use_container_width=True, hide_index=True)
+                        
+                        with col_acao:
+                            st.write("") # Ajuste de alinhamento vertical
+                            
+                            # Executa a chamada do Gemini e gera o .docx binário ao clicar
+                            if st.button(f"⚡ Estruturar via Gemini", key=f"btn_gemini_an_{idx}"):
+                                with st.spinner("🤖 O Gemini está analisando o perímetro e redigindo o trecho..."):
+                                    dados_anuencia_payload = {
+                                        "proprietario": proprietario_principal,
+                                        "confrontante": conf,
+                                        "local": local_principal,
+                                        "segmentos": segmentos_do_confrontante
+                                    }
+                                    
+                                    # Invoca a lógica do gerador_anuencias.py
+                                    buffer_docx = gerador_anuencia_modulo.gerar_documento(dados_anuencia_payload)
+                                    st.session_state[f"buffer_anuencia_{idx}"] = buffer_docx.getvalue()
+                                    st.success("Redação técnica concluída!")
+
+                            # Se o documento já foi gerado na memória do site, habilita o botão de Download
+                            if f"buffer_anuencia_{idx}" in st.session_state:
+                                nome_arquivo_limpo = sanitizar_nome_arquivo(conf).upper()
+                                st.download_button(
+                                    label="📥 Baixar Word (.docx)",
+                                    data=st.session_state[f"buffer_anuencia_{idx}"],
+                                    file_name=f"ANUENCIA_{nome_arquivo_limpo}.docx",
+                                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                    key=f"download_an_btn_{idx}",
+                                    use_container_width=True
+                                )
