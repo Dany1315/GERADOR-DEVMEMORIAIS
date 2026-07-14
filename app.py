@@ -196,26 +196,65 @@ def main():
                 color: white !important;
             }
 
-            /* ⚙️ ANIMAÇÃO DA ENGRENAGEM EM CSS ⚙️ */
-            @keyframes spin {
+            /* ⚙️ SISTEMA DE ENGRENAGENS EM CSS ⚙️ */
+            @keyframes spin-clockwise {
                 0% { transform: rotate(0deg); }
                 100% { transform: rotate(360deg); }
             }
-            .spinning-gear {
-                display: block;
-                margin: 2rem auto;
-                width: 120px;
-                height: 120px;
-                animation: spin 4s linear infinite;
-                color: #064e3b;
+            @keyframes spin-counter {
+                0% { transform: rotate(360deg); }
+                100% { transform: rotate(0deg); }
             }
+            
             .construction-container {
                 text-align: center;
-                padding: 3rem;
+                padding: 3.5rem;
                 border-radius: 12px;
                 background-color: #f8fafc;
                 border: 1px dashed #cbd5e1;
                 margin-top: 2rem;
+            }
+
+            .gears-wrapper {
+                position: relative;
+                width: 260px;
+                height: 180px;
+                margin: 0 auto 1.5rem auto;
+            }
+
+            .gear {
+                position: absolute;
+                display: block;
+            }
+
+            /* Engrenagem Maior (Esquerda - Verde Escura - Horário) */
+            .gear-large {
+                width: 110px;
+                height: 110px;
+                top: 30px;
+                left: 20px;
+                color: #022c22;
+                animation: spin-clockwise 10s linear infinite;
+            }
+
+            /* Engrenagem Média (Direita Superior - Verde Médio - Anti-horário) */
+            .gear-medium {
+                width: 80px;
+                height: 80px;
+                top: 15px;
+                left: 118px;
+                color: #047857;
+                animation: spin-counter 7.27s linear infinite; /* Velocidade proporcional ao tamanho */
+            }
+
+            /* Engrenagem Pequena (Direita Inferior - Verde Claro - Horário) */
+            .gear-small {
+                width: 55px;
+                height: 55px;
+                top: 85px;
+                left: 175px;
+                color: #10b981;
+                animation: spin-clockwise 5s linear infinite; /* Mais rápida */
             }
         </style>
     """, unsafe_allow_html=True)
@@ -341,7 +380,7 @@ def main():
             )
 
         st.markdown(
-            "<div style='font-size:0.8rem; color:#a7f3d0; margin-top:1.5rem;'>💡 As definições acima serão replicadas em todos os documentos processados no decorrer desta sessão activa.</div>",
+            "<div style='font-size:0.8rem; color:#a7f3d0; margin-top:1.5rem;'>💡 As definições acima serão replicadas em todos os documentos processados no decorrer desta sessão ativa.</div>",
             unsafe_allow_html=True
         )
 
@@ -438,7 +477,7 @@ def main():
                     # Mapear nome amigável para API
                     nome_modelo_api = GEMINI_CONFIG.MODELOS_DISPONIVEIS.get(nome_modelo, "gemini-3.5-flash")
 
-                    # Etapa 2: Converter PDFs in imagens
+                    # Etapa 2: Converter PDFs em imagens
                     st.info("🖼️ **Etapa 2:** Executando renderização de alta definição das páginas...")
                     processador = ProcessadorMemorial(nome_modelo_api)
                     
@@ -598,22 +637,36 @@ def main():
             """, unsafe_allow_html=True)
 
     # ------------------------------------------
-    # ABA 2: ANUÊNCIAS (EM CONSTRUÇÃO COM ENGRENAGEM)
+    # ABA 2: ANUÊNCIAS (EM CONSTRUÇÃO COM ENGRENAGENS INTERLIGADAS)
     # ------------------------------------------
     with tab_anuencias:
-        # Conteúdo visual da Engrenagem Giratória
-        st.markdown("""
+        # SVG Path Comum para as Engrenagens
+        gear_path = "M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.5.5 0 0 0 .12-.61l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.5.5 0 0 0-.5-.44H9.28a.5.5 0 0 0-.5.44L8.42 5.8c-.59.24-1.13.57-1.62.94l-2.39-.96a.5.5 0 0 0-.6.22L3.5 9.32a.5.5 0 0 0 .12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.5.5 0 0 0-.12.61l1.92 3.32c.12.22.37.29.6.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.44.5.44h3.84c.25 0 .45-.2.5-.44l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .6-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"
+
+        st.markdown(f"""
             <div class="construction-container">
-                <!-- SVG de Engrenagem com animação de giro CSS -->
-                <svg class="spinning-gear" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.5.5 0 0 0 .12-.61l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.5.5 0 0 0-.5-.44H9.28a.5.5 0 0 0-.5.44L8.42 5.8c-.59.24-1.13.57-1.62.94l-2.39-.96a.5.5 0 0 0-.6.22L3.5 9.32a.5.5 0 0 0 .12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.5.5 0 0 0-.12.61l1.92 3.32c.12.22.37.29.6.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.44.5.44h3.84c.25 0 .45-.2.5-.44l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .6-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" fill="currentColor"/>
-                </svg>
-                <h2 style="color: #064e3b; margin-top: 1rem; font-weight: 700;">Área em Desenvolvimento</h2>
+                <!-- Wrapper do Sistema de Engrenagens Mecânicas -->
+                <div class="gears-wrapper">
+                    <!-- Engrenagem Grande -->
+                    <svg class="gear gear-large" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="{gear_path}" fill="currentColor"/>
+                    </svg>
+                    <!-- Engrenagem Média -->
+                    <svg class="gear gear-medium" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="{gear_path}" fill="currentColor"/>
+                    </svg>
+                    <!-- Engrenagem Pequena -->
+                    <svg class="gear gear-small" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="{gear_path}" fill="currentColor"/>
+                    </svg>
+                </div>
+                
+                <h2 style="color: #022c22; margin-top: 1rem; font-weight: 700;">Módulo em Desenvolvimento</h2>
                 <p style="color: #475569; font-size: 1.1rem; max-width: 600px; margin: 0.5rem auto 0 auto;">
-                    O módulo de <b>Anuências</b> já está totalmente integrado à estrutura do portal e pronto para herdar a malha de dados do seu Memorial Descritivo.
+                    Estamos ajustando as engrenagens finais para esta seção do site. O sistema está pronto para conectar a malha de confrontantes gerada na primeira aba!
                 </p>
-                <p style="color: #64748b; font-size: 0.95rem; margin-top: 1rem;">
-                    ⚙️ <i>Aguardando o envio do modelo de anuência para ativação dos geradores automáticos...</i>
+                <p style="color: #64748b; font-size: 0.95rem; margin-top: 1.2rem;">
+                    🛠️ <i>Aguardando o envio do modelo de documento das anuências para prosseguir com a automação...</i>
                 </p>
             </div>
         """, unsafe_allow_html=True)
