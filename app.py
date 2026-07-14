@@ -627,10 +627,11 @@ def main():
         st.subheader("Modelo de IA")
         nome_modelo = st.selectbox(
             "Modelo Gemini",
-            options=["gemini-1.5-pro", "gemini-1.5-flash"],
+            options=["gemini-3.5-flash", "gemini-3.1-pro-preview"],
             index=0,
-            help="'pro' costuma ler tabelas/desenhos técnicos com mais precisão. "
-                 "'flash' é mais rápido e mais barato."
+            help="'gemini-3.5-flash' é o modelo atual recomendado (rápido e GA). "
+                 "'gemini-3.1-pro-preview' tem raciocínio mais forte para leitura de tabelas/desenhos "
+                 "complexos, porém é mais lento e mais caro."
         )
         dpi_conversao = st.slider(
             "Qualidade da imagem (DPI)", min_value=150, max_value=400, value=250, step=50,
