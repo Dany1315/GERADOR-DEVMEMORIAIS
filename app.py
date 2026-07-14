@@ -303,7 +303,7 @@ def main():
                 )
 
             with st.expander("👤 Responsável Técnico", expanded=True):
-                tecnico_nome = st.text_input(
+                technico_nome = st.text_input(
                     "Nome do Técnico",
                     value=TECNICO_CONFIG.NOME,
                     help="Nome completo do técnico"
@@ -563,7 +563,7 @@ def main():
 
                     st.info("📝 Redigindo arquivo final no padrão Word (.docx)...")
                     dados_empresa = {"nome": empresa_nome, "endereco": empresa_endereco, "telefone": empresa_telefone, "email": empresa_email}
-                    dados_tecnico = {"nome": tecnico_nome, "cfta": tecnico_cfta}
+                    dados_tecnico = {"nome": technico_nome, "cfta": tecnico_cfta}
                     
                     gerador = GeradorMemorialWord(dados_empresa, dados_tecnico)
                     arquivo_docx = gerador.gerar_documento(dados_finais)
@@ -676,7 +676,7 @@ def main():
                     "email": empresa_email
                 }
                 dados_tecnico_dict = {
-                    "nome": tecnico_nome,
+                    "nome": technico_nome,
                     "cfta": tecnico_cfta,
                     "trt": trt_numero,
                     "cpf": cpf_tecnico
@@ -684,25 +684,33 @@ def main():
                 
                 gerador_anuencia_modulo = GeradorAnuenciaWord(dados_empresa_dict, dados_tecnico_dict)
 
-                # Loop dinâmico corrigido e fechado
+                # Loop dinâmico corrigido e fechado com injeção de segmentos filtrados
                 for idx, conf in enumerate(confrontantes_validos):
                     st.markdown(f"#### 👤 {conf}")
                     
+                    # 1. Filtra os segmentos que pertencem estritamente a este confrontante
+                    segmentos_deste_confrontante = [
+                        seg for seg in segmentos 
+                        if str(seg.get("confrontante", "")).strip().upper() == conf
+                    ]
+                    
+                    # 2. Monta o texto dos vértices (ex: "1 ao 2, 2 ao 3")
                     pontos_confronta = [
                         f"{seg['de']} ao {seg['para']}" 
-                        for seg in segmentos 
-                        if str(seg.get("confrontante", "")).strip().upper() == conf
+                        for seg in segmentos_deste_confrontante
                     ]
                     intervalos_texto = ", ".join(pontos_confronta)
                     
                     st.write(f"**Intervalos de confrontação:** Vértices {intervalos_texto}")
                     
+                    # 3. Monta o dicionário incluindo os segmentos filtrados exigidos pelo módulo externo
                     dados_anuencia = {
                         "proprietario": proprietario_principal,
                         "local": local_principal,
                         "imovel": dados_memoriais.get("imovel", cliente_imovel),
                         "confrontante": conf,
-                        "intervalos": intervalos_texto
+                        "intervalos": intervals_texto,
+                        "segmentos": segmentos_deste_confrontante  # ✅ Corrigido
                     }
                     
                     try:
@@ -720,4 +728,4 @@ def main():
                         st.error(f"Erro ao gerar documento para {conf}: {str(e)}")
 
 if __name__ == "__main__":
-    main ()
+    main()
