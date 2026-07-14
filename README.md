@@ -1,6 +1,46 @@
 # GERADOR-DEVMEMORIAIS
-Gerador de Memorial Descritivo - Versão 2.0 (Corrigida)
+Gerador de Memorial Descritivo - Versão 6.1 (Corrigida)
+📐 Gerador inteligente e automatizado de Memoriais Descritivos georreferenciados. Desenvolvido em Python com Streamlit e integrado com Inteligência Artificial (Google Gemini) para visão computacional, análise de plantas/roteiros perimétricos e exportação profissional em formato Microsoft Word (.docx).
+# 📐 Gerador de Memorial Descritivo - Gleba A (Versão Premium)
 
+O **Gerador de Memorial Descritivo** é uma aplicação web de alto desempenho projetada para engenheiros, agrimensores e profissionais de topografia. Ele automatiza o processo lento e manual de transcrição e vinculação de limites territoriais, utilizando **Inteligência Artificial Multimodal (Google Gemini)** para extrair, validar e consolidar informações técnicas diretamente de arquivos PDF (Planta e Roteiro Perimétrico) ou de inserções manuais.
+
+A ferramenta entrega um documento final formatado em **Microsoft Word (.docx)** de acordo com as normas técnicas vigentes e pronto para assinatura e protocolo.
+
+---
+
+## 🚀 Funcionalidades Principais
+
+- **Análise Inteligente com IA (Visão Computacional):** Renderiza páginas de PDFs técnicos em alta definição (DPI ajustável) e utiliza o Google Gemini para ler tabelas de poligonais e descrições de confrontantes sem dependências pesadas locais de OCR.
+- **Mapeamento de Confrontantes:** Vincula automaticamente os vértices físicos (`De` -> `Para`) com seus respectivos confrontantes limítrofes obtidos na planta.
+- **Exportação Profissional (.docx):** Gera o memorial descritivo redigido automaticamente em formato Word editável utilizando padrões visuais corporativos.
+- **Painel Administrativo Premium:** Configuração flexível de dados da empresa, do responsável técnico (CFTA/CREA) e do cliente/imóvel em uma barra lateral otimizada e responsiva.
+- **Auditoria & Validação:** Emite relatórios de execução em tempo real detalhando o tempo de processamento, quantidade de segmentos identificados e possíveis inconsistências de vértices ou coordenadas para garantir a segurança técnica da peça.
+
+---
+
+## 🛠️ Arquitetura do Projeto
+
+O sistema foi redesenhado seguindo as melhores práticas de desenvolvimento de software, separando a lógica de negócio da interface gráfica:
+
+* `app.py`: Interface do usuário premium desenvolvida em **Streamlit**, estilizada com componentes visuais modernos e paleta de cores corporativa baseada em tons de verde escuro.
+* `processador.py`: Coordena a orquestração do processamento, conversão de PDFs (`PyMuPDF` / `Pillow`), chamadas à API do Gemini e validações via `Pydantic`.
+* `gerador_word.py`: Camada responsável pela estilização, formatação de tabelas, inserção de dados cadastrais e geração do arquivo `.docx` usando a biblioteca `python-docx`.
+* `config.py`: Centraliza todas as constantes do sistema, dados padrão (empresa, técnico e cliente) e configurações do motor de IA.
+* `utils.py`: Funções utilitárias como tratamento de logs estruturados, sanitização de strings, validação de arquivos e cálculo de tempo de execução.
+
+---
+
+## 📦 Pré-requisitos & Instalação
+
+### 1. Clonar o Repositório
+```bash
+git clone [https://github.com/seu-usuario/nome-do-repositorio.git](https://github.com/seu-usuario/nome-do-repositorio.git)
+cd nome-do-repositorio
+pip install -r requirements.txt
+# .streamlit/secrets.toml
+GEMINI_API_KEY = "SUA_CHAVE_API_AQUI"
+streamlit run app.py
 
 
 
