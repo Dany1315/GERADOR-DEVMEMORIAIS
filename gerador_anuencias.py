@@ -1,4 +1,4 @@
-"""
+#"""
 MÓDULO DE GERAÇÃO E ANÁLISE DE ANUÊNCIAS VIA GEMINI API
 Criação automatizada de Declarações de Reconhecimento de Limites baseada em modelos.
 """
