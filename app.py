@@ -1,18 +1,6 @@
 #"""
-#""" GERADOR DE MEMORIAL DESCRITIVO - Versão 6.0 Refatoração completa com arquitetura melhorada,
-#melhor performance e UX  Principais melhorias: ✅ Separação de responsabilidades
-#(config, utils, processador, gerador_word) ✅
-#Retry automático com exponential backoff para API Gemini ✅
-#Validação robusta de arquivos e entrada ✅
-#Cache de sessão para evitar reprocessamento ✅
-#Progress bars para operações longas ✅
-#Relatórios de processamento detalhados ✅
-#Tratamento aprimorado de erros ✅ 
-#Type hints completos ✅
-#Logging estruturado ✅
-#Documentação inline completa✅
-#GERADOR DE MEMORIAL DESCRITIVO - Versão 6.0 (UI/UX Premium Edition)
-#Refatoração visual completa focada em experiência do usuário e design corporativo.
+#GERADOR DE MEMORIAL DESCRITIVO - Versão 6.0 (UI/UX Premium Dark Green Edition)
+#Refatoração visual focada em experiência do usuário e design corporativo com paleta verde escuro.
 #"""
 
 import io
@@ -99,9 +87,9 @@ def main():
                 font-family: 'Inter', sans-serif;
             }
             
-            /* Banner de Cabeçalho Corporativo */
+            /* Banner de Cabeçalho Corporativo - Verde Escuro Elegante */
             .hero-container {
-                background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+                background: linear-gradient(135deg, #064e3b 0%, #022c22 100%);
                 padding: 2.5rem;
                 border-radius: 16px;
                 color: #ffffff;
@@ -117,13 +105,13 @@ def main():
             }
             .hero-subtitle {
                 font-size: 1.1rem;
-                color: #94a3b8;
+                color: #a7f3d0;
                 font-weight: 300;
             }
             
-            /* Ajustes finos nos cards e botões */
+            /* Ajustes finos nos cards e botões - Verde Escuro Premium */
             div.stButton > button:first-child {
-                background: linear-gradient(90deg, #10b981 0%, #059669 100%);
+                background: linear-gradient(90deg, #065f46 0%, #022c22 100%);
                 color: white;
                 border: none;
                 padding: 0.75rem 1.5rem;
@@ -131,12 +119,12 @@ def main():
                 font-size: 1.1rem;
                 border-radius: 8px;
                 transition: all 0.3s ease;
-                box-shadow: 0 4px 6px -1px rgba(16, 185, 129, 0.2);
+                box-shadow: 0 4px 6px -1px rgba(6, 95, 70, 0.2);
             }
             div.stButton > button:first-child:hover {
                 transform: translateY(-2px);
-                box-shadow: 0 10px 15px -3px rgba(16, 185, 129, 0.3);
-                background: linear-gradient(90deg, #059669 0%, #047857 100%);
+                box-shadow: 0 10px 15px -3px rgba(6, 95, 70, 0.3);
+                background: linear-gradient(90deg, #047857 0%, #064e3b 100%);
             }
             
             /* Customização de alertas e informativos */
@@ -570,11 +558,11 @@ def main():
                     st.code(traceback.format_exc())
 
     else:
-        # Mensagem inicial de tutorial de fluxo (substituindo a info box antiga por algo mais amigável)
+        # Mensagem inicial de tutorial de fluxo - Customizada para o visual escuro/verde
         st.markdown("""
-            <div style="background-color: #f1f5f9; padding: 1.5rem; border-radius: 8px; border-left: 4px solid #64748b; margin-top: 2rem;">
-                <h4 style="margin-top:0; color: #334155;">🏁 Primeiros passos para iniciar</h4>
-                <ol style="margin-bottom:0; color: #475569;">
+            <div style="background-color: #f1f5f9; padding: 1.5rem; border-radius: 8px; border-left: 4px solid #064e3b; margin-top: 2rem;">
+                <h4 style="margin-top:0; color: #0f172a;">🏁 Primeiros passos para iniciar</h4>
+                <ol style="margin-bottom:0; color: #334155;">
                     <li>Carregue ambos os arquivos PDFs correspondentes à <b>Planta</b> e ao <b>Roteiro</b> (ou insira-os manualmente na aba ao lado).</li>
                     <li>Certifique-se de preencher as informações cadastrais do Proprietário e do Técnico na barra lateral esquerda.</li>
                     <li>Clique no botão de análise que aparecerá na tela para processar a malha geográfica.</li>
