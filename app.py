@@ -1,9 +1,16 @@
 #"""
-#Gerador de Memorial Descritivo - Versão 4.0 (Streamlit Cloud)
+#Gerador de Memorial Descritivo - Versão 5.0 (Streamlit Cloud)
 #Lê PDFs de topografia (inclusive desenhos de CAD sem camada de texto, como
 #exportações VectorDraw) convertendo as páginas em imagem e usando a visão
 #multimodal do Gemini para extrair a tabela de roteiro perimétrico e os
-#dados/confrontantes da planta.
+#dados/confrontantes da planta (matrícula + nome dos vizinhos, sem CPF).
+#
+#Novidades v5.0:
+#  - Dados do cliente (Imóvel, Proprietário, Local, Área, Perímetro) na sidebar
+#  - Formato do memorial atualizado: coordenadas N/E por vértice, matrícula e
+#    nome dos vizinhos, distâncias percorridas, texto final conforme modelo oficial
+#  - Nomes dos modelos Gemini corrigidos (gemini-1.5-flash, gemini-1.5-pro, etc.)
+#  - Assinatura no formato do memorial de referência (Resp. Técnico + INCRA)
 #
 #Funciona 100% no Streamlit Cloud sem dependências de sistema operacional
 #(usa PyMuPDF puro-Python para rasterizar o PDF, sem precisar de Poppler/Tesseract).
@@ -56,6 +63,14 @@ EMPRESA_INFO = {
     "email": "topogeo2014@gmail.com"
 }
 
+CLIENTE_INFO = {
+    "imovel": "Lote",
+    "proprietario": "SEBASTIAO IZOTON",
+    "local": "Vila Valério",
+    "area": "0,16 ha",
+    "perimetro": "206,42 m"
+}
+
 TECNICO_INFO = {
     "nome": "Régis Campo da Silva",
     "cargo": "TÉCNICO EM AGROPECUÁRIA",
@@ -80,11 +95,6 @@ class RegraConfrontante(BaseModel):
 
 
 class MapeamentoConfrontantes(BaseModel):
-    proprietario: str
-    municipio: str
-    comarca: str
-    area: str
-    perimetro: str
     regras: List[RegraConfrontante]
 
     class Config:
@@ -346,10 +356,10 @@ def mapear_confrontantes_gemini(
         Sua tarefa é extrair os dados cadastrais solicitados e criar as regras matemáticas de transição de confrontantes.
 
         INSTRUÇÕES CRÍTICAS:
-        1. Extraia EXATAMENTE como aparecem no documento: proprietário, município, comarca, área total e perímetro total
-        2. Para cada confrontante, determine o intervalo de pontos (ponto_inicio e ponto_fim)
-        3. Exemplo: Se do ponto 7 ao 21 confronta com 'ES 230', crie: ponto_inicio: 7, ponto_fim: 21, nome_confrontante: 'ES 230'
-        4. Se houver fechamento do ciclo (ex: de ponto 21 para 1), use: ponto_inicio: 21, ponto_fim: 1
+        1. Para cada confrontante, determine o intervalo de pontos (ponto_inicio e ponto_fim)
+        2. Exemplo: Se do ponto 7 ao 21 confronta com 'Matrícula nº 1234 propriedade de JOAO', crie: ponto_inicio: 7, ponto_fim: 21, nome_confrontante: 'Matrícula nº 1234 propriedade de JOAO'
+        3. Se houver fechamento do ciclo (ex: de ponto 21 para 1), use: ponto_inicio: 21, ponto_fim: 1
+        4. Tente incluir a matrícula e os nomes dos vizinhos, não é necessário o CPF.
         5. Retorne ESTRITAMENTE no formato JSON estruturado fornecido
         6. NÃO invente dados. Se não conseguir extrair um campo, deixe como string vazia ""
         """
@@ -487,23 +497,21 @@ def gerar_documento_word(dados_finais: Dict[str, Any]) -> io.BytesIO:
         p_dados.paragraph_format.line_spacing = 1.15
         p_dados.paragraph_format.space_after = Pt(18)
 
-        proprietario = dados_finais.get('proprietario', '').upper() or 'NÃO INFORMADO'
-        municipio = dados_finais.get('municipio', '').upper() or 'NÃO INFORMADO'
-        comarca = dados_finais.get('comarca', '').upper() or 'NÃO INFORMADO'
+        imovel = dados_finais.get('imovel', 'NÃO INFORMADO')
+        proprietario = dados_finais.get('proprietario', 'NÃO INFORMADO')
+        local = dados_finais.get('local', 'NÃO INFORMADO')
         area = dados_finais.get('area', 'NÃO INFORMADO')
         perimetro = dados_finais.get('perimetro', 'NÃO INFORMADO')
 
         p_dados.add_run("Imóvel: ").bold = True
-        p_dados.add_run("GLEBA A\n")
+        p_dados.add_run(f"{imovel}\n")
         p_dados.add_run("Proprietário: ").bold = True
         p_dados.add_run(f"{proprietario}\n")
-        p_dados.add_run("Município: ").bold = True
-        p_dados.add_run(f"{municipio}\n")
-        p_dados.add_run("Comarca: ").bold = True
-        p_dados.add_run(f"{comarca}\n")
-        p_dados.add_run("Área: ").bold = True
+        p_dados.add_run("Local: ").bold = True
+        p_dados.add_run(f"{local}\n")
+        p_dados.add_run("Área (ha): ").bold = True
         p_dados.add_run(f"{area}\n")
-        p_dados.add_run("Perímetro: ").bold = True
+        p_dados.add_run("Perímetro (m): ").bold = True
         p_dados.add_run(f"{perimetro}")
 
         # Descrição
@@ -511,7 +519,7 @@ def gerar_documento_word(dados_finais: Dict[str, Any]) -> io.BytesIO:
         p_desc_tit.alignment = WD_ALIGN_PARAGRAPH.CENTER
         p_desc_tit.paragraph_format.space_before = Pt(12)
         p_desc_tit.paragraph_format.space_after = Pt(12)
-        run_desc = p_desc_tit.add_run("DESCRIÇÃO")
+        run_desc = p_desc_tit.add_run("DESCRIÇÃO DO PERÍMETRO")
         run_desc.bold = True
 
         p_texto = doc.add_paragraph()
@@ -539,21 +547,28 @@ def gerar_documento_word(dados_finais: Dict[str, Any]) -> io.BytesIO:
                 confrontante = s.get('confrontante', 'NÃO INFORMADO')
                 azimute = s.get('azimute', 'NÃO INFORMADO')
                 distancia = s.get('distancia', 'NÃO INFORMADO')
-
-                p_texto.add_run(
-                    f"deste, segue confrontando com {confrontante}, "
-                    f"com os seguintes azimutes e distâncias: {azimute} e {distancia} "
-                    f"até o vértice {s['para']}, de coordenadas N {prox_coordenada_n} e E {prox_coordenada_e}; "
-                )
+                
+                # Se for o último segmento que fecha o polígono, a formatação é um pouco diferente
+                if i == len(segmentos) - 1:
+                    p_texto.add_run(
+                        f" {azimute} e {distancia} "
+                        f"até o vértice {s['para']}, "
+                    )
+                else:
+                    p_texto.add_run(
+                        f"Divisa do imóvel; deste, segue confrontando com {confrontante}, "
+                        f"com os seguintes azimutes e distâncias: {azimute} e {distancia} "
+                        f"até o vértice {s['para']}, de coordenadas N {prox_coordenada_n} e E {prox_coordenada_e}; "
+                    )
         else:
             logger.warning("Nenhum segmento disponível para gerar descrição")
             p_texto.add_run("Nenhum segmento foi processado.")
 
         p_texto.add_run(
-            "ponto inicial da descrição deste perímetro. Todas as coordenadas aqui descritas "
-            "estão georreferenciadas ao Sistema Geodésico Brasileiro, e encontram-se representadas "
-            "no Sistema UTM, referenciadas ao Meridiano Central nº 39° WGr, tendo como datum o SIRGAS2000. "
-            "Todos os azimutes e distâncias, área e perímetro foram calculados no plano de projeção UTM."
+            "ponto inicial da descrição deste perímetro. As coordenadas da base foram processadas pelo método de Posicionamento por Ponto Preciso (PPP). Todas as coordenadas aqui descritas "
+            "estão georreferenciadas ao Sistema Geodésico Brasileiro e encontram-se representadas "
+            "no Sistema U T M, referenciadas ao Meridiano Central nº 39°00', fuso -24, tendo como datum o SIRGAS2000. "
+            "Todos os azimutes e distâncias, área e perímetro foram calculados no plano de projeção U T M."
         )
 
         # Data
@@ -566,17 +581,18 @@ def gerar_documento_word(dados_finais: Dict[str, Any]) -> io.BytesIO:
 
         p_data = doc.add_paragraph()
         p_data.paragraph_format.space_before = Pt(24)
-        p_data.add_run(f"Vila Valério, {data_atual.day} de {nome_mes} de {data_atual.year}")
+        local_data = dados_finais.get('local', 'Vila Valério')
+        p_data.add_run(f"{local_data} – ES, {data_atual.strftime('%d/%m/%Y')}.")
 
         # Assinatura
         p_assinatura = doc.add_paragraph()
         p_assinatura.paragraph_format.space_before = Pt(36)
         p_assinatura.add_run(
-            f"__________________________________________________\n"
-            f"{TECNICO_INFO['nome']}\n"
-            f"{TECNICO_INFO['cargo']}\n"
-            f"CFTA: {TECNICO_INFO['cfta']}\n"
-            f"TRT: {TECNICO_INFO['trt']}"
+            f"__________________________________\n"
+            f"                {TECNICO_INFO['nome']}\n"
+            f"             Resp. Técnico\n"
+            f"               CFTA: {TECNICO_INFO['cfta']}\n"
+            f"Credenciamento INCRA: G1D"
         )
 
         conteudo_arquivo = io.BytesIO()
@@ -605,10 +621,12 @@ def main():
 
     # Info sobre versão
     st.info("""
-    ✅ **Versão 4.0 - Leitura visual via IA**
+    ✅ **Versão 5.0 - Leitura visual via IA + Dados do Cliente**
     - Funciona 100% na nuvem, sem Poppler/Tesseract
     - Lê PDFs de CAD (ex.: VectorDraw) que não têm texto extraível, convertendo
       as páginas em imagem e usando a visão do Gemini para ler as tabelas
+    - Extrai matrícula e nome dos vizinhos (sem CPF) da planta
+    - Dados do cliente (Imóvel, Proprietário, Local, Área, Perímetro) configurados na barra lateral
     - Se preferir, ainda é possível colar o texto manualmente
     """)
 
@@ -627,12 +645,19 @@ def main():
         st.subheader("Modelo de IA")
         nome_modelo = st.selectbox(
             "Modelo Gemini",
-            options=["gemini-3.5-flash", "gemini-3.1-pro-preview"],
+            options=["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash", "gemini-2.5-pro"],
             index=0,
-            help="'gemini-3.5-flash' é o modelo atual recomendado (rápido e GA). "
-                 "'gemini-3.1-pro-preview' tem raciocínio mais forte para leitura de tabelas/desenhos "
+            help="'gemini-1.5-flash' é o modelo atual recomendado (rápido e GA). "
+                 "'gemini-1.5-pro' tem raciocínio mais forte para leitura de tabelas/desenhos "
                  "complexos, porém é mais lento e mais caro."
         )
+
+        st.subheader("Dados do Cliente")
+        cliente_imovel = st.text_input("Imóvel", value=CLIENTE_INFO["imovel"])
+        cliente_proprietario = st.text_input("Nome do Proprietário", value=CLIENTE_INFO["proprietario"])
+        cliente_local = st.text_input("Local", value=CLIENTE_INFO["local"])
+        cliente_area = st.text_input("Área (ha)", value=CLIENTE_INFO["area"])
+        cliente_perimetro = st.text_input("Perímetro (m)", value=CLIENTE_INFO["perimetro"])
         dpi_conversao = st.slider(
             "Qualidade da imagem (DPI)", min_value=150, max_value=400, value=250, step=50,
             help="DPI mais alto = leitura mais precisa dos números, porém mais lenta."
@@ -690,6 +715,12 @@ def main():
             EMPRESA_INFO["email"] = empresa_email
             TECNICO_INFO["nome"] = tecnico_nome
             TECNICO_INFO["cfta"] = tecnico_cfta
+            
+            CLIENTE_INFO["imovel"] = cliente_imovel
+            CLIENTE_INFO["proprietario"] = cliente_proprietario
+            CLIENTE_INFO["local"] = cliente_local
+            CLIENTE_INFO["area"] = cliente_area
+            CLIENTE_INFO["perimetro"] = cliente_perimetro
 
             with st.spinner("⏳ Processando documentos..."):
                 try:
@@ -753,11 +784,11 @@ def main():
 
                     # Dados finais
                     dados_finais = {
-                        "proprietario": mapeamento.proprietario,
-                        "municipio": mapeamento.municipio,
-                        "comarca": mapeamento.comarca,
-                        "area": mapeamento.area,
-                        "perimetro": mapeamento.perimetro,
+                        "imovel": CLIENTE_INFO["imovel"],
+                        "proprietario": CLIENTE_INFO["proprietario"],
+                        "local": CLIENTE_INFO["local"],
+                        "area": CLIENTE_INFO["area"],
+                        "perimetro": CLIENTE_INFO["perimetro"],
                         "segmentos": segmentos_reais
                     }
 
@@ -801,10 +832,11 @@ def main():
                     st.success("✅ Documento gerado com sucesso!")
 
                     # Download
+                    nome_arquivo = CLIENTE_INFO['proprietario'].replace(' ', '_').upper() or 'MEMORIAL'
                     st.download_button(
                         label="📥 Baixar Memorial Descritivo (.docx)",
                         data=arquivo_docx,
-                        file_name=f"MEMORIAL_DESCRITIVO_GLEBA_A_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx",
+                        file_name=f"MEMORIAL_DESCRITIVO_{nome_arquivo}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx",
                         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                         use_container_width=True
                     )
