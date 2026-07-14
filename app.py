@@ -1,19 +1,19 @@
-"""
-""" GERADOR DE MEMORIAL DESCRITIVO - Versão 6.0 Refatoração completa com arquitetura melhorada,
-melhor performance e UX  Principais melhorias: ✅ Separação de responsabilidades
-(config, utils, processador, gerador_word) ✅
-Retry automático com exponential backoff para API Gemini ✅
-Validação robusta de arquivos e entrada ✅
-Cache de sessão para evitar reprocessamento ✅
-Progress bars para operações longas ✅
-Relatórios de processamento detalhados ✅
-Tratamento aprimorado de erros ✅ 
-Type hints completos ✅
-Logging estruturado ✅
-Documentação inline completa✅
-GERADOR DE MEMORIAL DESCRITIVO - Versão 6.0 (UI/UX Premium Edition)
-Refatoração visual completa focada em experiência do usuário e design corporativo.
-"""
+#"""
+#""" GERADOR DE MEMORIAL DESCRITIVO - Versão 6.0 Refatoração completa com arquitetura melhorada,
+#melhor performance e UX  Principais melhorias: ✅ Separação de responsabilidades
+#(config, utils, processador, gerador_word) ✅
+#Retry automático com exponential backoff para API Gemini ✅
+#Validação robusta de arquivos e entrada ✅
+#Cache de sessão para evitar reprocessamento ✅
+#Progress bars para operações longas ✅
+#Relatórios de processamento detalhados ✅
+#Tratamento aprimorado de erros ✅ 
+#Type hints completos ✅
+#Logging estruturado ✅
+#Documentação inline completa✅
+#GERADOR DE MEMORIAL DESCRITIVO - Versão 6.0 (UI/UX Premium Edition)
+#Refatoração visual completa focada em experiência do usuário e design corporativo.
+#"""
 
 import io
 import logging
