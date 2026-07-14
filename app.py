@@ -1,7 +1,7 @@
-"""
-GERADOR DE MEMORIAL DESCRITIVO - Versão 6.2 (UI/UX Premium All-Green Edition com Módulo de Anuências)
-Refatoração visual focada em experiência do usuário e design corporativo com paleta verde escuro integral.
-"""
+#"""
+#GERADOR DE MEMORIAL DESCRITIVO - Versão 6.2 (UI/UX Premium All-Green Edition com Módulo de Anuências)
+#Refatoração visual focada em experiência do usuário e design corporativo com paleta verde escuro integral.
+#"""
 
 import io
 import logging
