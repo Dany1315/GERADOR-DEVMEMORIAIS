@@ -1,5 +1,5 @@
 """
-GERADOR DE MEMORIAL DESCRITIVO - Versão 6.1 (UI/UX Premium All-Green Edition)
+GERADOR DE MEMORIAL DESCRITIVO - Versão 6.2 (UI/UX Premium All-Green Edition com Módulo de Anuências)
 Refatoração visual focada em experiência do usuário e design corporativo com paleta verde escuro integral.
 """
 
@@ -180,6 +180,21 @@ def main():
                 font-weight: 700;
                 color: #0f172a;
             }
+            
+            /* Estilização premium para as abas principais do sistema */
+            .stTabs [data-baseweb="tab-list"] {
+                gap: 10px;
+            }
+            .stTabs [data-baseweb="tab"] {
+                background-color: #f1f5f9;
+                border-radius: 8px 8px 0px 0px;
+                padding: 10px 20px;
+                font-weight: 600;
+            }
+            .stTabs [aria-selected="true"] {
+                background-color: #064e3b !important;
+                color: white !important;
+            }
         </style>
     """, unsafe_allow_html=True)
 
@@ -313,297 +328,292 @@ def main():
         )
 
     # ==========================================
-    # CORPO PRINCIPAL (TABS PARA FLUXO LIMPO)
+    # CRIAÇÃO DAS ABAS PRINCIPAIS DO SISTEMA
     # ==========================================
+    tab_memorial, tab_anuencias = st.tabs(["📝 Memorial Descritivo", "🤝 Geração de Anuências"])
 
-    st.markdown("### 📥 Entrada de Dados do Memorial")
-    
-    # Separando o upload de PDF e a colagem manual por abas para limpar a tela
-    tab_pdf, tab_manual = st.tabs(["📁 Processamento de Arquivos PDF", "📝 Colagem de Texto Manual"])
-
-    with tab_pdf:
-        st.write("Insira os documentos técnicos vetorizados da Gleba A para processamento inteligente.")
-        col1, col2 = st.columns(2)
+    # ------------------------------------------
+    # ABA 1: MEMORIAL DESCRITIVO (CÓDIGO ORIGINAL INTEGRO)
+    # ------------------------------------------
+    with tab_memorial:
+        st.markdown("### 📥 Entrada de Dados do Memorial")
         
-        with col1:
-            st.markdown("<div style='font-weight: 600; margin-bottom: 0.5rem;'>📋 Planta e Confrontantes</div>", unsafe_allow_html=True)
-            pdf_planta = st.file_uploader(
-                "Arraste ou selecione o PDF da Planta:",
-                type=["pdf"],
-                key="planta",
-                help="PDF contendo a relação de confrontantes por intervalos de pontos"
-            )
-            if pdf_planta:
-                valido, msg = validar_arquivo_pdf(pdf_planta, tamanho_max)
-                if valido:
-                    st.success(f"{msg}")
-                else:
-                    st.error(f"{msg}")
+        # Separando o upload de PDF e a colagem manual por abas para limpar a tela
+        tab_pdf, tab_manual = st.tabs(["📁 Processamento de Arquivos PDF", "📝 Colagem de Texto Manual"])
 
-        with col2:
-            st.markdown("<div style='font-weight: 600; margin-bottom: 0.5rem;'>📊 Tabela de Roteiro Perimétrico</div>", unsafe_allow_html=True)
-            pdf_roteiro = st.file_uploader(
-                "Arraste ou selecione o PDF do Roteiro:",
-                type=["pdf"],
-                key="roteiro",
-                help="PDF contendo a tabela com coordenadas, azimutes e distâncias"
-            )
-            if pdf_roteiro:
-                valido, msg = validar_arquivo_pdf(pdf_roteiro, tamanho_max)
-                if valido:
-                    st.success(f"{msg}")
-                else:
-                    st.error(f"{msg}")
-
-    with tab_manual:
-        st.write("Cole os dados brutos de texto caso não possua os arquivos PDF em mãos.")
-        col1, col2 = st.columns(2)
-        with col1:
-            texto_planta_manual = st.text_area(
-                "Texto copiado da PLANTA (Confrontantes):",
-                height=150,
-                key="texto_planta",
-                placeholder="Exemplo: De 1 para 2 confronta com João da Silva..."
-            )
-        with col2:
-            texto_roteiro_manual = st.text_area(
-                "Texto copiado do ROTEIRO (Tabela técnica):",
-                height=150,
-                key="texto_roteiro",
-                placeholder="Exemplo: PONTO N E AZIMUTE DISTANCIA..."
-            )
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # ==========================================
-    # DETECÇÃO DE ENTRADA & PROCESSAMENTO
-    # ==========================================
-
-    tem_pdfs = pdf_planta and pdf_roteiro
-    tem_textos = texto_planta_manual and texto_roteiro_manual
-    
-    if tem_pdfs or tem_textos:
-        st.markdown("---")
-        st.markdown("<h3 style='text-align: center;'>⚡ Pronto para Processar!</h3>", unsafe_allow_html=True)
-        
-        if st.button("🔄 ANALISAR DOCUMENTOS E GERAR MEMORIAL DESCRITIVO", type="primary", use_container_width=True):
+        with tab_pdf:
+            st.write("Insira os documentos técnicos vetorizados da Gleba A para processamento inteligente.")
+            col1, col2 = st.columns(2)
             
-            tempo_inicio_geral = time.time()
-            
-            try:
-                # Etapa 1: Configurar Gemini
-                st.info("🔑 **Etapa 1:** Inicializando conexão com os servidores do Google Gemini...")
-                if not configurar_gemini():
-                    st.error(
-                        "❌ Erro crítico: A variável de ambiente GEMINI_API_KEY não foi encontrada nas configurações do Streamlit."
-                    )
-                    st.stop()
-                st.success("✅ Conexão com o motor de IA estabelecida!")
-
-                # Mapear nome amigável para API
-                nome_modelo_api = GEMINI_CONFIG.MODELOS_DISPONIVEIS.get(
-                    nome_modelo,
-                    "gemini-3.5-flash"
+            with col1:
+                st.markdown("<div style='font-weight: 600; margin-bottom: 0.5rem;'>📋 Planta e Confrontantes</div>", unsafe_allow_html=True)
+                pdf_planta = st.file_uploader(
+                    "Arraste ou selecione o PDF da Planta:",
+                    type=["pdf"],
+                    key="planta",
+                    help="PDF contendo a relação de confrontantes por intervalos de pontos"
                 )
-
-                # Etapa 2: Converter PDFs em imagens
-                st.info("🖼️ **Etapa 2:** Executando renderização de alta definição das páginas...")
-                
-                processador = ProcessadorMemorial(nome_modelo_api)
-                
-                imagens_planta = []
-                imagens_roteiro = []
-                
                 if pdf_planta:
-                    progress_planta = st.progress(0)
-                    imagens_planta = processador.pdf_para_imagens(
-                        pdf_planta,
-                        dpi=dpi_conversao,
-                        progress_callback=lambda p, msg: progress_planta.progress(p, msg)
-                    )
-                
-                if pdf_roteiro:
-                    progress_roteiro = st.progress(0)
-                    imagens_roteiro = processador.pdf_para_imagens(
-                        pdf_roteiro,
-                        dpi=dpi_conversao,
-                        progress_callback=lambda p, msg: progress_roteiro.progress(p, msg)
-                    )
-                
-                st.success("✅ Renderização concluída!")
+                    valido, msg = validar_arquivo_pdf(pdf_planta, tamanho_max)
+                    if valido:
+                        st.success(f"{msg}")
+                    else:
+                        st.error(f"{msg}")
 
-                # Etapa 3: Extrair tabela de roteiro
-                st.info("📊 **Etapa 3:** Analisando a planilha de roteiro por vetorização...")
-                
-                if imagens_roteiro:
-                    segmentos = processador.extrair_roteiro_com_ia(imagens_roteiro)
-                else:
-                    segmentos = processador.parse_tabela_roteiro_texto(texto_roteiro_manual)
-
-                if not segmentos:
-                    st.warning(
-                        "⚠️ Atenção: Não conseguimos extrair segmentos legíveis do roteiro perimétrico. "
-                        "Revise a qualidade de conversão ou aumente a taxa de DPI."
-                    )
-                    st.stop()
-
-                st.success(f"✅ Sucesso! {len(segmentos)} segmentos georreferenciados identificados.")
-
-                # Etapa 4: Mapear confrontantes
-                st.info("🤖 **Etapa 4:** Mapeando relações espaciais e limites territoriais...")
-                
-                mapeamento = processador.mapear_confrontantes(
-                    imagens_planta=imagens_planta if imagens_planta else None,
-                    texto_planta=texto_planta_manual if texto_planta_manual else None,
-                    texto_roteiro=texto_roteiro_manual if texto_roteiro_manual else None,
+            with col2:
+                st.markdown("<div style='font-weight: 600; margin-bottom: 0.5rem;'>📊 Tabela de Roteiro Perimétrico</div>", unsafe_allow_html=True)
+                pdf_roteiro = st.file_uploader(
+                    "Arraste ou selecione o PDF do Roteiro:",
+                    type=["pdf"],
+                    key="roteiro",
+                    help="PDF contendo a tabela com coordenadas, azimutes e distâncias"
                 )
-                
-                st.success(f"✅ {len(mapeamento.regras)} polígonos de confrontação mapeados com sucesso!")
+                if pdf_roteiro:
+                    valido, msg = validar_arquivo_pdf(pdf_roteiro, tamanho_max)
+                    if valido:
+                        st.success(f"{msg}")
+                    else:
+                        st.error(f"{msg}")
 
-                # Etapa 5: Vincular confrontantes
-                st.info("🔗 **Etapa 5:** Consolidando dados topográficos e confrontações...")
-                
-                segmentos_vinculados = processador.vincular_confrontantes()
-                
-                st.success("✅ Consolidação de vértices realizada!")
+        with tab_manual:
+            st.write("Cole os dados brutos de texto caso não possua os arquivos PDF em mãos.")
+            col1, col2 = st.columns(2)
+            with col1:
+                texto_planta_manual = st.text_area(
+                    "Texto copiado da PLANTA (Confrontantes):",
+                    height=150,
+                    key="texto_planta",
+                    placeholder="Exemplo: De 1 para 2 confronta com João da Silva..."
+                )
+            with col2:
+                texto_roteiro_manual = st.text_area(
+                    "Texto copiado do ROTEIRO (Tabela técnica):",
+                    height=150,
+                    key="texto_roteiro",
+                    placeholder="Exemplo: PONTO N E AZIMUTE DISTANCIA..."
+                )
 
-                # Validar resultado
-                valido, avisos = processador.validar_resultado()
-                if avisos:
-                    for aviso in avisos:
-                        st.warning(aviso)
+        st.markdown("<br>", unsafe_allow_html=True)
 
-                # Preparar dados finais
-                dados_finais = {
-                    "imovel": cliente_imovel,
-                    "proprietario": cliente_proprietario,
-                    "local": cliente_local,
-                    "area": cliente_area,
-                    "perimetro": cliente_perimetro,
-                    "segmentos": segmentos_vinculados
-                }
+        # DETECÇÃO DE ENTRADA & PROCESSAMENTO
+        tem_pdfs = pdf_planta and pdf_roteiro
+        tem_textos = texto_planta_manual and texto_roteiro_manual
+        
+        if tem_pdfs or tem_textos:
+            st.markdown("---")
+            st.markdown("<h3 style='text-align: center;'>⚡ Pronto para Processar!</h3>", unsafe_allow_html=True)
+            
+            if st.button("🔄 ANALISAR DOCUMENTOS E GERAR MEMORIAL DESCRITIVO", type="primary", use_container_width=True):
+                tempo_inicio_geral = time.time()
+                try:
+                    # Etapa 1: Configurar Gemini
+                    st.info("🔑 **Etapa 1:** Inicializando conexão com os servidores do Google Gemini...")
+                    if not configurar_gemini():
+                        st.error("❌ Erro crítico: A variável de ambiente GEMINI_API_KEY não foi encontrada nas configurações do Streamlit.")
+                        st.stop()
+                    st.success("✅ Conexão com o motor de IA estabelecida!")
 
-                # Resumo de validação
-                st.balloons()
-                st.success("🎉 Memorial estruturado com sucesso!")
-                
-                st.markdown("### 🔍 Validação e Auditoria dos Dados")
-                
-                # Cards de métricas mais limpos e polidos
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    prop_truncado = (dados_finais['proprietario'][:25] + "...") if len(dados_finais['proprietario']) > 25 else dados_finais['proprietario']
-                    st.metric("👤 Proprietário", prop_truncado)
-                with col2:
-                    st.metric("📐 Área Total Declarada", f"{dados_finais['area']} ha")
-                with col3:
-                    st.metric("🏃 Perímetro Estimado", f"{dados_finais['perimetro']} m")
+                    # Mapear nome amigável para API
+                    nome_modelo_api = GEMINI_CONFIG.MODELOS_DISPONIVEIS.get(nome_modelo, "gemini-3.5-flash")
 
-                # Tabela detalhada
-                st.markdown("<br>", unsafe_allow_html=True)
-                with st.expander("📋 Tabela Gerada: Malha de Confrontação e Poligonais", expanded=True):
-                    df_data = []
-                    for seg in dados_finais["segmentos"]:
-                        df_data.append({
-                            "De": seg['de'],
-                            "Para": seg['para'],
-                            "N": seg['n_y'],
-                            "E": seg['e_x'],
-                            "Azimute": seg['azimute'],
-                            "Distância (m)": seg['distancia'],
-                            "Confrontante": seg['confrontante']
-                        })
-
-                    df = pd.DataFrame(df_data)
-                    st.dataframe(df, use_container_width=True, hide_index=True)
-                    st.caption(
-                        "⚠️ Nota de Responsabilidade: Os dados acima foram estruturados por algoritmos de visão de IA. "
-                        "Sempre revise os resultados antes de protocolar a peça técnica."
-                    )
-
-                # Gerar documento Word
-                st.info("📝 Redigindo arquivo final no padrão Word (.docx)...")
-                
-                dados_empresa = {
-                    "nome": empresa_nome,
-                    "endereco": empresa_endereco,
-                    "telefone": empresa_telefone,
-                    "email": empresa_email
-                }
-                
-                dados_tecnico = {
-                    "nome": tecnico_nome,
-                    "cfta": tecnico_cfta
-                }
-                
-                gerador = GeradorMemorialWord(dados_empresa, dados_tecnico)
-                arquivo_docx = gerador.gerar_documento(dados_finais)
-                
-                st.markdown("<br>", unsafe_allow_html=True)
-                
-                # Seção de exportação com destaque visual
-                col_down1, col_down2 = st.columns(2)
-                
-                with col_down1:
-                    nome_arquivo = sanitizar_nome_arquivo(cliente_proprietario.upper())
-                    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                    # Etapa 2: Converter PDFs em imagens
+                    st.info("🖼️ **Etapa 2:** Executando renderização de alta definição das páginas...")
+                    processador = ProcessadorMemorial(nome_modelo_api)
                     
-                    st.download_button(
-                        label="📥 BAIXAR MEMORIAL DESCRITIVO (.DOCX)",
-                        data=arquivo_docx,
-                        file_name=f"MEMORIAL_DESCRITIVO_{nome_arquivo}_{timestamp}.docx",
-                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                        use_container_width=True
-                    )
-                
-                with col_down2:
-                    # Relatório de processamento
-                    tempo_fim = time.time()
-                    relatorio = gerar_relatorio_processamento(
-                        dados_finais,
-                        tempo_inicio_geral,
-                        tempo_fim,
-                        processador.tempo_gemini
-                    )
+                    imagens_planta = []
+                    imagens_roteiro = []
                     
-                    st.download_button(
-                        label="📥 BAIXAR RELATÓRIO DE EXECUÇÃO (.TXT)",
-                        data=relatorio,
-                        file_name=f"relatorio_{timestamp}.txt",
-                        use_container_width=True
+                    if pdf_planta:
+                        progress_planta = st.progress(0)
+                        imagens_planta = processador.pdf_para_imagens(
+                            pdf_planta,
+                            dpi=dpi_conversao,
+                            progress_callback=lambda p, msg: progress_planta.progress(p, msg)
+                        )
+                    
+                    if pdf_roteiro:
+                        progress_roteiro = st.progress(0)
+                        imagens_roteiro = processador.pdf_para_imagens(
+                            pdf_roteiro,
+                            dpi=dpi_conversao,
+                            progress_callback=lambda p, msg: progress_roteiro.progress(p, msg)
+                        )
+                    st.success("✅ Renderização concluída!")
+
+                    # Etapa 3: Extrair tabela de roteiro
+                    st.info("📊 **Etapa 3:** Analisando a planilha de roteiro por vetorização...")
+                    if imagens_roteiro:
+                        segmentos = processador.extrair_roteiro_com_ia(imagens_roteiro)
+                    else:
+                        segmentos = processador.parse_tabela_roteiro_texto(texto_roteiro_manual)
+
+                    if not segmentos:
+                        st.warning("⚠️ Atenção: Não conseguimos extrair segmentos legíveis do roteiro perimétrico. Revise a qualidade de conversão ou aumente a taxa de DPI.")
+                        st.stop()
+                    st.success(f"✅ Sucesso! {len(segmentos)} segmentos georreferenciados identificados.")
+
+                    # Etapa 4: Mapear confrontantes
+                    st.info("🤖 **Etapa 4:** Mapeando relações espaciais e limites territoriais...")
+                    mapeamento = processador.mapear_confrontantes(
+                        imagens_planta=imagens_planta if imagens_planta else None,
+                        texto_planta=texto_planta_manual if texto_planta_manual else None,
+                        texto_roteiro=texto_roteiro_manual if texto_roteiro_manual else None,
                     )
+                    st.success(f"✅ {len(mapeamento.regras)} polígonos de confrontação mapeados com sucesso!")
 
-                with st.expander("📊 Relatório Detalhado das Operações", expanded=False):
-                    st.text(relatorio)
+                    # Etapa 5: Vincular confrontantes
+                    st.info("🔗 **Etapa 5:** Consolidando dados topográficos e confrontações...")
+                    segmentos_vinculados = processador.vincular_confrontantes()
+                    st.success("✅ Consolidação de vértices realizada!")
 
-            except ValueError as e:
-                st.error(f"❌ Erro de Validação: {str(e)}")
-                logger.error(f"Erro de validação: {str(e)}")
+                    # Validar resultado
+                    valido, avisos = processador.validar_resultado()
+                    if avisos:
+                        for aviso in avisos:
+                            st.warning(aviso)
 
-            except json.JSONDecodeError as e:
-                st.error(f"❌ Erro ao processar resposta da IA: {str(e)}")
-                logger.error(f"Erro JSON: {str(e)}")
+                    # Preparar dados finais
+                    dados_finais = {
+                        "imovel": cliente_imovel,
+                        "proprietario": cliente_proprietario,
+                        "local": cliente_local,
+                        "area": cliente_area,
+                        "perimetro": cliente_perimetro,
+                        "segmentos": segmentos_vinculados
+                    }
 
-            except Exception as e:
-                st.error(f"❌ Erro inesperado: {str(e)}")
-                logger.error(f"Erro geral: {str(e)}", exc_info=True)
+                    # Salvar dados na sessão para que fiquem disponíveis para o módulo de Anuências
+                    st.session_state["dados_memoriais_processados"] = dados_finais
 
-                with st.expander("🔧 Detalhes Técnicos (Debug/Diagnóstico)"):
-                    import traceback
-                    st.code(traceback.format_exc())
+                    # Resumo de validação
+                    st.balloons()
+                    st.success("🎉 Memorial estruturado com sucesso!")
+                    st.markdown("### 🔍 Validação e Auditoria dos Dados")
+                    
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        prop_truncado = (dados_finais['proprietario'][:25] + "...") if len(dados_finais['proprietario']) > 25 else dados_finais['proprietario']
+                        st.metric("👤 Proprietário", prop_truncado)
+                    with col2:
+                        st.metric("📐 Área Total Declarada", f"{dados_finais['area']} ha")
+                    with col3:
+                        st.metric("🏃 Perímetro Estimado", f"{dados_finais['perimetro']} m")
 
-    else:
-        # Mensagem inicial de tutorial de fluxo - Customizada para o visual escuro/verde
-        st.markdown("""
-            <div style="background-color: #f1f5f9; padding: 1.5rem; border-radius: 8px; border-left: 4px solid #064e3b; margin-top: 2rem;">
-                <h4 style="margin-top:0; color: #0f172a;">🏁 Primeiros passos para iniciar</h4>
-                <ol style="margin-bottom:0; color: #334155;">
-                    <li>Carregue ambos os arquivos PDFs correspondentes à <b>Planta</b> e ao <b>Roteiro</b> (ou insira-os manualmente na aba ao lado).</li>
-                    <li>Certifique-se de preencher as informações cadastrais do Proprietário e do Técnico na barra lateral esquerda.</li>
-                    <li>Clique no botão de análise que aparecerá na tela para processar a malha geográfica.</li>
-                </ol>
-            </div>
-        """, unsafe_allow_html=True)
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    with st.expander("📋 Tabela Gerada: Malha de Confrontação e Poligonais", expanded=True):
+                        df_data = []
+                        for seg in dados_finais["segmentos"]:
+                            df_data.append({
+                                "De": seg['de'],
+                                "Para": seg['para'],
+                                "N": seg['n_y'],
+                                "E": seg['e_x'],
+                                "Azimute": seg['azimute'],
+                                "Distância (m)": seg['distancia'],
+                                "Confrontante": seg['confrontante']
+                            })
+                        df = pd.DataFrame(df_data)
+                        st.dataframe(df, use_container_width=True, hide_index=True)
+                        st.caption("⚠️ Nota de Responsabilidade: Os dados acima foram estruturados por algoritmos de visão de IA. Sempre revise os resultados antes de protocolar a peça técnica.")
+
+                    # Gerar documento Word
+                    st.info("📝 Redigindo arquivo final no padrão Word (.docx)...")
+                    dados_empresa = {"nome": empresa_nome, "endereco": empresa_endereco, "telefone": empresa_telefone, "email": empresa_email}
+                    dados_tecnico = {"nome": tecnico_nome, "cfta": tecnico_cfta}
+                    
+                    gerador = GeradorMemorialWord(dados_empresa, dados_tecnico)
+                    arquivo_docx = gerador.gerar_documento(dados_finais)
+                    
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    col_down1, col_down2 = st.columns(2)
+                    
+                    with col_down1:
+                        nome_arquivo = sanitizar_nome_arquivo(cliente_proprietario.upper())
+                        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                        st.download_button(
+                            label="📥 BAIXAR MEMORIAL DESCRITIVO (.DOCX)",
+                            data=arquivo_docx,
+                            file_name=f"MEMORIAL_DESCRITIVO_{nome_arquivo}_{timestamp}.docx",
+                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            use_container_width=True
+                        )
+                    
+                    with col_down2:
+                        tempo_fim = time.time()
+                        relatorio = gerar_relatorio_processamento(dados_finais, tempo_inicio_geral, tempo_fim, processador.tempo_gemini)
+                        st.download_button(
+                            label="📥 BAIXAR RELATÓRIO DE EXECUÇÃO (.TXT)",
+                            data=relatorio,
+                            file_name=f"relatorio_{timestamp}.txt",
+                            use_container_width=True
+                        )
+
+                    with st.expander("📊 Relatório Detalhado das Operações", expanded=False):
+                        st.text(relatorio)
+
+                except ValueError as e:
+                    st.error(f"❌ Erro de Validação: {str(e)}")
+                    logger.error(f"Erro de validação: {str(e)}")
+                except json.JSONDecodeError as e:
+                    st.error(f"❌ Erro ao processar resposta da IA: {str(e)}")
+                    logger.error(f"Erro JSON: {str(e)}")
+                except Exception as e:
+                    st.error(f"❌ Erro inesperado: {str(e)}")
+                    logger.error(f"Erro geral: {str(e)}", exc_info=True)
+                    with st.expander("🔧 Detalhes Técnicos (Debug/Diagnóstico)"):
+                        import traceback
+                        st.code(traceback.format_exc())
+        else:
+            st.markdown("""
+                <div style="background-color: #f1f5f9; padding: 1.5rem; border-radius: 8px; border-left: 4px solid #064e3b; margin-top: 2rem;">
+                    <h4 style="margin-top:0; color: #0f172a;">🏁 Primeiros passos para iniciar</h4>
+                    <ol style="margin-bottom:0; color: #334155;">
+                        <li>Carregue ambos os arquivos PDFs correspondentes à <b>Planta</b> e ao <b>Roteiro</b> (ou insira-os manualmente na aba ao lado).</li>
+                        <li>Certifique-se de preencher as informações cadastrais do Proprietário e do Técnico na barra lateral esquerda.</li>
+                        <li>Clique no botão de análise que aparecerá na tela para processar a malha geográfica.</li>
+                    </ol>
+                </div>
+            """, unsafe_allow_html=True)
+
+    # ------------------------------------------
+    # ABA 2: ANUÊNCIAS (NOVO MÓDULO ENGATILHADO)
+    # ------------------------------------------
+    with tab_anuencias:
+        st.markdown("### 🤝 Módulo de Geração de Cartas de Anuência")
+        st.write("Esta ferramenta utilizará os dados processados no Memorial Descritivo para gerar automaticamente os termos de anuência para os confrontantes.")
+        
+        # Verifica se existem dados processados na Aba 1
+        dados_disponiveis = st.session_state.get("dados_memoriais_processados")
+        
+        if dados_disponiveis:
+            st.success("✅ Dados do Memorial identificados com sucesso! Pronto para estruturar as anuências.")
+            
+            # Caixa informativa sobre o status atual do setup
+            st.info("💡 **Aguardando Modelo:** A interface de anuências já está integrada ao motor. Envie o modelo de documento desejado para ativarmos os geradores automáticos.")
+            
+            # Painel de Visualização Prévio (Apenas para demonstração do engatilhamento)
+            with st.expander("🔍 Visualizar Confrontantes Encontrados para Anuência", expanded=True):
+                segmentos = dados_disponiveis.get("segmentos", [])
+                confrontantes_unicos = sorted(list(set([seg['confrontante'] for seg in segmentos if seg.get('confrontante')])))
+                
+                if confrontantes_unicos:
+                    st.write("Os seguintes confrontantes foram detectados e receberão termos individuais:")
+                    for conf in confrontantes_unicos:
+                        st.markdown(f"* 👤 **{conf}**")
+                else:
+                    st.warning("Nenhum confrontante nominal mapeado de forma explícita nos segmentos ainda.")
+        else:
+            # Mensagem caso o usuário entre na aba sem rodar o memorial primeiro
+            st.markdown("""
+                <div style="background-color: #fef3c7; padding: 1.5rem; border-radius: 8px; border-left: 4px solid #d97706; margin-top: 1rem;">
+                    <h4 style="margin-top:0; color: #92400e;">⚠️ Dados do Memorial não encontrados</h4>
+                    <p style="margin-bottom:0; color: #b45309;">
+                        Para gerar as Cartas de Anuência, você precisa primeiro preencher os dados e clicar em 
+                        <b>"ANALISAR DOCUMENTOS E GERAR MEMORIAL DESCRITIVO"</b> na primeira aba (📝 Memorial Descritivo). 
+                        Assim que o processamento for concluído, os dados espaciais aparecerão aqui automaticamente!
+                    </p>
+                </div>
+            """, unsafe_allow_html=True)
 
 
 if __name__ == "__main__":
