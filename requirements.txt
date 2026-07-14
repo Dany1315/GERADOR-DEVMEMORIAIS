@@ -3,3 +3,7 @@ python-docx
 pypdf
 google-genai
 google-generativeai
+PyMuPDF
+Pillow
+pydantic
+pandas
