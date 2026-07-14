@@ -195,6 +195,28 @@ def main():
                 background-color: #064e3b !important;
                 color: white !important;
             }
+
+            /* ⚙️ ANIMAÇÃO DA ENGRENAGEM EM CSS ⚙️ */
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+            .spinning-gear {
+                display: block;
+                margin: 2rem auto;
+                width: 120px;
+                height: 120px;
+                animation: spin 4s linear infinite;
+                color: #064e3b;
+            }
+            .construction-container {
+                text-align: center;
+                padding: 3rem;
+                border-radius: 12px;
+                background-color: #f8fafc;
+                border: 1px dashed #cbd5e1;
+                margin-top: 2rem;
+            }
         </style>
     """, unsafe_allow_html=True)
 
@@ -206,17 +228,13 @@ def main():
         </div>
     """, unsafe_allow_html=True)
 
-    # Info sobre versão recolhida em aba ou expander limpo
-    with st.expander("ℹ️ Detalhes da Plataforma & Recursos Ativos", expanded=False):
-        st.markdown(f"""
-        **Gleba A Processor** — `Versão {VERSAO_APP}` — *{DESCRICAO_VERSAO}*
-        * **Visão Computacional:** Processamento multimodal via IA (sem dependências locais pesadas).
-        * **Infraestrutura:** Execução direta em nuvem com tolerância a falhas (*exponential backoff*).
-        * **Saída:** Geração automatizada de relatórios técnicos de alta precisão em formato Microsoft Word (`.docx`).
-        """)
+    # ==========================================
+    # CRIAÇÃO DAS ABAS PRINCIPAIS DO SISTEMA (BEM NO TOPO)
+    # ==========================================
+    tab_memorial, tab_anuencias = st.tabs(["📝 Memorial Descritivo", "🤝 Anuências"])
 
     # ==========================================
-    # SIDEBAR COM CONFIGURAÇÕES (REORGANIZADO)
+    # SIDEBAR COM CONFIGURAÇÕES
     # ==========================================
     
     with st.sidebar:
@@ -323,19 +341,23 @@ def main():
             )
 
         st.markdown(
-            "<div style='font-size:0.8rem; color:#a7f3d0; margin-top:1.5rem;'>💡 As definições acima serão replicadas em todos os documentos processados no decorrer desta sessão ativa.</div>",
+            "<div style='font-size:0.8rem; color:#a7f3d0; margin-top:1.5rem;'>💡 As definições acima serão replicadas em todos os documentos processados no decorrer desta sessão activa.</div>",
             unsafe_allow_html=True
         )
 
-    # ==========================================
-    # CRIAÇÃO DAS ABAS PRINCIPAIS DO SISTEMA
-    # ==========================================
-    tab_memorial, tab_anuencias = st.tabs(["📝 Memorial Descritivo", "🤝 Geração de Anuências"])
-
     # ------------------------------------------
-    # ABA 1: MEMORIAL DESCRITIVO (CÓDIGO ORIGINAL INTEGRO)
+    # ABA 1: MEMORIAL DESCRITIVO
     # ------------------------------------------
     with tab_memorial:
+        # Info sobre versão recolhida em aba ou expander limpo
+        with st.expander("ℹ️ Detalhes da Plataforma & Recursos Ativos", expanded=False):
+            st.markdown(f"""
+            **Gleba A Processor** — `Versão {VERSAO_APP}` — *{DESCRICAO_VERSAO}*
+            * **Visão Computacional:** Processamento multimodal via IA (sem dependências locais pesadas).
+            * **Infraestrutura:** Execução direta em nuvem com tolerância a falhas (*exponential backoff*).
+            * **Saída:** Geração automatizada de relatórios técnicos de alta precisão em formato Microsoft Word (`.docx`).
+            """)
+
         st.markdown("### 📥 Entrada de Dados do Memorial")
         
         # Separando o upload de PDF e a colagem manual por abas para limpar a tela
@@ -416,7 +438,7 @@ def main():
                     # Mapear nome amigável para API
                     nome_modelo_api = GEMINI_CONFIG.MODELOS_DISPONIVEIS.get(nome_modelo, "gemini-3.5-flash")
 
-                    # Etapa 2: Converter PDFs em imagens
+                    # Etapa 2: Converter PDFs in imagens
                     st.info("🖼️ **Etapa 2:** Executando renderização de alta definição das páginas...")
                     processador = ProcessadorMemorial(nome_modelo_api)
                     
@@ -576,44 +598,25 @@ def main():
             """, unsafe_allow_html=True)
 
     # ------------------------------------------
-    # ABA 2: ANUÊNCIAS (NOVO MÓDULO ENGATILHADO)
+    # ABA 2: ANUÊNCIAS (EM CONSTRUÇÃO COM ENGRENAGEM)
     # ------------------------------------------
     with tab_anuencias:
-        st.markdown("### 🤝 Módulo de Geração de Cartas de Anuência")
-        st.write("Esta ferramenta utilizará os dados processados no Memorial Descritivo para gerar automaticamente os termos de anuência para os confrontantes.")
-        
-        # Verifica se existem dados processados na Aba 1
-        dados_disponiveis = st.session_state.get("dados_memoriais_processados")
-        
-        if dados_disponiveis:
-            st.success("✅ Dados do Memorial identificados com sucesso! Pronto para estruturar as anuências.")
-            
-            # Caixa informativa sobre o status atual do setup
-            st.info("💡 **Aguardando Modelo:** A interface de anuências já está integrada ao motor. Envie o modelo de documento desejado para ativarmos os geradores automáticos.")
-            
-            # Painel de Visualização Prévio (Apenas para demonstração do engatilhamento)
-            with st.expander("🔍 Visualizar Confrontantes Encontrados para Anuência", expanded=True):
-                segmentos = dados_disponiveis.get("segmentos", [])
-                confrontantes_unicos = sorted(list(set([seg['confrontante'] for seg in segmentos if seg.get('confrontante')])))
-                
-                if confrontantes_unicos:
-                    st.write("Os seguintes confrontantes foram detectados e receberão termos individuais:")
-                    for conf in confrontantes_unicos:
-                        st.markdown(f"* 👤 **{conf}**")
-                else:
-                    st.warning("Nenhum confrontante nominal mapeado de forma explícita nos segmentos ainda.")
-        else:
-            # Mensagem caso o usuário entre na aba sem rodar o memorial primeiro
-            st.markdown("""
-                <div style="background-color: #fef3c7; padding: 1.5rem; border-radius: 8px; border-left: 4px solid #d97706; margin-top: 1rem;">
-                    <h4 style="margin-top:0; color: #92400e;">⚠️ Dados do Memorial não encontrados</h4>
-                    <p style="margin-bottom:0; color: #b45309;">
-                        Para gerar as Cartas de Anuência, você precisa primeiro preencher os dados e clicar em 
-                        <b>"ANALISAR DOCUMENTOS E GERAR MEMORIAL DESCRITIVO"</b> na primeira aba (📝 Memorial Descritivo). 
-                        Assim que o processamento for concluído, os dados espaciais aparecerão aqui automaticamente!
-                    </p>
-                </div>
-            """, unsafe_allow_html=True)
+        # Conteúdo visual da Engrenagem Giratória
+        st.markdown("""
+            <div class="construction-container">
+                <!-- SVG de Engrenagem com animação de giro CSS -->
+                <svg class="spinning-gear" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.5.5 0 0 0 .12-.61l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.5.5 0 0 0-.5-.44H9.28a.5.5 0 0 0-.5.44L8.42 5.8c-.59.24-1.13.57-1.62.94l-2.39-.96a.5.5 0 0 0-.6.22L3.5 9.32a.5.5 0 0 0 .12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.5.5 0 0 0-.12.61l1.92 3.32c.12.22.37.29.6.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.44.5.44h3.84c.25 0 .45-.2.5-.44l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .6-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z" fill="currentColor"/>
+                </svg>
+                <h2 style="color: #064e3b; margin-top: 1rem; font-weight: 700;">Área em Desenvolvimento</h2>
+                <p style="color: #475569; font-size: 1.1rem; max-width: 600px; margin: 0.5rem auto 0 auto;">
+                    O módulo de <b>Anuências</b> já está totalmente integrado à estrutura do portal e pronto para herdar a malha de dados do seu Memorial Descritivo.
+                </p>
+                <p style="color: #64748b; font-size: 0.95rem; margin-top: 1rem;">
+                    ⚙️ <i>Aguardando o envio do modelo de anuência para ativação dos geradores automáticos...</i>
+                </p>
+            </div>
+        """, unsafe_allow_html=True)
 
 
 if __name__ == "__main__":
