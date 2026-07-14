@@ -720,4 +720,4 @@ def main():
                         st.error(f"Erro ao gerar documento para {conf}: {str(e)}")
 
 if __name__ == "__main__":
-    main (:)
+    main ()
