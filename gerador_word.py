@@ -278,3 +278,124 @@ class GeradorMemorialWord:
         )
 
         logger.debug("Seção de assinatura criada")
+
+
+class GeradorAnuenciaWord:
+    """
+    Gera documentos Word formatados com termos de anuência.
+    """
+
+    def __init__(self, dados_empresa: Dict, dados_tecnico: Dict):
+        self.dados_empresa = dados_empresa
+        self.dados_tecnico = dados_tecnico
+
+    def gerar_documento(self, dados_anuencia: Dict[str, Any]) -> io.BytesIO:
+        """
+        Gera termo de anuência.
+        """
+        try:
+            doc = docx.Document()
+            
+            # Margens e estilos
+            margem = Cm(DOCUMENTO_CONFIG.MARGENS_CM)
+            for section in doc.sections:
+                section.top_margin = margem
+                section.bottom_margin = margem
+                section.left_margin = margem
+                section.right_margin = margem
+            
+            style = doc.styles['Normal']
+            style.font.name = DOCUMENTO_CONFIG.FONTE_PADRAO
+            style.font.size = Pt(DOCUMENTO_CONFIG.TAMANHO_FONTE_PADRAO)
+
+            # Título
+            p_titulo = doc.add_paragraph()
+            p_titulo.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            run_tit = p_titulo.add_run("DECLARAÇÃO DE RECONHECIMENTO DE LIMITES")
+            run_tit.bold = True
+            run_tit.font.size = Pt(12)
+
+            # Texto inicial
+            p_texto = doc.add_paragraph()
+            p_texto.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+            p_texto.add_run(f"Eu, ").add_run(f"{dados_anuencia['confrontante']}").bold = True
+            p_texto.add_run(", proprietário do imóvel confrontante, e eu, ")
+            p_texto.add_run(f"{dados_anuencia['proprietario']}").bold = True
+            p_texto.add_run(", proprietário do imóvel rural, declaramos não existir nenhuma disputa ou discordância sobre os limites comuns existentes entre os citados imóveis.")
+
+            p_trecho = doc.add_paragraph()
+            p_trecho.add_run("Descrição do trecho de confrontação:").bold = True
+
+            # Tabela
+            table = doc.add_table(rows=1, cols=7)
+            table.style = 'Table Grid'
+            hdr_cells = table.rows[0].cells
+            hdr_cells[0].text = 'De'
+            hdr_cells[1].text = 'Para'
+            hdr_cells[2].text = 'Azimute'
+            hdr_cells[3].text = 'Distância (m)'
+            hdr_cells[4].text = 'E(X)'
+            hdr_cells[5].text = 'N(Y)'
+            hdr_cells[6].text = 'Altitude'
+
+            distancia_total = 0.0
+            for seg in dados_anuencia['segmentos']:
+                row_cells = table.add_row().cells
+                row_cells[0].text = str(seg['de'])
+                row_cells[1].text = str(seg['para'])
+                row_cells[2].text = str(seg['azimute'])
+                row_cells[3].text = str(seg['distancia']).replace(' m', '').replace(',', '.')
+                row_cells[4].text = str(seg['e_x']).replace(' m', '')
+                row_cells[5].text = str(seg['n_y']).replace(' m', '')
+                row_cells[6].text = '-'
+                
+                try:
+                    d_val = float(row_cells[3].text)
+                    distancia_total += d_val
+                except:
+                    pass
+
+            # Linha de total
+            row_total = table.add_row().cells
+            row_total[0].text = 'TOTAL'
+            row_total[3].text = f"{distancia_total:.2f}".replace('.', ',')
+
+            # Texto final
+            p_final = doc.add_paragraph()
+            p_final.paragraph_format.space_before = Pt(12)
+            p_final.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+            p_final.add_run(f"Declaramos ainda que o profissional {self.dados_tecnico['nome']} (RG n° 1.936.653 e CPF n° 111.985.197-11), Resp. Técnico (CFTA {self.dados_tecnico['cfta']}), credenciado pelo INCRA sob o cod. G1D, nos indicou as demarcações do limite entre as nossas propriedades, tanto no campo como nas suas apresentações gráficas.\n")
+            p_final.add_run("Concordamos com essa demarcação, expressa na planta e no memorial descritivo, ambos em anexo, e reconhecemos esta descrição como o limite legal entre nossas propriedades.")
+
+            # Data
+            p_data = doc.add_paragraph()
+            p_data.paragraph_format.space_before = Pt(12)
+            data_atual = datetime.now()
+            nome_mes = MESES_PT[data_atual.month]
+            p_data.add_run(f"{dados_anuencia['local']}, {data_atual.day} de {nome_mes} de {data_atual.year}")
+
+            # Assinaturas
+            p_ass = doc.add_paragraph()
+            p_ass.paragraph_format.space_before = Pt(24)
+            p_ass.add_run("______________________________\n")
+            p_ass.add_run("______________________________\n")
+            p_ass.add_run(f"{dados_anuencia['confrontante']}\n").bold = True
+            p_ass.add_run(f"{dados_anuencia['proprietario']}\n").bold = True
+            p_ass.add_run("Proprietário do Imóvel Confrontante\n")
+            p_ass.add_run("Proprietário do Imóvel")
+
+            p_ass_tec = doc.add_paragraph()
+            p_ass_tec.paragraph_format.space_before = Pt(12)
+            p_ass_tec.add_run("___________________________________\n")
+            p_ass_tec.add_run(f"{self.dados_tecnico['nome']}\n")
+            p_ass_tec.add_run("Resp. Técnico\n")
+            p_ass_tec.add_run(f"CFTA: {self.dados_tecnico['cfta']} | TRT: BR20260600550")
+
+            conteudo_arquivo = io.BytesIO()
+            doc.save(conteudo_arquivo)
+            conteudo_arquivo.seek(0)
+            return conteudo_arquivo
+
+        except Exception as e:
+            logger.error(f"Erro ao gerar anuência: {str(e)}")
+            raise
