@@ -1,5 +1,5 @@
 # ==========================================
-# ARQUIVO: gerador_anuencia_incra.py (CORRIGIDO)
+# ARQUIVO: gerador_anuencia_incra.py (VERSÃO FINAL PAISAGEM)
 # ==========================================
 import io
 import re
@@ -19,6 +19,7 @@ except ImportError:
 from docx import Document
 from docx.shared import Pt, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.section import WD_ORIENT
 
 logger = logging.getLogger(__name__)
 
@@ -45,20 +46,20 @@ class GeradorAnuenciaIncraWord:
                 "proprietario": "AGOSTINHO IZOTON",
                 "cpf": "215.894.707-10",
                 "imovel": "GLEBA A",
-                "localidade": "Vila Valério - ES"
+                "localidade": "Vila Val rio-ES"
             },
             "confrontantes": [
                 {
-                    "confrontante_imovel": "Sítio Sete Quedas",
+                    "confrontante_imovel": "Sitio Sete Quedas",
                     "confrontante_matricula": "8280",
-                    "confrontante_comarca": "São Gabriel da Palha",
+                    "confrontante_comarca": "o Gabriel da Palha",
                     "confrontante_proprietario": "Elias Moro, Luiz Valentin Moro",
                     "confrontante_cpf": "780.485.677-68",
                     "vertices": [
                         {
                             "codigo": "G1D-P-06815",
-                            "longitude": "-40°17'14,014\"",
-                            "latitude": "-18°59'22,007\"",
+                            "longitude": "40°17'14,014\"",
+                            "latitude": "18°59'22,007\"",
                             "altitude": "58.39",
                             "vante": "G1D-P-06816",
                             "azimute": "02°15'",
@@ -140,343 +141,4 @@ class GeradorAnuenciaIncraWord:
             if texto_resposta.startswith("```json"):
                 texto_resposta = texto_resposta.split("```json")[1].split("```")[0].strip()
             elif texto_resposta.startswith("```"):
-                texto_resposta = texto_resposta.split("```")[1].split("```")[0].strip()
-
-            dados = json.loads(texto_resposta)
-            return dados
-        except Exception as e:
-            logger.error(f"Erro ao obter dados estruturados do Gemini: {str(e)}")
-            return estrutura_padrao
-
-    def _extrair_texto_memorial(self, conteudo_arquivo: bytes, nome_arquivo: str) -> str:
-        texto_memorial = ""
-        if nome_arquivo.lower().endswith(".pdf"):
-            try:
-                pdf_file = io.BytesIO(conteudo_arquivo)
-                if pypdf:
-                    reader = pypdf.PdfReader(pdf_file)
-                    paginas_texto = []
-                    for pagina in reader.pages:
-                        texto_pag = pagina.extract_text()
-                        if texto_pag:
-                            paginas_texto.append(texto_pag)
-                    texto_memorial = "\n".join(paginas_texto)
-                else:
-                    texto_memorial = conteudo_arquivo.decode("utf-8", errors="ignore")
-            except Exception as pdf_err:
-                logger.error(f"Falha ao extrair texto do PDF: {pdf_err}")
-                texto_memorial = "Erro na leitura estruturada do PDF."
-        elif nome_arquivo.lower().endswith(".docx"):
-            try:
-                doc_temp = Document(io.BytesIO(conteudo_arquivo))
-                texto_memorial = "\n".join([p.text for p in doc_temp.paragraphs])
-            except Exception as docx_err:
-                logger.error(f"Não foi possível abrir o arquivo como .docx: {docx_err}")
-                texto_memorial = conteudo_arquivo.decode("utf-8", errors="ignore")
-        else:
-            texto_memorial = conteudo_arquivo.decode("utf-8", errors="ignore")
-
-        texto_memorial = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\xFF]', '', texto_memorial)
-        return texto_memorial
-
-    def gerar_documentos_pelo_memorial(
-        self, conteudo_arquivo: bytes, nome_arquivo: str, dados_projeto: Dict[str, Any] = None
-    ) -> List[Tuple[str, io.BytesIO]]:
-        """
-        Gera um documento Word separado para cada confrontante identificado no memorial,
-        extraindo todas as informações do documento original.
-        """
-        if not conteudo_arquivo:
-            raise ValueError("O conteúdo do arquivo está vazio ou corrompido.")
-
-        texto_memorial = self._extrair_texto_memorial(conteudo_arquivo, nome_arquivo)
-        dados_ia = self._obter_dados_estruturados_com_ia(texto_memorial)
-        
-        confrontantes = dados_ia.get("confrontantes") or self._estrutura_padrao()["confrontantes"]
-        dados_origem = dados_ia.get("imovel_origem") or self._estrutura_padrao()["imovel_origem"]
-
-        documentos: List[Tuple[str, io.BytesIO]] = []
-        for dados_confrontante in confrontantes:
-            nome_confrontante = str(
-                dados_confrontante.get("confrontante_proprietario", "Confrontante")
-            ).strip()
-            # Passa a estrutura extraída da IA contendo a origem correta do proprietário
-            buffer = self._montar_documento_confrontante(dados_confrontante, dados_origem)
-            documentos.append((nome_confrontante, buffer))
-
-        return documentos
-
-    def gerar_documento_pelo_memorial(
-        self, conteudo_arquivo: bytes, nome_arquivo: str, dados_projeto: Dict[str, Any] = None
-    ) -> io.BytesIO:
-        documentos = self.gerar_documentos_pelo_memorial(conteudo_arquivo, nome_arquivo, dados_projeto)
-        return documentos[0][1]
-
-    @staticmethod
-    def gerar_zip_anuencias(documentos: List[Tuple[str, io.BytesIO]], prefixo_arquivo: str = "ANUENCIA_INCRA") -> io.BytesIO:
-        zip_buffer = io.BytesIO()
-        nomes_usados = set()
-        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-            for nome_confrontante, buffer in documentos:
-                nome_base = re.sub(r'[^A-Za-z0-9_\-]+', '_', nome_confrontante.strip().upper()) or "CONFRONTANTE"
-                nome_arquivo = f"{prefixo_arquivo}_{nome_base}.docx"
-                sufixo = 2
-                nome_final = nome_arquivo
-                while nome_final in nomes_usados:
-                    nome_final = f"{prefixo_arquivo}_{nome_base}_{sufixo}.docx"
-                    sufixo += 1
-                nomes_usados.add(nome_final)
-
-                buffer.seek(0)
-                zip_file.writestr(nome_final, buffer.read())
-                buffer.seek(0)
-
-        zip_buffer.seek(0)
-        return zip_buffer
-
-    def _montar_documento_confrontante(
-        self, dados_ia: Dict[str, Any], dados_origem: Dict[str, str]
-    ) -> io.BytesIO:
-        """
-        Gera o documento Word da declaração de anuência do INCRA.
-        """
-        doc = Document()
-
-        # Margens Estreitas
-        for section in doc.sections:
-            section.top_margin = Inches(0.75)
-            section.bottom_margin = Inches(0.75)
-            section.left_margin = Inches(0.75)
-            section.right_margin = Inches(0.75)
-
-        # Estilo de Fonte Padrão
-        style = doc.styles['Normal']
-        font = style.font
-        font.name = 'Arial'
-        font.size = Pt(11)
-
-        # 1. TÍTULO
-        p_titulo = doc.add_paragraph()
-        p_titulo.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p_titulo.paragraph_format.space_before = Pt(0)
-        p_titulo.paragraph_format.space_after = Pt(12)
-        run_titulo = p_titulo.add_run("DECLARAÇÃO DE RESPEITO DE LIMITES")
-        run_titulo.bold = True
-        run_titulo.font.size = Pt(12)
-        run_titulo.font.name = 'Arial'
-
-        # 2. DADOS DO PROPRIETÁRIO EXTRAÍDOS DO PRÓPRIO MEMORIAL PELA IA
-        proprietario_origem = str(dados_origem.get("proprietario", "AGOSTINHO IZOTON")).upper()
-        cpf_origem = str(dados_origem.get("cpf", "___.___.___-__"))
-        localidade_origem = str(dados_origem.get("localidade", "Vila Valério - ES"))
-
-        tecnico_nome = self.dados_tecnico.get("nome", "Régis Campo da Silva")
-        tecnico_cfta = self.dados_tecnico.get("cfta", "1119851971-1")
-        codigo_incra = "G1D"
-
-        p_corpo = doc.add_paragraph()
-        p_corpo.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-        p_corpo.paragraph_format.space_after = Pt(12)
-        p_corpo.paragraph_format.line_spacing = 1.15
-        
-        p_corpo.add_run("Eu, ").font.name = 'Arial'
-        run_corp2 = p_corpo.add_run(f"{proprietario_origem}, CPF {cpf_origem}")
-        run_corp2.bold = True
-        run_corp2.font.name = 'Arial'
-        p_corpo.add_run(f", residente no Jurama, Corrego Sete Quedas, {localidade_origem}, e eu, ").font.name = 'Arial'
-        run_corp4 = p_corpo.add_run(f"{tecnico_nome}")
-        run_corp4.bold = True
-        run_corp4.font.name = 'Arial'
-        p_corpo.add_run(f", Técnico em Agropecuária, CFTA {tecnico_cfta}, credenciado pelo INCRA sob o código ").font.name = 'Arial'
-        run_corp6 = p_corpo.add_run(f"{codigo_incra}")
-        run_corp6.bold = True
-        run_corp6.font.name = 'Arial'
-        p_corpo.add_run(f", declaramos sob as penas da Lei que quando dos trabalhos topográficos executados na citada propriedade ").font.name = 'Arial'
-        run_corp8 = p_corpo.add_run("foram respeitados os limites de \"divisas in loco\"")
-        run_corp8.bold = True
-        run_corp8.font.name = 'Arial'
-        p_corpo.add_run(" com os confrontantes abaixo relacionados, ").font.name = 'Arial'
-        run_corp10 = p_corpo.add_run("não havendo qualquer litígio entre as partes.")
-        run_corp10.bold = True
-        run_corp10.font.name = 'Arial'
-
-        # 3. CABEÇALHO CONFRONTANTES E DATA
-        p_confrontantes_label = doc.add_paragraph()
-        p_confrontantes_label.paragraph_format.space_after = Pt(4)
-        run_conf_label = p_confrontantes_label.add_run(" Confrontantes:")
-        run_conf_label.bold = True
-        run_conf_label.font.name = 'Arial'
-
-        data_atual = datetime.now()
-        meses = [
-            "JANEIRO", "FEVEREIRO", "MARÇO", "ABRIL", "MAIO", "JUNHO",
-            "JULHO", "AGOSTO", "SETEMBRO", "OUTUBRO", "NOVEMBRO", "DEZEMBRO"
-        ]
-        texto_data = f"Vila Valério - ES, {data_atual.day} de {meses[data_atual.month - 1]} de {data_atual.year}."
-
-        p_data = doc.add_paragraph()
-        p_data.paragraph_format.space_after = Pt(8)
-        p_data.alignment = WD_ALIGN_PARAGRAPH.LEFT
-        p_data.add_run(texto_data).font.name = 'Arial'
-
-        # 4. TABELA 1: DADOS DO CONFRONTANTE
-        tabela_conf = doc.add_table(rows=2, cols=4)
-        tabela_conf.style = 'Table Grid'
-        tabela_conf.autofit = False
-
-        larguras_t1 = [Inches(2.2), Inches(1.1), Inches(1.5), Inches(2.7)]
-        headers_t1 = ["Nome Imóvel Rural", "Mat. /Trans.", "Comarca", "Nome do Proprietário"]
-
-        hdr_cells = tabela_conf.rows[0].cells
-        for idx, text in enumerate(headers_t1):
-            hdr_cells[idx].text = text
-            hdr_cells[idx].paragraphs[0].runs[0].font.bold = True
-            hdr_cells[idx].paragraphs[0].runs[0].font.size = Pt(9.5)
-            hdr_cells[idx].paragraphs[0].runs[0].font.name = 'Arial'
-
-        row_cells = tabela_conf.rows[1].cells
-        row_cells[0].text = str(dados_ia.get("confrontante_imovel", ""))
-        row_cells[1].text = str(dados_ia.get("confrontante_matricula", ""))
-        row_cells[2].text = str(dados_ia.get("confrontante_comarca", ""))
-        row_cells[3].text = str(dados_ia.get("confrontante_proprietario", ""))
-        for cell in row_cells:
-            for paragraph in cell.paragraphs:
-                for run in paragraph.runs:
-                    run.font.name = 'Arial'
-                    run.font.size = Pt(9.5)
-
-        for row in tabela_conf.rows:
-            for idx, cell in enumerate(row.cells):
-                cell.width = larguras_t1[idx]
-                p = cell.paragraphs[0]
-                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                p.paragraph_format.space_after = Pt(2)
-                p.paragraph_format.space_before = Pt(2)
-
-        # 5. DIVISOR DESCRIÇÃO DA PARCELA
-        p_desc = doc.add_paragraph()
-        p_desc.paragraph_format.space_before = Pt(12)
-        p_desc.paragraph_format.space_after = Pt(6)
-        p_desc.add_run("DESCRIÇÃO DA PARCELA").bold = True
-
-        # 6. TABELA 2: PARCELA / VÉRTICES / VANTE
-        tabela_vert = doc.add_table(rows=2, cols=8)
-        tabela_vert.style = 'Table Grid'
-        tabela_vert.autofit = False
-
-        hdr_p = tabela_vert.rows[0].cells
-        hdr_p[0].merge(hdr_p[3])
-        hdr_p[0].text = "VÉRTICE"
-        hdr_p[0].paragraphs[0].runs[0].font.bold = True
-        hdr_p[0].paragraphs[0].runs[0].font.size = Pt(9.5)
-
-        hdr_p[4].merge(hdr_p[7])
-        hdr_p[4].text = "SEGMENTO VANTE"
-        hdr_p[4].paragraphs[0].runs[0].font.bold = True
-        hdr_p[4].paragraphs[0].runs[0].font.size = Pt(9.5)
-
-        sub_headers = [
-            "Código", "Longitude", "Latitude", "Altitude (m)",
-            "Código", "Azimute", "Dist. (m)", "Confrontações"
-        ]
-        sub_cells = tabela_vert.rows[1].cells
-        for idx, text in enumerate(sub_headers):
-            sub_cells[idx].text = text
-            sub_cells[idx].paragraphs[0].runs[0].font.bold = True
-            sub_cells[idx].paragraphs[0].runs[0].font.size = Pt(9)
-
-        larguras_t2 = [
-            Inches(1.0), Inches(1.1), Inches(1.1), Inches(0.8),
-            Inches(1.0), Inches(0.7), Inches(0.7), Inches(1.6)
-        ]
-
-        vertices_dados = dados_ia.get("vertices", [])
-        for v in vertices_dados:
-            row = tabela_vert.add_row()
-            cells = row.cells
-            cells[0].text = str(v.get("codigo", ""))
-            cells[1].text = str(v.get("longitude", ""))
-            cells[2].text = str(v.get("latitude", ""))
-            cells[3].text = str(v.get("altitude", ""))
-            cells[4].text = str(v.get("vante", ""))
-            cells[5].text = str(v.get("azimute", ""))
-            cells[6].text = str(v.get("distancia", ""))
-            cells[7].text = str(v.get("confrontacao_completa", ""))
-
-        # Formatação das larguras e fontes da tabela 2
-        for r_idx, row in enumerate(tabela_vert.rows):
-            for c_idx, cell in enumerate(row.cells):
-                cell.width = larguras_t2[c_idx]
-                p = cell.paragraphs[0]
-                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                p.paragraph_format.space_before = Pt(2)
-                p.paragraph_format.space_after = Pt(2)
-                if len(p.runs) > 0:
-                    p.runs[0].font.size = Pt(8.5)
-                    p.runs[0].font.name = 'Arial'
-
-        # Espaço antes das Assinaturas
-        doc.add_paragraph().paragraph_format.space_before = Pt(36)
-
-        # 7. TABELA DE ASSINATURAS HORIZONTAIS
-        tabela_assinaturas = doc.add_table(rows=2, cols=2)
-        tabela_assinaturas.autofit = False
-        tabela_assinaturas.columns[0].width = Inches(3.7)
-        tabela_assinaturas.columns[1].width = Inches(3.7)
-
-        cells_as = tabela_assinaturas.rows[0].cells
-        cells_as[0].text = "              _______________________________________________"
-        cells_as[1].text = "_______________________________________________"
-
-        cells_nomes = tabela_assinaturas.rows[1].cells
-
-        p_origem = cells_nomes[0].paragraphs[0]
-        p_origem.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run_o1 = p_origem.add_run(f"\n{proprietario_origem}\n")
-        run_o1.bold = True
-        p_origem.add_run(f"CPF: {cpf_origem}")
-
-        p_confrontante = cells_nomes[1].paragraphs[0]
-        p_confrontante.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        nome_vizinho = str(dados_ia.get("confrontante_proprietario", "")).upper()
-        cpf_vizinho = str(dados_ia.get("confrontante_cpf", "___.___.___-__"))
-        run_v1 = p_confrontante.add_run(f"\n{nome_vizinho}\n")
-        run_v1.bold = True
-        p_confrontante.add_run(f"CPF: {cpf_vizinho}")
-
-        for row in tabela_assinaturas.rows:
-            for cell in row.cells:
-                for p in cell.paragraphs:
-                    for run in p.runs:
-                        run.font.size = Pt(9.5)
-                        run.font.name = 'Arial'
-
-        # 8. ASSINATURA DO RESPONSÁVEL TÉCNICO
-        doc.add_paragraph().paragraph_format.space_before = Pt(28)
-        p_linha_rt = doc.add_paragraph()
-        p_linha_rt.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p_linha_rt.add_run("_____________________________________")
-
-        p_info_rt = doc.add_paragraph()
-        p_info_rt.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run_rt1 = p_info_rt.add_run(f"{tecnico_nome}\n")
-        run_rt1.bold = True
-        p_info_rt.add_run(f"CFTA {tecnico_cfta}")
-
-        for run in p_info_rt.runs:
-            run.font.size = Pt(9.5)
-            run.font.name = 'Arial'
-
-        # 9. ANEXOS
-        doc.add_paragraph().paragraph_format.space_before = Pt(24)
-        p_anexos = doc.add_paragraph()
-        p_anexos.add_run("Anexos: ").bold = True
-        p_anexos.add_run("Planta do Imóvel \t\t Memorial Descritivo do Imóvel")
-        for run in p_anexos.runs:
-            run.font.size = Pt(9)
-            run.font.name = 'Arial'
-
-        buffer = io.BytesIO()
-        doc.save(buffer)
-        buffer.seek(0)
-        return buffer
+                texto_resposta = texto_resposta.split("
