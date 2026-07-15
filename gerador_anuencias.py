@@ -13,8 +13,8 @@ import google.generativeai as genai
 from docx import Document
 from docx.shared import Pt, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.oxml import parse_xml, OxmlElement
-from docx.oxml.ns import nsdecls, qn
+from docx.oxml import parse_xml
+from docx.oxml.ns import nsdecls
 
 logger = logging.getLogger(__name__)
 
@@ -26,56 +26,39 @@ class GeradorAnuenciaWord:
         self.dados_empresa = dados_empresa
         self.dados_tecnico = dados_tecnico
         
-        # Configuração da API do Gemini obtida de forma segura a partir dos Secrets do Streamlit
+        # Configuração da API do Gemini (Mantido por compatibilidade de estrutura)
         self.api_key = st.secrets.get("GEMINI_API_KEY")
         if self.api_key:
             genai.configure(api_key=self.api_key)
-        else:
-            logger.warning("Chave 'GEMINI_API_KEY' não encontrada nos st.secrets.")
 
-    def consultar_gemini_para_trecho(self, confrontante: str, proprietario: str, segmentos: List[Dict[str, Any]]) -> str:
+    def _limpar_e_converter_numerico(self, valor: Any) -> float:
         """
-        Envia os dados georreferenciados do trecho para a API do Gemini 
-        para redigir a descrição técnica textual fluida.
-        """
-        if not self.api_key:
-            return "De comum acordo, as partes reconhecem o limite estabelecido pelos vértices informados."
-
-        try:
-            # Transforma os segmentos em linhas legíveis para a IA
-            linhas_texto = []
-            for s in segmentos:
-                linhas_texto.append(f"De {s['de']} para {s['para']} com azimute {s['azimute']} e distância {s['distancia']}")
-            roteiro_trecho = "; ".join(linhas_texto)
-
-            prompt = f"""
-            Você é um engenheiro agrimensor especialista em retificação de registro imobiliário e topografia jurídica.
-            Redija um parágrafo técnico formal, fluido e descritivo (em português) para ser inserido em uma DECLARAÇÃO DE RECONHECIMENTO DE LIMITES.
-            O imóvel principal pertence a {proprietario} e o trecho analisado confronta com {confrontante}.
-            Dados das linhas do trecho: {roteiro_trecho}.
-            
-            Retorne APENAS o parágrafo corrido, sem saudações, sem marcações em negrito e sem introduções textuais.
-            """
-            
-            model = genai.GenerativeModel('gemini-2.5-flash')
-            resposta = model.generate_content(prompt)
-            return resposta.text.strip()
-            
-        except Exception as e:
-            logger.error(f"Erro ao chamar a API do Gemini para Anuência: {str(e)}")
-            return f"O limite perimétrico com {confrontante} acompanha as amarrações técnicas e coordenadas descritas na tabela."
-
-    def _limpar_e_converter_distancia(self, valor_distancia: Any) -> float:
-        """
-        Remove letras (como 'm'), espaços e caracteres extras, convertendo a distância com segurança.
+        Limpa caracteres indesejados mantendo apenas números, pontos e vírgulas,
+        garantindo a conversão para float sem erros de compilação.
         """
         try:
-            string_limpa = str(valor_distancia).strip()
+            string_limpa = str(valor).strip()
             string_limpa = re.sub(r"[^\d,.]", "", string_limpa)
-            string_limpa = string_limpa.replace(",", ".")
-            return float(string_limpa) if string_limpa else 0.0
+            if not string_limpa:
+                return 0.0
+            
+            # Se possui os dois separadores (ex: 7,884,471.06), remove as vírgulas de milhar
+            if "," in string_limpa and "." in string_limpa:
+                string_limpa = string_limpa.replace(",", "")
+            # Caso tenha vindo apenas com vírgula como decimal (ex: 15,68)
+            elif "," in string_limpa and "." not in string_limpa:
+                string_limpa = string_limpa.replace(",", ".")
+                
+            return float(string_limpa)
         except Exception:
             return 0.0
+
+    def _formatar_para_padrao_modelo(self, valor_numerico: float) -> str:
+        """
+        Formata o número usando ponto para decimais e vírgula para milhar (Ex: 7,884,471.06).
+        """
+        # Formata com vírgulas como separador de milhar americano (1,234,567.89)
+        return f"{valor_numerico:,.2f}"
 
     def gerar_documento(self, dados_anuencia: Dict[str, Any]) -> io.BytesIO:
         """
@@ -100,16 +83,16 @@ class GeradorAnuenciaWord:
         style.font.name = 'Calibri'
         style.font.size = Pt(11)
 
-        # 1. TÍTULO: Negrito, Centralizado e em Letras Maiúsculas 
+        # 1. TÍTULO: Negrito, Centralizado e em Letras Maiúsculas
         p_titulo = doc.add_paragraph()
         p_titulo.alignment = WD_ALIGN_PARAGRAPH.CENTER
         p_titulo.paragraph_format.space_before = Pt(0)
         p_titulo.paragraph_format.space_after = Pt(18)
         run_titulo = p_titulo.add_run("DECLARAÇÃO DE RECONHECIMENTO DE LIMITES")
         run_titulo.bold = True
-        run_titulo.font.size = Pt(12) # Tamanho padrão do modelo físico
+        run_titulo.font.size = Pt(11)
 
-        # 2. TEXTO DE ABERTURA: Alinhamento Justificado [cite: 26, 38]
+        # 2. TEXTO DE ABERTURA: Alinhamento Justificado
         texto_abertura = (
             f"Eu, {confrontante.title()}, proprietário do imóvel confrontante, e eu, "
             f"{proprietario.title()}, proprietário do imóvel urbano, declaramos não "
@@ -120,19 +103,13 @@ class GeradorAnuenciaWord:
         p_abertura.paragraph_format.line_spacing = 1.15
         p_abertura.paragraph_format.space_after = Pt(12)
 
-        # 3. DESCRIÇÃO DO TRECHO (Via Inteligência Artificial) [cite: 27, 39]
+        # 3. DESCRIÇÃO DO TRECHO (Vai direto do Título para a Tabela, sem parágrafo de IA)
         p_desc_tit = doc.add_paragraph()
         p_desc_tit.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
         p_desc_tit.paragraph_format.space_after = Pt(6)
         p_desc_tit.add_run("Descrição do trecho de confrontação:").bold = True
-        
-        texto_ia = self.consultar_gemini_para_trecho(confrontante, proprietario, segmentos)
-        p_desc_corpo = doc.add_paragraph(texto_ia)
-        p_desc_corpo.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-        p_desc_corpo.paragraph_format.line_spacing = 1.15
-        p_desc_corpo.paragraph_format.space_after = Pt(12)
 
-        # 4. TABELA TÉCNICA: Mantém linhas de grade visíveis ('Table Grid') 
+        # 4. TABELA TÉCNICA: Mantém linhas de grade visíveis ('Table Grid') e padrão americano
         tabela = doc.add_table(rows=1, cols=7)
         tabela.style = 'Table Grid'
         tabela.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -154,12 +131,17 @@ class GeradorAnuenciaWord:
             row_cells[1].text = str(s['para'])
             row_cells[2].text = str(s['azimute'])
             
-            dist_val = self._limpar_e_converter_distancia(s['distancia'])
+            # Tratamento da distância e acumulação
+            dist_val = self._limpar_e_converter_numerico(s['distancia'])
             total_distancia += dist_val
-            row_cells[3].text = f"{dist_val:.2f}".replace('.', ',')
+            row_cells[3].text = self._formatar_para_padrao_modelo(dist_val)
             
-            row_cells[4].text = str(s.get('e_x', '0,00'))
-            row_cells[5].text = str(s.get('n_y', '0,00'))
+            # Formatação de Coordenadas sem sufixos de texto (ex: "m")
+            val_ex = self._limpar_e_converter_numerico(s.get('e_x', '0.00'))
+            val_ny = self._limpar_e_converter_numerico(s.get('n_y', '0.00'))
+            
+            row_cells[4].text = self._formatar_para_padrao_modelo(val_ex)
+            row_cells[5].text = self._formatar_para_padrao_modelo(val_ny)
             row_cells[6].text = "0,00"
             
             # Centralizar células de dados da tabela
@@ -169,19 +151,19 @@ class GeradorAnuenciaWord:
                 if p.runs:
                     p.runs[0].font.size = Pt(9.5)
 
-        # Linha de Totais da Tabela 
+        # Linha de Totais da Tabela (Sem espaços e alinhada)
         row_totais = tabela.add_row().cells
         row_totais[0].text = "Total"
         row_totais[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
         row_totais[0].paragraphs[0].runs[0].font.bold = True
         row_totais[0].paragraphs[0].runs[0].font.size = Pt(9.5)
 
-        row_totais[3].text = f"{total_distancia:.2f}".replace('.', ',')
+        row_totais[3].text = self._formatar_para_padrao_modelo(total_distancia)
         row_totais[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
         row_totais[3].paragraphs[0].runs[0].font.bold = True
         row_totais[3].paragraphs[0].runs[0].font.size = Pt(9.5)
         
-        # Garante células vazias centralizadas e limpas
+        # Células vazias limpas
         for idx in [1, 2, 4, 5, 6]:
             row_totais[idx].text = ""
             row_totais[idx].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -190,9 +172,8 @@ class GeradorAnuenciaWord:
         p_espaco = doc.add_paragraph("")
         p_espaco.paragraph_format.space_before = Pt(6)
 
-        # 5. PARÁGRAFO DE RESPONSABILIDADE TÉCNICA: Justificado [cite: 29, 30, 41, 42]
-        # Inserido o campo de RG e a estrutura correta extraída do modelo original
-        rg_rt = self.dados_tecnico.get('rg', '1.936.653') # Padrão extraído do modelo físico
+        # 5. PARÁGRAFO DE RESPONSABILIDADE TÉCNICA: Justificado e com colagem sem espaçamento pós-ponto
+        rg_rt = self.dados_tecnico.get('rg', '1.936.653')
         codigo_incra = self.dados_tecnico.get('codigo_incra', 'G1D')
         
         texto_tecnico = (
@@ -200,7 +181,7 @@ class GeradorAnuenciaWord:
             f"(RG nº {rg_rt} e CPF nº {self.dados_tecnico.get('cpf', '111.985.197-11')}), Resp. "
             f"Técnico (CFTA {self.dados_tecnico.get('cfta')}), credenciado pelo INCRA sob o cod. {codigo_incra}, com a emissão da TRT nº "
             f"{self.dados_tecnico.get('trt')}, nos indicou as demarcações do limite entre as nossas propriedades, tanto no campo como "
-            f"nas suas apresentações gráficas. Concordamos com essa demarcação, expressa na planta e no memorial descritivo, "
+            f"nas suas apresentações gráficas.Concordamos com essa demarcação, expressa na planta e no memorial descritivo, "
             f"ambos em anexo, e reconhecemos esta descrição como o limite legal entre nossas propriedades."
         )
         p_tecnico = doc.add_paragraph(texto_tecnico)
@@ -208,13 +189,12 @@ class GeradorAnuenciaWord:
         p_tecnico.paragraph_format.line_spacing = 1.15
         p_tecnico.paragraph_format.space_after = Pt(20)
 
-        # 6. ENCERRAMENTO COM DATA [cite: 31, 43]
-        # Ajusta para a cidade correta
+        # 6. ENCERRAMENTO COM DATA
         data_atual = datetime.now().strftime('%d de %m de %Y')
-        p_data = doc.add_paragraph(f"{local}, {data_atual}.")
+        p_data = doc.add_paragraph(f"{local}, {data_atual}")
         p_data.paragraph_format.space_after = Pt(28)
 
-        # 7. CAMPOS DE ASSINATURA LADO A LADO: Tabela Invisível de 2 colunas 
+        # 7. CAMPOS DE ASSINATURA LADO A LADO: Tabela Invisível de 2 colunas
         tab_assinatura = doc.add_table(rows=2, cols=2)
         tab_assinatura.alignment = WD_ALIGN_PARAGRAPH.CENTER
         
@@ -232,41 +212,80 @@ class GeradorAnuenciaWord:
         )
         tblPr.append(tblBorders)
 
+        # Linhas de assinatura
         celulas_l1 = tab_assinatura.rows[0].cells
         celulas_l1[0].text = "__________________________________________________"
         celulas_l1[1].text = "__________________________________________________"
         celulas_l1[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
         celulas_l1[1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
         
+        # Nomes e cargos em parágrafos separados (evita fusão de linhas)
         celulas_l2 = tab_assinatura.rows[1].cells
-        celulas_l2[0].text = f"{confrontante.title()}\nProprietário do Imóvel Confrontante"
-        celulas_l2[1].text = f"{proprietario.title()}\nProprietário do Imóvel"
         
-        for cell in celulas_l2:
-            p = cell.paragraphs[0]
-            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            p.paragraph_format.space_before = Pt(4)
-            if p.runs:
-                p.runs[0].font.size = Pt(10)
-
-        # Espaçamento para a assinatura do RT
-        p_espaco_final = doc.add_paragraph("\n")
-
-        # 8. ASSINATURA DO RESPONSÁVEL TÉCNICO: Centralizada abaixo das duas 
-        p_ass_tec = doc.add_paragraph()
-        p_ass_tec.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p_ass_tec.paragraph_format.space_before = Pt(18)
+        # Coluna 1: Confrontante
+        c1 = celulas_l2[0]
+        c1.text = "" # Limpa inicialização
+        p1_c1 = c1.paragraphs[0]
+        p1_c1.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p1_c1.paragraph_format.space_before = Pt(4)
+        run_name_c1 = p1_c1.add_run(confrontante.title())
+        run_name_c1.font.size = Pt(10)
         
-        run_linha = p_ass_tec.add_run("______________________________\n")
+        p2_c1 = c1.add_paragraph()
+        p2_c1.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p2_c1.paragraph_format.space_before = Pt(1)
+        run_role_c1 = p2_c1.add_run("Proprietário do Imóvel Confrontante")
+        run_role_c1.font.size = Pt(10)
+
+        # Coluna 2: Proprietário
+        c2 = celulas_l2[1]
+        c2.text = "" # Limpa inicialização
+        p1_c2 = c2.paragraphs[0]
+        p1_c2.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p1_c2.paragraph_format.space_before = Pt(4)
+        run_name_c2 = p1_c2.add_run(proprietario.title())
+        run_name_c2.font.size = Pt(10)
+        
+        p2_c2 = c2.add_paragraph()
+        p2_c2.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p2_c2.paragraph_format.space_before = Pt(1)
+        run_role_c2 = p2_c2.add_run("Proprietário do Imóvel")
+        run_role_c2.font.size = Pt(10)
+
+        # Espaçamento para o RT
+        p_espaco_final = doc.add_paragraph("")
+        p_espaco_final.paragraph_format.space_before = Pt(16)
+
+        # 8. ASSINATURA DO RESPONSÁVEL TÉCNICO: Centralizado e estruturado em 4 parágrafos separados
+        p_rt_l1 = doc.add_paragraph()
+        p_rt_l1.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_rt_l1.paragraph_format.space_before = Pt(12)
+        p_rt_l1.paragraph_format.space_after = Pt(0)
+        run_linha = p_rt_l1.add_run("______________________________")
         run_linha.bold = True
         
-        run_nome_tec = p_ass_tec.add_run(f"{self.dados_tecnico.get('nome')}\n")
+        p_rt_l2 = doc.add_paragraph()
+        p_rt_l2.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_rt_l2.paragraph_format.space_before = Pt(4)
+        p_rt_l2.paragraph_format.space_after = Pt(0)
+        run_nome_tec = p_rt_l2.add_run(f"{self.dados_tecnico.get('nome')}")
         run_nome_tec.bold = True
         
-        run_cargo = p_ass_tec.add_run(f"Resp. Técnico\nCFTA: {self.dados_tecnico.get('cfta')}")
+        p_rt_l3 = doc.add_paragraph()
+        p_rt_l3.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_rt_l3.paragraph_format.space_before = Pt(1)
+        p_rt_l3.paragraph_format.space_after = Pt(0)
+        run_cargo = p_rt_l3.add_run("Resp. Técnico")
         run_cargo.font.size = Pt(10)
+        
+        p_rt_l4 = doc.add_paragraph()
+        p_rt_l4.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_rt_l4.paragraph_format.space_before = Pt(1)
+        p_rt_l4.paragraph_format.space_after = Pt(0)
+        run_cfta = p_rt_l4.add_run(f"CFTA: {self.dados_tecnico.get('cfta')}")
+        run_cfta.font.size = Pt(10)
 
-        # Salva o arquivo final em memória para disponibilizar no Streamlit
+        # Salva o arquivo final para download
         buffer = io.BytesIO()
         doc.save(buffer)
         buffer.seek(0)
