@@ -83,6 +83,10 @@ class GeradorAnuenciaWord:
         style.font.name = 'Calibri'
         style.font.size = Pt(11)
 
+        # Configuração da Cor Verde Claro para os nomes principais do topo
+        cor_verde_claro = RGBColor(34, 139, 34) # Verde Floresta Claro/Médio bem profissional
+        cor_preta = RGBColor(0, 0, 0) # Preto puro para as informações de contato
+
         # =========================================================================
         # CABEÇALHO CORPORATIVO (Topo da Folha, Centralizado)
         # =========================================================================
@@ -93,6 +97,7 @@ class GeradorAnuenciaWord:
         run_h1 = p_head1.add_run("TopoGeo")
         run_h1.bold = True
         run_h1.font.size = Pt(12)
+        run_h1.font.color.rgb = cor_verde_claro # Aplicado verde claro
         
         p_head2 = doc.add_paragraph()
         p_head2.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -101,6 +106,7 @@ class GeradorAnuenciaWord:
         run_h2 = p_head2.add_run("Topografia   Consultoria LTDA")
         run_h2.bold = True
         run_h2.font.size = Pt(10)
+        run_h2.font.color.rgb = cor_verde_claro # Aplicado verde claro
         
         p_head3 = doc.add_paragraph()
         p_head3.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -108,15 +114,15 @@ class GeradorAnuenciaWord:
         p_head3.paragraph_format.space_after = Pt(1)
         run_h3 = p_head3.add_run("Rua Natalino Cossi, No 114, sala 2 - Vila Valério, CEP 29785-000 Fone 27 99837-1164")
         run_h3.font.size = Pt(9)
-        run_h3.font.color.rgb = RGBColor(100, 100, 100) # Cor cinza elegante
+        run_h3.font.color.rgb = cor_preta # Aplicado preto puro
         
         p_head4 = doc.add_paragraph()
         p_head4.alignment = WD_ALIGN_PARAGRAPH.CENTER
         p_head4.paragraph_format.space_before = Pt(0)
-        p_head4.paragraph_format.space_after = Pt(24) # Espaçamento maior antes do título
+        p_head4.paragraph_format.space_after = Pt(24) # Espaçamento maior antes de iniciar o título
         run_h4 = p_head4.add_run("topogeo2014@gmail.com")
         run_h4.font.size = Pt(9)
-        run_h4.font.color.rgb = RGBColor(100, 100, 100)
+        run_h4.font.color.rgb = cor_preta # Aplicado preto puro
 
         # 1. TÍTULO: Negrito, Centralizado e em Letras Maiúsculas
         p_titulo = doc.add_paragraph()
@@ -247,82 +253,8 @@ class GeradorAnuenciaWord:
         )
         tblPr.append(tblBorders)
 
-        # Linhas de assinatura (Underlines encurtados de 50 para 38 caracteres)
+        # Linhas de assinatura (Underlines encurtados para uma estética limpa)
         celulas_l1 = tab_assinatura.rows[0].cells
         celulas_l1[0].text = "______________________________________"
         celulas_l1[1].text = "______________________________________"
-        celulas_l1[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-        celulas_l1[1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-        
-        # Nomes e cargos em parágrafos separados (evita fusão de linhas)
-        celulas_l2 = tab_assinatura.rows[1].cells
-        
-        # Coluna 1: Confrontante
-        c1 = celulas_l2[0]
-        c1.text = "" # Limpa inicialização
-        p1_c1 = c1.paragraphs[0]
-        p1_c1.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p1_c1.paragraph_format.space_before = Pt(4)
-        run_name_c1 = p1_c1.add_run(confrontante.title())
-        run_name_c1.font.size = Pt(10)
-        
-        p2_c1 = c1.add_paragraph()
-        p2_c1.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p2_c1.paragraph_format.space_before = Pt(1)
-        run_role_c1 = p2_c1.add_run("Proprietário do Imóvel Confrontante")
-        run_role_c1.font.size = Pt(10)
-
-        # Coluna 2: Proprietário
-        c2 = celulas_l2[1]
-        c2.text = "" # Limpa inicialização
-        p1_c2 = c2.paragraphs[0]
-        p1_c2.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p1_c2.paragraph_format.space_before = Pt(4)
-        run_name_c2 = p1_c2.add_run(proprietario.title())
-        run_name_c2.font.size = Pt(10)
-        
-        p2_c2 = c2.add_paragraph()
-        p2_c2.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p2_c2.paragraph_format.space_before = Pt(1)
-        run_role_c2 = p2_c2.add_run("Proprietário do Imóvel")
-        run_role_c2.font.size = Pt(10)
-
-        # Espaçamento para o RT
-        p_espaco_final = doc.add_paragraph("")
-        p_espaco_final.paragraph_format.space_before = Pt(16)
-
-        # 8. ASSINATURA DO RESPONSÁVEL TÉCNICO: Centralizado e estruturado em 4 parágrafos separados
-        # Linha de assinatura do RT (Underlines encurtados de 30 para 24 caracteres)
-        p_rt_l1 = doc.add_paragraph()
-        p_rt_l1.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p_rt_l1.paragraph_format.space_before = Pt(12)
-        p_rt_l1.paragraph_format.space_after = Pt(0)
-        run_linha = p_rt_l1.add_run("________________________")
-        run_linha.bold = True
-        
-        p_rt_l2 = doc.add_paragraph()
-        p_rt_l2.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p_rt_l2.paragraph_format.space_before = Pt(4)
-        p_rt_l2.paragraph_format.space_after = Pt(0)
-        run_nome_tec = p_rt_l2.add_run(f"{self.dados_tecnico.get('nome')}")
-        run_nome_tec.bold = True
-        
-        p_rt_l3 = doc.add_paragraph()
-        p_rt_l3.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p_rt_l3.paragraph_format.space_before = Pt(1)
-        p_rt_l3.paragraph_format.space_after = Pt(0)
-        run_cargo = p_rt_l3.add_run("Resp. Técnico")
-        run_cargo.font.size = Pt(10)
-        
-        p_rt_l4 = doc.add_paragraph()
-        p_rt_l4.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p_rt_l4.paragraph_format.space_before = Pt(1)
-        p_rt_l4.paragraph_format.space_after = Pt(0)
-        run_cfta = p_rt_l4.add_run(f"CFTA: {self.dados_tecnico.get('cfta')}")
-        run_cfta.font.size = Pt(10)
-
-        # Salva o arquivo final para download
-        buffer = io.BytesIO()
-        doc.save(buffer)
-        buffer.seek(0)
-        return buffer
+        celulas_l1[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAP
