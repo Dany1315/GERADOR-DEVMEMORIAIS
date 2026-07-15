@@ -247,7 +247,7 @@ class GeradorAnuenciaIncraWord:
         # Estilo de Fonte Padrão (Times New Roman, 11pt)
         style = doc.styles['Normal']
         font = style.font
-        font.name = 'Times New Roman'
+        font.name = 'Arial'
         font.size = Pt(11)
 
         # 1. TÍTULO (DECLARAÇÃO DE RESPEITO DE LIMITES)
@@ -258,35 +258,54 @@ class GeradorAnuenciaIncraWord:
         run_titulo = p_titulo.add_run("DECLARAÇÃO DE RESPEITO DE LIMITES")
         run_titulo.bold = True
         run_titulo.font.size = Pt(12)
+        run_titulo.font.name = 'Arial'
 
         # 2. TEXTO DA DECLARAÇÃO (Idêntico ao modelo)
         proprietario_origem = dados_projeto.get("proprietario", "AGOSTINHO IZOTON").upper()
         cpf_origem = dados_projeto.get("cpf_proprietario", "215.894.707-10")
-        localidade_origem = dados_projeto.get("local", "Vila Valério - ES")
+        localidade_origem = dados_projeto.get("local", "Vila Valério-ES")
 
         tecnico_nome = self.dados_tecnico.get("nome", "Régis Campo da Silva")
         tecnico_cfta = self.dados_tecnico.get("cfta", "1119851971-1")
         codigo_incra = "G1D"
 
-        texto_abertura = (
-            f"Eu, {proprietario_origem}, CPF {cpf_origem}, residente no Jurama, Córrego Sete Quedas, {localidade_origem}, "
-            f"e eu, {tecnico_nome}, Técnico em Agropecuária, CFTA {tecnico_cfta}, credenciado pelo INCRA sob o código {codigo_incra}, "
-            f"declaramos sob as penas da Lei que quando dos trabalhos topográficos executados na citada propriedade "
-            f"foram respeitados os limites de \"divisas in loco\" com os confrontantes abaixo relacionados, "
-            f"não havendo qualquer litígio entre as partes."
-        )
-
         p_corpo = doc.add_paragraph()
         p_corpo.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
         p_corpo.paragraph_format.space_after = Pt(12)
         p_corpo.paragraph_format.line_spacing = 1.15
-        p_corpo.add_run(texto_abertura)
+        
+        run_corpo1 = p_corpo.add_run("Eu, ")
+        run_corpo1.font.name = 'Arial'
+        run_corpo2 = p_corpo.add_run(f"{proprietario_origem}, CPF {cpf_origem}")
+        run_corpo2.bold = True
+        run_corpo2.font.name = 'Arial'
+        run_corpo3 = p_corpo.add_run(f", residente no Jurama, Corrego Sete Quedas, {localidade_origem}, e eu, ")
+        run_corpo3.font.name = 'Arial'
+        run_corpo4 = p_corpo.add_run(f"{tecnico_nome}")
+        run_corpo4.bold = True
+        run_corpo4.font.name = 'Arial'
+        run_corpo5 = p_corpo.add_run(f", Técnico em Agropecuária, CFTA {tecnico_cfta}, credenciado pelo INCRA sob o código ")
+        run_corpo5.font.name = 'Arial'
+        run_corpo6 = p_corpo.add_run(f"{codigo_incra}")
+        run_corpo6.bold = True
+        run_corpo6.font.name = 'Arial'
+        run_corpo7 = p_corpo.add_run(f", declaramos sob as penas da Lei que quando dos trabalhos topográficos executados na citada propriedade ")
+        run_corpo7.font.name = 'Arial'
+        run_corpo8 = p_corpo.add_run("foram respeitados os limites de \"divisas in loco\"")
+        run_corpo8.bold = True
+        run_corpo8.font.name = 'Arial'
+        run_corpo9 = p_corpo.add_run(" com os confrontantes abaixo relacionados, ")
+        run_corpo9.font.name = 'Arial'
+        run_corpo10 = p_corpo.add_run("não havendo qualquer litígio entre as partes.")
+        run_corpo10.bold = True
+        run_corpo10.font.name = 'Arial'
 
         # 3. CABEÇALHO CONFRONTANTES E DATA (Idêntico ao modelo)
         p_confrontantes_label = doc.add_paragraph()
         p_confrontantes_label.paragraph_format.space_after = Pt(4)
         run_conf_label = p_confrontantes_label.add_run(" Confrontantes:")
         run_conf_label.bold = True
+        run_conf_label.font.name = 'Arial'
 
         data_atual = datetime.now()
         meses = [
@@ -297,12 +316,13 @@ class GeradorAnuenciaIncraWord:
 
         p_data = doc.add_paragraph()
         p_data.paragraph_format.space_after = Pt(8)
-        p_data.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        p_data.alignment = WD_ALIGN_PARAGRAPH.LEFT
         run_data = p_data.add_run(texto_data)
-        run_data.bold = True
+        run_data.font.name = 'Arial'
 
         # 4. TABELA 1: DADOS DO CONFRONTANTE (Idêntico ao modelo)
         tabela_conf = doc.add_table(rows=2, cols=4)
+        tabela_conf.style = 'Table Grid'
         tabela_conf.autofit = False
 
         larguras_t1 = [Inches(2.2), Inches(1.1), Inches(1.5), Inches(2.7)]
@@ -313,14 +333,18 @@ class GeradorAnuenciaIncraWord:
             hdr_cells[idx].text = text
             hdr_cells[idx].paragraphs[0].runs[0].font.bold = True
             hdr_cells[idx].paragraphs[0].runs[0].font.size = Pt(9.5)
-            shading_xml = f'<w:shd {nsdecls("w")} w:fill="F2F2F2"/>'
-            hdr_cells[idx]._tc.get_or_add_tcPr().append(parse_xml(shading_xml))
+            hdr_cells[idx].paragraphs[0].runs[0].font.name = 'Arial'
 
         row_cells = tabela_conf.rows[1].cells
         row_cells[0].text = str(dados_ia.get("confrontante_imovel", ""))
         row_cells[1].text = str(dados_ia.get("confrontante_matricula", ""))
         row_cells[2].text = str(dados_ia.get("confrontante_comarca", ""))
         row_cells[3].text = str(dados_ia.get("confrontante_proprietario", ""))
+        for cell in row_cells:
+            for paragraph in cell.paragraphs:
+                for run in paragraph.runs:
+                    run.font.name = 'Arial'
+                    run.font.size = Pt(9.5)
 
         for row in tabela_conf.rows:
             for idx, cell in enumerate(row.cells):
@@ -340,8 +364,9 @@ class GeradorAnuenciaIncraWord:
         run_desc.bold = True
 
         # 6. TABELA 2: PARCELA / VÉRTICES / VANTE (Idêntico ao modelo)
-        tabela_parcela = doc.add_table(rows=3, cols=8)
-        tabela_parcela.autofit = False
+        tabela_vert = doc.add_table(rows=1, cols=8)
+        tabela_vert.style = 'Table Grid'
+        tabela_vert.autofit = False
 
         hdr_p = tabela_parcela.rows[0].cells
         hdr_p[0].merge(hdr_p[3])
@@ -363,8 +388,7 @@ class GeradorAnuenciaIncraWord:
             sub_cells[idx].text = text
             sub_cells[idx].paragraphs[0].runs[0].font.bold = True
             sub_cells[idx].paragraphs[0].runs[0].font.size = Pt(9)
-            shading_xml = f'<w:shd {nsdecls("w")} w:fill="F2F2F2"/>'
-            sub_cells[idx]._tc.get_or_add_tcPr().append(parse_xml(shading_xml))
+
 
         larguras_t2 = [
             Inches(1.0), Inches(1.1), Inches(1.1), Inches(0.8),
@@ -404,8 +428,9 @@ class GeradorAnuenciaIncraWord:
                 p.paragraph_format.space_after = Pt(2)
                 if len(p.runs) > 0:
                     p.runs[0].font.size = Pt(8.5)
-                    if r_idx == 0:
-                        p.runs[0].font.size = Pt(9.5)
+                    p.runs[0].font.name = 'Arial'
+                if r_idx == 0:
+                    p.runs[0].font.size = Pt(9.5)
 
         # Quebra de Espaço antes das Assinaturas
         p_espaco = doc.add_paragraph()
@@ -442,6 +467,7 @@ class GeradorAnuenciaIncraWord:
                 for p in cell.paragraphs:
                     for run in p.runs:
                         run.font.size = Pt(9.5)
+                        run.font.name = 'Arial'
 
         # 8. ASSINATURA DO RESPONSÁVEL TÉCNICO (Centralizado abaixo das outras duas)
         p_rt_espaco = doc.add_paragraph()
@@ -459,6 +485,7 @@ class GeradorAnuenciaIncraWord:
 
         for run in p_info_rt.runs:
             run.font.size = Pt(9.5)
+            run.font.name = 'Arial'
 
         # 9. ANEXOS (Idêntico ao modelo)
         p_anexos_espaco = doc.add_paragraph()
@@ -469,7 +496,9 @@ class GeradorAnuenciaIncraWord:
         run_anexos_label.bold = True
         p_anexos.add_run("Planta do Imóvel \t\t Memorial Descritivo do Imóvel")
         p_anexos.runs[0].font.size = Pt(9)
+        p_anexos.runs[0].font.name = 'Arial'
         p_anexos.runs[1].font.size = Pt(9)
+        p_anexos.runs[1].font.name = 'Arial'
 
         buffer = io.BytesIO()
         doc.save(buffer)
