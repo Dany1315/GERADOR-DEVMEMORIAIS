@@ -22,6 +22,7 @@ from utils import (
 from processador import ProcessadorMemorial
 from gerador_word import GeradorMemorialWord
 
+# Inicializa o logger
 logger = criar_logger(__name__)
 
 st.set_page_config(
@@ -259,7 +260,9 @@ def main():
                 st.success(f"🔍 Encontrados **{len(confrontantes_validos)}** confrontantes elegíveis para Termos de Anuência.")
                 trt_numero = st.text_input("Número da TRT / ART vinculada:", value="", key="trt_anuencias")
 
+                # Importação no escopo correto para evitar redundâncias
                 from gerador_anuencias import GeradorAnuenciaWord
+                
                 dados_empresa_dict = {"nome": empresa_nome, "endereco": empresa_endereco, "telefone": empresa_telefone, "email": empresa_email}
                 dados_tecnico_dict = {"nome": technico_nome, "cfta": tecnico_cfta, "trt": trt_numero, "cpf": cpf_tecnico}
                 
@@ -318,7 +321,7 @@ def main():
             if st.button("⚙️ PROCESSAR E GERAR ANUÊNCIAS INCRA", type="primary", use_container_width=True):
                 with st.spinner("Analisando o memorial e estruturando dados do INCRA..."):
                     try:
-                        # Importação condicional do novo módulo que será criado
+                        # Importação dinâmica do novo módulo correspondente
                         from gerador_anuencia_incra import GeradorAnuenciaIncraWord
                         
                         dados_empresa_dict = {
@@ -340,8 +343,7 @@ def main():
                         # Processamento do arquivo enviado pelo usuário
                         arquivo_conteudo = memorial_incra_file.read()
                         
-                        # Chamada para o método que vai processar e gerar o Word
-                        # Nota: A lógica interna deste método será construída na sequência
+                        # Geração física do documento
                         documento_gerado = gerador_incra.gerar_documento_pelo_memorial(
                             arquivo_conteudo, 
                             memorial_incra_file.name,
