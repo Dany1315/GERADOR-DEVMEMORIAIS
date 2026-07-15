@@ -83,7 +83,7 @@ class GeradorAnuenciaWord:
         style.font.name = 'Calibri'
         style.font.size = Pt(11)
 
-        # Configuração da Cor Verde Claro para os nomes principais do topo
+        # Configuração das Cores do Cabeçalho
         cor_verde_claro = RGBColor(34, 139, 34) # Verde Floresta Claro/Médio bem profissional
         cor_preta = RGBColor(0, 0, 0) # Preto puro para as informações de contato
 
@@ -97,7 +97,7 @@ class GeradorAnuenciaWord:
         run_h1 = p_head1.add_run("TopoGeo")
         run_h1.bold = True
         run_h1.font.size = Pt(12)
-        run_h1.font.color.rgb = cor_verde_claro # Aplicado verde claro
+        run_h1.font.color.rgb = cor_verde_claro
         
         p_head2 = doc.add_paragraph()
         p_head2.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -106,7 +106,7 @@ class GeradorAnuenciaWord:
         run_h2 = p_head2.add_run("Topografia   Consultoria LTDA")
         run_h2.bold = True
         run_h2.font.size = Pt(10)
-        run_h2.font.color.rgb = cor_verde_claro # Aplicado verde claro
+        run_h2.font.color.rgb = cor_verde_claro
         
         p_head3 = doc.add_paragraph()
         p_head3.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -114,15 +114,15 @@ class GeradorAnuenciaWord:
         p_head3.paragraph_format.space_after = Pt(1)
         run_h3 = p_head3.add_run("Rua Natalino Cossi, No 114, sala 2 - Vila Valério, CEP 29785-000 Fone 27 99837-1164")
         run_h3.font.size = Pt(9)
-        run_h3.font.color.rgb = cor_preta # Aplicado preto puro
+        run_h3.font.color.rgb = cor_preta
         
         p_head4 = doc.add_paragraph()
         p_head4.alignment = WD_ALIGN_PARAGRAPH.CENTER
         p_head4.paragraph_format.space_before = Pt(0)
-        p_head4.paragraph_format.space_after = Pt(24) # Espaçamento maior antes de iniciar o título
+        p_head4.paragraph_format.space_after = Pt(24)
         run_h4 = p_head4.add_run("topogeo2014@gmail.com")
         run_h4.font.size = Pt(9)
-        run_h4.font.color.rgb = cor_preta # Aplicado preto puro
+        run_h4.font.color.rgb = cor_preta
 
         # 1. TÍTULO: Negrito, Centralizado e em Letras Maiúsculas
         p_titulo = doc.add_paragraph()
@@ -144,13 +144,13 @@ class GeradorAnuenciaWord:
         p_abertura.paragraph_format.line_spacing = 1.15
         p_abertura.paragraph_format.space_after = Pt(12)
 
-        # 3. DESCRIÇÃO DO TRECHO (Vai direto do Título para a Tabela, sem parágrafo de IA)
+        # 3. DESCRIÇÃO DO TRECHO (Sem parágrafo extra)
         p_desc_tit = doc.add_paragraph()
         p_desc_tit.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
         p_desc_tit.paragraph_format.space_after = Pt(6)
         p_desc_tit.add_run("Descrição do trecho de confrontação:").bold = True
 
-        # 4. TABELA TÉCNICA: Mantém linhas de grade visíveis ('Table Grid') e padrão americano
+        # 4. TABELA TÉCNICA
         tabela = doc.add_table(rows=1, cols=7)
         tabela.style = 'Table Grid'
         tabela.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -172,12 +172,10 @@ class GeradorAnuenciaWord:
             row_cells[1].text = str(s['para'])
             row_cells[2].text = str(s['azimute'])
             
-            # Tratamento da distância e acumulação
             dist_val = self._limpar_e_converter_numerico(s['distancia'])
             total_distancia += dist_val
             row_cells[3].text = self._formatar_para_padrao_modelo(dist_val)
             
-            # Formatação de Coordenadas sem sufixos de texto (ex: "m")
             val_ex = self._limpar_e_converter_numerico(s.get('e_x', '0.00'))
             val_ny = self._limpar_e_converter_numerico(s.get('n_y', '0.00'))
             
@@ -185,14 +183,13 @@ class GeradorAnuenciaWord:
             row_cells[5].text = self._formatar_para_padrao_modelo(val_ny)
             row_cells[6].text = "0,00"
             
-            # Centralizar células de dados da tabela
             for cell in row_cells:
                 p = cell.paragraphs[0]
                 p.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 if p.runs:
                     p.runs[0].font.size = Pt(9.5)
 
-        # Linha de Totais da Tabela (Sem espaços e alinhada)
+        # Linha de Totais da Tabela
         row_totais = tabela.add_row().cells
         row_totais[0].text = "Total"
         row_totais[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -204,57 +201,18 @@ class GeradorAnuenciaWord:
         row_totais[3].paragraphs[0].runs[0].font.bold = True
         row_totais[3].paragraphs[0].runs[0].font.size = Pt(9.5)
         
-        # Células vazias limpas
         for idx in [1, 2, 4, 5, 6]:
             row_totais[idx].text = ""
             row_totais[idx].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-        # Espaço pós tabela
         p_espaco = doc.add_paragraph("")
         p_espaco.paragraph_format.space_before = Pt(6)
 
-        # 5. PARÁGRAFO DE RESPONSABILIDADE TÉCNICA: Justificado e com colagem sem espaçamento pós-ponto
+        # 5. PARÁGRAFO DE RESPONSABILIDADE TÉCNICA
         rg_rt = self.dados_tecnico.get('rg', '1.936.653')
         codigo_incra = self.dados_tecnico.get('codigo_incra', 'G1D')
         
         texto_tecnico = (
             f"Declaramos ainda que o profissional {self.dados_tecnico.get('nome')} "
             f"(RG nº {rg_rt} e CPF nº {self.dados_tecnico.get('cpf', '111.985.197-11')}), Resp. "
-            f"Técnico (CFTA {self.dados_tecnico.get('cfta')}), credenciado pelo INCRA sob o cod. {codigo_incra}, com a emissão da TRT nº "
-            f"{self.dados_tecnico.get('trt')}, nos indicou as demarcações do limite entre as nossas propriedades, tanto no campo como "
-            f"nas suas apresentações gráficas.Concordamos com essa demarcação, expressa na planta e no memorial descritivo, "
-            f"ambos em anexo, e reconhecemos esta descrição como o limite legal entre nossas propriedades."
-        )
-        p_tecnico = doc.add_paragraph(texto_tecnico)
-        p_tecnico.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-        p_tecnico.paragraph_format.line_spacing = 1.15
-        p_tecnico.paragraph_format.space_after = Pt(20)
-
-        # 6. ENCERRAMENTO COM DATA
-        data_atual = datetime.now().strftime('%d de %m de %Y')
-        p_data = doc.add_paragraph(f"{local}, {data_atual}")
-        p_data.paragraph_format.space_after = Pt(28)
-
-        # 7. CAMPOS DE ASSINATURA LADO A LADO: Tabela Invisível de 2 colunas
-        tab_assinatura = doc.add_table(rows=2, cols=2)
-        tab_assinatura.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        
-        # Esconder bordas para a seção de assinatura ficar perfeitamente limpa
-        tblPr = tab_assinatura._tbl.tblPr
-        tblBorders = parse_xml(
-            r'<w:tblBorders %s>'
-            r'  <w:top w:val="none"/>'
-            r'  <w:left w:val="none"/>'
-            r'  <w:bottom w:val="none"/>'
-            r'  <w:right w:val="none"/>'
-            r'  <w:insideH w:val="none"/>'
-            r'  <w:insideV w:val="none"/>'
-            r'</w:tblBorders>' % nsdecls('w')
-        )
-        tblPr.append(tblBorders)
-
-        # Linhas de assinatura (Underlines encurtados para uma estética limpa)
-        celulas_l1 = tab_assinatura.rows[0].cells
-        celulas_l1[0].text = "______________________________________"
-        celulas_l1[1].text = "______________________________________"
-        celulas_l1[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAP
+            f"Técnico (CFTA {self.dados_tecnico.get('cfta')}), credenciado pelo INCRA sob o cod. {codigo_incra}, com a emissão da
