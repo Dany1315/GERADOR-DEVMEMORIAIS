@@ -11,7 +11,7 @@ from typing import Dict, List, Any
 import streamlit as st
 import google.generativeai as genai
 from docx import Document
-from docx.shared import Pt, Inches
+from docx.shared import Pt, Inches, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import parse_xml
 from docx.oxml.ns import nsdecls
@@ -82,6 +82,41 @@ class GeradorAnuenciaWord:
         style = doc.styles['Normal']
         style.font.name = 'Calibri'
         style.font.size = Pt(11)
+
+        # =========================================================================
+        # CABEÇALHO CORPORATIVO (Topo da Folha, Centralizado)
+        # =========================================================================
+        p_head1 = doc.add_paragraph()
+        p_head1.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_head1.paragraph_format.space_before = Pt(0)
+        p_head1.paragraph_format.space_after = Pt(1)
+        run_h1 = p_head1.add_run("TopoGeo")
+        run_h1.bold = True
+        run_h1.font.size = Pt(12)
+        
+        p_head2 = doc.add_paragraph()
+        p_head2.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_head2.paragraph_format.space_before = Pt(0)
+        p_head2.paragraph_format.space_after = Pt(1)
+        run_h2 = p_head2.add_run("Topografia   Consultoria LTDA")
+        run_h2.bold = True
+        run_h2.font.size = Pt(10)
+        
+        p_head3 = doc.add_paragraph()
+        p_head3.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_head3.paragraph_format.space_before = Pt(0)
+        p_head3.paragraph_format.space_after = Pt(1)
+        run_h3 = p_head3.add_run("Rua Natalino Cossi, No 114, sala 2 - Vila Valério, CEP 29785-000 Fone 27 99837-1164")
+        run_h3.font.size = Pt(9)
+        run_h3.font.color.rgb = RGBColor(100, 100, 100) # Cor cinza elegante
+        
+        p_head4 = doc.add_paragraph()
+        p_head4.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_head4.paragraph_format.space_before = Pt(0)
+        p_head4.paragraph_format.space_after = Pt(24) # Espaçamento maior antes do título
+        run_h4 = p_head4.add_run("topogeo2014@gmail.com")
+        run_h4.font.size = Pt(9)
+        run_h4.font.color.rgb = RGBColor(100, 100, 100)
 
         # 1. TÍTULO: Negrito, Centralizado e em Letras Maiúsculas
         p_titulo = doc.add_paragraph()
@@ -212,10 +247,10 @@ class GeradorAnuenciaWord:
         )
         tblPr.append(tblBorders)
 
-        # Linhas de assinatura
+        # Linhas de assinatura (Underlines encurtados de 50 para 38 caracteres)
         celulas_l1 = tab_assinatura.rows[0].cells
-        celulas_l1[0].text = "__________________________________________________"
-        celulas_l1[1].text = "__________________________________________________"
+        celulas_l1[0].text = "______________________________________"
+        celulas_l1[1].text = "______________________________________"
         celulas_l1[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
         celulas_l1[1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
         
@@ -257,11 +292,12 @@ class GeradorAnuenciaWord:
         p_espaco_final.paragraph_format.space_before = Pt(16)
 
         # 8. ASSINATURA DO RESPONSÁVEL TÉCNICO: Centralizado e estruturado em 4 parágrafos separados
+        # Linha de assinatura do RT (Underlines encurtados de 30 para 24 caracteres)
         p_rt_l1 = doc.add_paragraph()
         p_rt_l1.alignment = WD_ALIGN_PARAGRAPH.CENTER
         p_rt_l1.paragraph_format.space_before = Pt(12)
         p_rt_l1.paragraph_format.space_after = Pt(0)
-        run_linha = p_rt_l1.add_run("______________________________")
+        run_linha = p_rt_l1.add_run("________________________")
         run_linha.bold = True
         
         p_rt_l2 = doc.add_paragraph()
