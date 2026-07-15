@@ -85,9 +85,14 @@ class GeradorAnuenciaWord:
         cor_preta = RGBColor(0, 0, 0) # Preto puro para as informacoes de contato
 
         # =========================================================================
-        # CABECALHO CORPORATIVO (Topo da Folha, Centralizado)
+        # CABECALHO NATIVO DO WORD (Exclusivo na area superior da pagina)
         # =========================================================================
-        p_head1 = doc.add_paragraph()
+        secao = doc.sections[0]
+        cabecalho_nativo = secao.header
+        
+        # O primeiro parágrafo já existe por padrão no cabeçalho nativo
+        p_head1 = cabecalho_nativo.paragraphs[0]
+        p_head1.text = ""  # Limpa o texto padrão existente
         p_head1.alignment = WD_ALIGN_PARAGRAPH.CENTER
         p_head1.paragraph_format.space_before = Pt(0)
         p_head1.paragraph_format.space_after = Pt(1)
@@ -96,7 +101,7 @@ class GeradorAnuenciaWord:
         run_h1.font.size = Pt(12)
         run_h1.font.color.rgb = cor_verde_claro
         
-        p_head2 = doc.add_paragraph()
+        p_head2 = cabecalho_nativo.add_paragraph()
         p_head2.alignment = WD_ALIGN_PARAGRAPH.CENTER
         p_head2.paragraph_format.space_before = Pt(0)
         p_head2.paragraph_format.space_after = Pt(1)
@@ -105,7 +110,7 @@ class GeradorAnuenciaWord:
         run_h2.font.size = Pt(10)
         run_h2.font.color.rgb = cor_verde_claro
         
-        p_head3 = doc.add_paragraph()
+        p_head3 = cabecalho_nativo.add_paragraph()
         p_head3.alignment = WD_ALIGN_PARAGRAPH.CENTER
         p_head3.paragraph_format.space_before = Pt(0)
         p_head3.paragraph_format.space_after = Pt(1)
@@ -113,18 +118,22 @@ class GeradorAnuenciaWord:
         run_h3.font.size = Pt(9)
         run_h3.font.color.rgb = cor_preta
         
-        p_head4 = doc.add_paragraph()
+        p_head4 = cabecalho_nativo.add_paragraph()
         p_head4.alignment = WD_ALIGN_PARAGRAPH.CENTER
         p_head4.paragraph_format.space_before = Pt(0)
-        p_head4.paragraph_format.space_after = Pt(24)
+        p_head4.paragraph_format.space_after = Pt(0)
         run_h4 = p_head4.add_run("topogeo2014@gmail.com")
         run_h4.font.size = Pt(9)
         run_h4.font.color.rgb = cor_preta
 
+        # =========================================================================
+        # INICIO DO CORPO DO DOCUMENTO (Começa diretamente no Título)
+        # =========================================================================
+        
         # 1. TITULO: Negrito, Centralizado e em Letras Maiusculas
         p_titulo = doc.add_paragraph()
         p_titulo.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p_titulo.paragraph_format.space_before = Pt(0)
+        p_titulo.paragraph_format.space_before = Pt(12) # Pequeno recuo para desgrudar do cabeçalho
         p_titulo.paragraph_format.space_after = Pt(18)
         run_titulo = p_titulo.add_run("DECLARAÇÃO DE RECONHECIMENTO DE LIMITES")
         run_titulo.bold = True
