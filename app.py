@@ -118,7 +118,15 @@ def main():
                 cliente_perimetro = st.text_input("🏃 Perímetro (m)", value=CLIENTE_CONFIG.PERIMETRO)
 
         st.markdown("---")
-        nome_modelo = st.selectbox("Modelo Gemini", options=list(GEMINI_CONFIG.MODELOS_DISPONIVEIS.keys()), index=0)
+        
+        # DEFINIÇÃO EXCLUSIVA DOS MODELOS GEMINI 2.5 FLASH E GEMINI 2.5 PRO
+        modelos_filtrados = {
+            "Gemini 2.5 Flash": "gemini-2.5-flash",
+            "Gemini 2.5 Pro": "gemini-2.5-pro"
+        }
+        nome_modelo = st.selectbox("Modelo Gemini", options=list(modelos_filtrados.keys()), index=0)
+        nome_modelo_api = modelos_filtrados[nome_modelo]
+        
         dpi_conversao = st.slider("Resolução (DPI)", 100, 400, int(PROCESSAMENTO_CONFIG.DPI_PADRAO), 50)
         tamanho_max = st.slider("Upload Máximo (MB)", 10, 100, int(PROCESSAMENTO_CONFIG.TAMANHO_MAX_PDF_MB), 10)
 
@@ -160,7 +168,6 @@ def main():
                             st.error("Erro crítico: Chave API ausente nos Secrets.")
                             st.stop()
                         
-                        nome_modelo_api = GEMINI_CONFIG.MODELOS_DISPONIVEIS.get(nome_modelo, "gemini-2.5-flash")
                         processador = ProcessadorMemorial(nome_modelo_api)
                         
                         # Processamento de PDF
