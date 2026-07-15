@@ -299,7 +299,7 @@ def main():
                                     st.error(f"Falha na compilação: {err}")
 
     # ------------------------------------------
-    # ABA 3: ANUÊNCIAS INCRA (NOVA FUNCIONALIDADE)
+    # ABA 3: ANUÊNCIAS INCRA (OTIMIZADA PARA TODOS OS VIZINHOS)
     # ------------------------------------------
     with tab_anuencias_incra:
         st.markdown("### 🌾 Geração Automatizada de Declarações de Anuência INCRA")
@@ -318,8 +318,8 @@ def main():
             trt_incra_numero = st.text_input("Número da TRT / ART vinculada (INCRA):", value="", key="trt_incra")
             
             # Botão de processamento da Anuência INCRA
-            if st.button("⚙️ PROCESSAR E GERAR ANUÊNCIAS INCRA", type="primary", use_container_width=True):
-                with st.spinner("Analisando o memorial e estruturando dados do INCRA..."):
+            if st.button("⚙️ PROCESSAR E GERAR ANUÊNCIAS DE TODOS OS VIZINHOS", type="primary", use_container_width=True):
+                with st.spinner("Analisando o memorial e gerando as anuências de todos os confrontantes..."):
                     try:
                         # Importação dinâmica do novo módulo correspondente
                         from gerador_anuencia_incra import GeradorAnuenciaIncraWord
@@ -337,14 +337,14 @@ def main():
                             "cpf": cpf_tecnico
                         }
                         
-                        # Instanciação do novo gerador
+                        # Instanciação do gerador
                         gerador_incra = GeradorAnuenciaIncraWord(dados_empresa_dict, dados_tecnico_dict)
                         
                         # Processamento do arquivo enviado pelo usuário
                         arquivo_conteudo = memorial_incra_file.read()
                         
-                        # Geração física do documento
-                        documento_gerado = gerador_incra.gerar_documento_pelo_memorial(
+                        # GERAÇÃO DA LISTA DE DOCUMENTOS (Um para cada confrontante identificado)
+                        documentos_gerados = gerador_incra.gerar_documentos_pelo_memorial(
                             arquivo_conteudo, 
                             memorial_incra_file.name,
                             {
@@ -357,15 +357,40 @@ def main():
                         )
                         
                         st.balloons()
-                        st.success("🎉 Anuência INCRA gerada com sucesso!")
+                        st.success(f"🎉 Processamento concluído! Foram geradas **{len(documentos_gerados)}** anuências individuais.")
                         
+                        # -------------------------------------------------------------
+                        # Opção 1: Botão para Baixar Todas as Anuências Juntas em ZIP
+                        # -------------------------------------------------------------
+                        zip_buffer = gerador_incra.gerar_zip_anuencias(documentos_gerados)
                         st.download_button(
-                            label="📥 BAIXAR ANUÊNCIA INCRA (.DOCX)",
-                            data=documento_gerado,
-                            file_name=f"ANUENCIA_INCRA_{sanitizar_nome_arquivo(cliente_proprietario.upper())}.docx",
-                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            label="📥 BAIXAR TODAS AS ANUÊNCIAS EM UM ÚNICO ARQUIVO (.ZIP)",
+                            data=zip_buffer,
+                            file_name=f"ANUENCIAS_INCRA_LOTE_{sanitizar_nome_arquivo(cliente_proprietario.upper())}.zip",
+                            mime="application/zip",
                             use_container_width=True
                         )
+                        
+                        st.markdown("---")
+                        st.markdown("#### 👤 Downloads Individuais por Vizinho:")
+                        
+                        # -------------------------------------------------------------
+                        # Opção 2: Lista com Botões de Download Individuais
+                        # -------------------------------------------------------------
+                        for nome_confrontante, doc_buffer in documentos_gerados:
+                            col_nome, col_btn = st.columns([3, 1])
+                            with col_nome:
+                                st.markdown(f"**Confrontante:** {nome_confrontante.upper()}")
+                            with col_btn:
+                                st.download_button(
+                                    label="Baixar Word (.docx)",
+                                    data=doc_buffer,
+                                    file_name=f"ANUENCIA_INCRA_{sanitizar_nome_arquivo(nome_confrontante.upper())}.docx",
+                                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                    key=f"down_incra_{sanitizar_nome_arquivo(nome_confrontante.upper())}",
+                                    use_container_width=True
+                                )
+                                
                     except Exception as err:
                         st.error(f"Erro ao processar as anuências INCRA: {err}")
                         logger.error(f"Erro INCRA: {str(err)}", exc_info=True)
