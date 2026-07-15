@@ -4,6 +4,7 @@
 #"""
 
 import io
+import re
 import logging
 from datetime import datetime
 from typing import Dict, List, Any
@@ -12,8 +13,8 @@ import google.generativeai as genai
 from docx import Document
 from docx.shared import Pt, Inches, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.oxml import parse_xml, OxmlElement
-from docx.oxml.ns import nsdecls, qn
+from docx.oxml import parse_xml
+from docx.oxml.ns import nsdecls
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +45,7 @@ class GeradorAnuenciaWord:
             # Transforma os segmentos em linhas legíveis para a IA
             linhas_texto = []
             for s in segmentos:
-                linhas_texto.append(f"De {s['de']} para {s['para']} com azimute {s['azimute']} e distância {s['distancia']}m")
+                linhas_texto.append(f"De {s['de']} para {s['para']} com azimute {s['azimute']} e distância {s['distancia']}")
             roteiro_trecho = "; ".join(linhas_texto)
 
             prompt = f"""
@@ -56,7 +57,6 @@ class GeradorAnuenciaWord:
             Retorne APENAS o parágrafo corrido, sem saudações, sem marcações em negrito e sem introduções textuais.
             """
             
-            # Utilizando o modelo atualizado conforme solicitação do painel principal
             model = genai.GenerativeModel('gemini-2.5-flash')
             resposta = model.generate_content(prompt)
             return resposta.text.strip()
@@ -65,8 +65,22 @@ class GeradorAnuenciaWord:
             logger.error(f"Erro ao chamar a API do Gemini para Anuência: {str(e)}")
             return f"O limite perimétrico com {confrontante} acompanha as amarrações técnicas e coordenadas descritas na tabela."
 
+    def _limpar_e_converter_distancia(self, valor_distancia: Any) -> float:
+        """
+        Remove letras (como 'm'), espaços e caracteres extras, convertendo a distância com segurança.
+        """
+        try:
+            string_limpa = str(valor_distancia).strip()
+            # Mantém apenas números, pontos e vírgulas
+            string_limpa = re.sub(r"[^\d,.]", "", string_limpa)
+            # Substitui vírgula por ponto para conversão americana padrão
+            string_limpa = string_limpa.replace(",", ".")
+            return float(string_limpa) if string_limpa else 0.0
+        except Exception:
+            return 0.0
+
     def _definir_bordas_tabela(self, tabela):
-        """Aplica bordas finas e discretas (padrão cinza do Word) nas células da tabela."""
+        """Aplica bordas finas e discretas nas células da tabela."""
         tblPr = tabela._tbl.tblPr
         tblBorders = parse_xml(
             r'<w:tblBorders %s>'
@@ -103,21 +117,20 @@ class GeradorAnuenciaWord:
             section.left_margin = Inches(1)
             section.right_margin = Inches(1)
 
-        # Configuração de Estilo e Fonte Base (Calibri 11, Cinza Escuro para Leitura Premium)
+        # Configuração de Estilo e Fonte Base
         style = doc.styles['Normal']
         style.font.name = 'Calibri'
         style.font.size = Pt(11)
-        style.font.color.rgb = RGBColor(51, 65, 85) # #334155 (Slate 700)
+        style.font.color.rgb = RGBColor(51, 65, 85) # Slate 700
 
         # 1. TÍTULO
         p_titulo = doc.add_paragraph()
         p_titulo.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p_titulo.paragraph_format.space_before = Pt(0)
         p_titulo.paragraph_format.space_after = Pt(24)
         run_titulo = p_titulo.add_run("DECLARAÇÃO DE RECONHECIMENTO DE LIMITES")
         run_titulo.bold = True
         run_titulo.font.size = Pt(14)
-        run_titulo.font.color.rgb = RGBColor(15, 23, 42) # #0F172A (Slate 900)
+        run_titulo.font.color.rgb = RGBColor(15, 23, 42) # Slate 900
 
         # 2. TEXTO DE ABERTURA
         texto_abertura = (
@@ -141,29 +154,24 @@ class GeradorAnuenciaWord:
         p_desc_corpo.paragraph_format.line_spacing = 1.15
         p_desc_corpo.paragraph_format.space_after = Pt(18)
 
-        # 4. TABELA TÉCNICA DO TRECHO (Estilizada em tons de Azul-Cinza Premium)
+        # 4. TABELA TÉCNICA DO TRECHO
         tabela = doc.add_table(rows=1, cols=7)
         tabela.alignment = WD_ALIGN_PARAGRAPH.CENTER
         self._definir_bordas_tabela(tabela)
         
         hdr_cells = tabela.rows[0].cells
         headers = ["De", "Para", "Azimute", "Distância (m)", "E(X)", "N(Y)", "Altitude"]
-        
-        # Cor de fundo azulada/verde escuro discreto para o cabeçalho (#0f172a ou #064e3b)
-        # Usando azul escuro suave #1e293b (Slate 800) para manter o visual corporativo limpo
         cor_cabecalho_hex = "1E293B" 
         
         for i, header in enumerate(headers):
             hdr_cells[i].text = header
             self._colorir_celula(hdr_cells[i], cor_cabecalho_hex)
-            
-            # Formatação de texto do cabeçalho
             p = hdr_cells[i].paragraphs[0]
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER
             run = p.runs[0]
             run.font.bold = True
             run.font.size = Pt(10)
-            run.font.color.rgb = RGBColor(255, 255, 255) # Texto Branco
+            run.font.color.rgb = RGBColor(255, 255, 255)
 
         total_distancia = 0.0
         for r_idx, s in enumerate(segmentos):
@@ -172,7 +180,8 @@ class GeradorAnuenciaWord:
             row_cells[1].text = str(s['para'])
             row_cells[2].text = str(s['azimute'])
             
-            dist_val = float(str(s['distancia']).replace(',', '.'))
+            # ✅ RESOLUÇÃO DO SEU PROBLEMA: Conversão e tratamento seguro de distância
+            dist_val = self._limpar_e_converter_distancia(s['distancia'])
             total_distancia += dist_val
             row_cells[3].text = f"{dist_val:.2f}".replace('.', ',')
             
@@ -180,7 +189,6 @@ class GeradorAnuenciaWord:
             row_cells[5].text = str(s.get('n_y', '0,00'))
             row_cells[6].text = "0,00"
 
-            # Zebragem suave das linhas para melhor leitura técnica (#F8FAFC)
             cor_linha = "F8FAFC" if r_idx % 2 == 0 else "FFFFFF"
             for cell in row_cells:
                 self._colorir_celula(cell, cor_linha)
@@ -189,7 +197,7 @@ class GeradorAnuenciaWord:
                 if p.runs:
                     p.runs[0].font.size = Pt(9.5)
 
-        # Linha de Totais Estilizada em Azul Claro Suave (#F1F5F9)
+        # Linha de Totais Estilizada
         row_totais = tabela.add_row().cells
         cor_total_hex = "F1F5F9"
         
@@ -210,11 +218,10 @@ class GeradorAnuenciaWord:
         p_dist_tot.runs[0].font.size = Pt(9.5)
         p_dist_tot.runs[0].font.color.rgb = RGBColor(15, 23, 42)
         
-        # Centralizar vazios
         for idx in [1, 2, 4, 5, 6]:
             row_totais[idx].text = ""
 
-        # Adiciona espaçamento após a tabela
+        # Espaço pós tabela
         p_espaco = doc.add_paragraph("")
         p_espaco.paragraph_format.space_before = Pt(12)
 
@@ -236,11 +243,10 @@ class GeradorAnuenciaWord:
         p_data = doc.add_paragraph(f"{local}, {data_atual}.")
         p_data.paragraph_format.space_after = Pt(36)
 
-        # 7. CAMPOS DE ASSINATURA DOS PROPRIETÁRIOS (Tabela sem bordas para alinhamento lado a lado perfeito)
+        # 7. CAMPOS DE ASSINATURA DOS PROPRIETÁRIOS (Sem bordas)
         tab_assinatura = doc.add_table(rows=2, cols=2)
         tab_assinatura.alignment = WD_ALIGN_PARAGRAPH.CENTER
         
-        # Remover bordas da tabela de assinatura
         tblPr = tab_assinatura._tbl.tblPr
         tblBorders = parse_xml(
             r'<w:tblBorders %s>'
@@ -258,7 +264,6 @@ class GeradorAnuenciaWord:
         celulas_l1[0].text = "__________________________________________________"
         celulas_l1[1].text = "__________________________________________________"
         
-        # Centralizar as linhas de assinatura
         celulas_l1[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
         celulas_l1[1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
         
@@ -266,17 +271,15 @@ class GeradorAnuenciaWord:
         celulas_l2[0].text = f"{confrontante.title()}\nProprietário do Imóvel Confrontante"
         celulas_l2[1].text = f"{proprietario.title()}\nProprietário do Imóvel"
         
-        # Centralizar e formatar os nomes dos assinantes
         for cell in celulas_l2:
             p = cell.paragraphs[0]
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER
             p.paragraph_format.space_before = Pt(4)
             if p.runs:
                 p.runs[0].font.size = Pt(10)
-                p.runs[0].font.color.rgb = RGBColor(71, 85, 105) # Cinza suave
+                p.runs[0].font.color.rgb = RGBColor(71, 85, 105)
 
-        # Espaçamento para o responsável técnico
-        p_espaco_final = doc.add_paragraph("\n\n")
+        doc.add_paragraph("\n\n")
 
         # 8. ASSINATURA DO RESPONSÁVEL TÉCNICO
         p_ass_tec = doc.add_paragraph()
@@ -292,7 +295,6 @@ class GeradorAnuenciaWord:
         run_cargo.font.size = Pt(10)
         run_cargo.font.color.rgb = RGBColor(71, 85, 105)
 
-        # Retorna o arquivo formatado em bytes pronto para download
         buffer = io.BytesIO()
         doc.save(buffer)
         buffer.seek(0)
