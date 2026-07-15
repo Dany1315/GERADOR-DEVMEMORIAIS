@@ -1,3 +1,6 @@
+# ==========================================
+# ARQUIVO: gerador_anuencia_incra.py (CORRIGIDO)
+# ==========================================
 import io
 import re
 import json
@@ -16,8 +19,6 @@ except ImportError:
 from docx import Document
 from docx.shared import Pt, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.oxml import parse_xml
-from docx.oxml.ns import nsdecls
 
 logger = logging.getLogger(__name__)
 
@@ -30,16 +31,22 @@ class GeradorAnuenciaIncraWord:
         self.dados_empresa = dados_empresa
         self.dados_tecnico = dados_tecnico
 
-        # Configuração da API do Gemini obtida de forma segura dos secrets do Streamlit
+        # Configuração da API do Gemini
         self.api_key = st.secrets.get("GEMINI_API_KEY")
         if self.api_key:
             genai.configure(api_key=self.api_key)
 
     def _estrutura_padrao(self) -> Dict[str, Any]:
         """
-        Estrutura de fallback baseada fielmente nos modelos reais fornecidos (Elias/Evaldo).
+        Estrutura de fallback baseada nos modelos reais.
         """
         return {
+            "imovel_origem": {
+                "proprietario": "AGOSTINHO IZOTON",
+                "cpf": "215.894.707-10",
+                "imovel": "GLEBA A",
+                "localidade": "Vila Valério - ES"
+            },
             "confrontantes": [
                 {
                     "confrontante_imovel": "Sítio Sete Quedas",
@@ -63,26 +70,20 @@ class GeradorAnuenciaIncraWord:
             ]
         }
 
-    def _obter_dados_estruturados_com_ia(self, texto_memorial: str, dados_projeto: Dict[str, Any]) -> Dict[str, Any]:
+    def _obter_dados_estruturados_com_ia(self, texto_memorial: str) -> Dict[str, Any]:
         """
-        Usa o Gemini para analisar o memorial e separar TODOS os confrontantes com seus respectivos
-        vértices e dados cadastrais.
+        Usa o Gemini para analisar o memorial e extrair TANTO os dados do proprietário
+        de origem quanto os dados de TODOS os confrontantes com seus vértices.
         """
         estrutura_padrao = self._estrutura_padrao()
 
         if not self.api_key:
-            logger.warning("Chave de API do Gemini não configurada nos secrets do Streamlit. Usando dados padrão.")
+            logger.warning("Chave de API do Gemini não configurada nos secrets. Usando dados padrão.")
             return estrutura_padrao
 
         prompt = f"""
         Você é um engenheiro cartógrafo especialista em georreferenciamento do INCRA.
-        Sua tarefa é analisar o texto de um memorial descritivo ou relatório de vértices e estruturar as
-        informações de TODOS os confrontantes (vizinhos) identificados ao longo da poligonal.
-
-        DADOS DE CONTEXTO DO PROJETO (ORIGEM):
-        - Proprietário Origem: {dados_projeto.get('proprietario', 'Agostinho Izoton')}
-        - Imóvel Origem: {dados_projeto.get('imovel', 'Gleba A')}
-        - Município: {dados_projeto.get('local', 'Vila Valério - ES')}
+        Sua tarefa é analisar o texto de um memorial descritivo ou relatório de cálculo/vértices e estruturar de forma impecável as informações do IMÓVEL DE ORIGEM (objeto do memorial) e de TODOS os confrontantes (vizinhos) identificados.
 
         TEXTO DO MEMORIAL DESCRITIVO / RELATÓRIO EXTRAÍDO:
         \"\"\"
@@ -90,17 +91,23 @@ class GeradorAnuenciaIncraWord:
         \"\"\"
 
         REGRAS DE EXTRAÇÃO:
-        1. Identifique cada confrontante distinto (por nome de proprietário, matrícula ou imóvel) ao longo do perímetro.
-        2. Agrupe sob cada confrontante APENAS os vértices/segmentos cujo trecho de "vante" faz divisa com ele.
-        3. Se o texto for incompreensível, simule dados verossímeis baseados no contexto para manter o JSON estruturado.
-        4. Tente encontrar ou estimar o CPF do confrontante se houver menção, caso contrário, deixe em branco para preenchimento manual (ex: "___.___.___-__").
+        1. Identifique os dados do proprietário principal/origem do memorial (Nome completo, CPF, Nome do Imóvel/Gleba e Localização).
+        2. Identifique cada confrontante distinto ao longo da poligonal periférica.
+        3. Agrupe sob cada confrontante APENAS os vértices/segmentos cujo trecho de "vante" faz divisa com ele.
+        4. Caso o CPF do proprietário de origem ou dos confrontantes não esteja explícito no texto, tente extrair se houver, caso contrário, retorne no formato "___.___.___-__" para preenchimento posterior.
 
-        Responda APENAS com o JSON estruturado abaixo, sem markdown ou textos explicativos:
+        Responda APENAS com o JSON estruturado abaixo, sem markdown, sem tags ```json ou textos explicativos:
         {{
+            "imovel_origem": {{
+                "proprietario": "NOME COMPLETO DO PROPRIETÁRIO PRINCIPAL",
+                "cpf": "CPF DO PROPRIETÁRIO PRINCIPAL",
+                "imovel": "NOME DO IMÓVEL RURAL DE ORIGEM",
+                "localidade": "MUNICÍPIO OU LOCALIDADE DE ORIGEM"
+            }},
             "confrontantes": [
                 {{
                     "confrontante_imovel": "Nome do Imóvel Confrontante",
-                    "confrontante_matricula": "Número da Matrícula",
+                    "confrontante_matricula": "Número da Matrícula/Transcrição",
                     "confrontante_comarca": "Nome da Comarca",
                     "confrontante_proprietario": "Nome do Proprietário Confrontante",
                     "confrontante_cpf": "CPF do Confrontante",
@@ -111,9 +118,9 @@ class GeradorAnuenciaIncraWord:
                             "latitude": "Latitude formatada (Graus Minutos Segundos)",
                             "altitude": "Altitude com duas casas",
                             "vante": "Código do Vértice de Vante",
-                            "azimute": "Azimute formatado (Graus Minutos)",
+                            "azimute": "Azimute formatado",
                             "distancia": "Distância formatada com duas casas",
-                            "confrontacao_completa": "Descrição completa da confrontação conforme os modelos"
+                            "confrontacao_completa": "Descrição completa da confrontação"
                         }}
                     ]
                 }}
@@ -129,16 +136,13 @@ class GeradorAnuenciaIncraWord:
             )
 
             texto_resposta = response.text.strip()
+            # Tratamento de segurança para wraps de markdown
             if texto_resposta.startswith("```json"):
                 texto_resposta = texto_resposta.split("```json")[1].split("```")[0].strip()
             elif texto_resposta.startswith("```"):
                 texto_resposta = texto_resposta.split("```")[1].split("```")[0].strip()
 
             dados = json.loads(texto_resposta)
-
-            if "confrontantes" not in dados:
-                dados = {"confrontantes": [dados]}
-
             return dados
         except Exception as e:
             logger.error(f"Erro ao obter dados estruturados do Gemini: {str(e)}")
@@ -176,34 +180,35 @@ class GeradorAnuenciaIncraWord:
         return texto_memorial
 
     def gerar_documentos_pelo_memorial(
-        self, conteudo_arquivo: bytes, nome_arquivo: str, dados_projeto: Dict[str, Any]
+        self, conteudo_arquivo: bytes, nome_arquivo: str, dados_projeto: Dict[str, Any] = None
     ) -> List[Tuple[str, io.BytesIO]]:
         """
-        Gera um documento Word separado para cada confrontante identificado no memorial.
+        Gera um documento Word separado para cada confrontante identificado no memorial,
+        extraindo todas as informações do documento original.
         """
         if not conteudo_arquivo:
             raise ValueError("O conteúdo do arquivo está vazio ou corrompido.")
 
         texto_memorial = self._extrair_texto_memorial(conteudo_arquivo, nome_arquivo)
-        dados_ia = self._obter_dados_estruturados_com_ia(texto_memorial, dados_projeto)
+        dados_ia = self._obter_dados_estruturados_com_ia(texto_memorial)
+        
         confrontantes = dados_ia.get("confrontantes") or self._estrutura_padrao()["confrontantes"]
+        dados_origem = dados_ia.get("imovel_origem") or self._estrutura_padrao()["imovel_origem"]
 
         documentos: List[Tuple[str, io.BytesIO]] = []
         for dados_confrontante in confrontantes:
             nome_confrontante = str(
                 dados_confrontante.get("confrontante_proprietario", "Confrontante")
             ).strip()
-            buffer = self._montar_documento_confrontante(dados_confrontante, dados_projeto)
+            # Passa a estrutura extraída da IA contendo a origem correta do proprietário
+            buffer = self._montar_documento_confrontante(dados_confrontante, dados_origem)
             documentos.append((nome_confrontante, buffer))
 
         return documentos
 
     def gerar_documento_pelo_memorial(
-        self, conteudo_arquivo: bytes, nome_arquivo: str, dados_projeto: Dict[str, Any]
+        self, conteudo_arquivo: bytes, nome_arquivo: str, dados_projeto: Dict[str, Any] = None
     ) -> io.BytesIO:
-        """
-        Mantido para compatibilidade simples (retorna o primeiro).
-        """
         documentos = self.gerar_documentos_pelo_memorial(conteudo_arquivo, nome_arquivo, dados_projeto)
         return documentos[0][1]
 
@@ -230,27 +235,27 @@ class GeradorAnuenciaIncraWord:
         return zip_buffer
 
     def _montar_documento_confrontante(
-        self, dados_ia: Dict[str, Any], dados_projeto: Dict[str, Any]
+        self, dados_ia: Dict[str, Any], dados_origem: Dict[str, str]
     ) -> io.BytesIO:
         """
-        Gera o documento idêntico aos modelos reais enviados.
+        Gera o documento Word da declaração de anuência do INCRA.
         """
         doc = Document()
 
-        # Margens Estreitas conforme os modelos enviados
+        # Margens Estreitas
         for section in doc.sections:
             section.top_margin = Inches(0.75)
             section.bottom_margin = Inches(0.75)
             section.left_margin = Inches(0.75)
             section.right_margin = Inches(0.75)
 
-        # Estilo de Fonte Padrão (Times New Roman, 11pt)
+        # Estilo de Fonte Padrão
         style = doc.styles['Normal']
         font = style.font
         font.name = 'Arial'
         font.size = Pt(11)
 
-        # 1. TÍTULO (DECLARAÇÃO DE RESPEITO DE LIMITES)
+        # 1. TÍTULO
         p_titulo = doc.add_paragraph()
         p_titulo.alignment = WD_ALIGN_PARAGRAPH.CENTER
         p_titulo.paragraph_format.space_before = Pt(0)
@@ -260,10 +265,10 @@ class GeradorAnuenciaIncraWord:
         run_titulo.font.size = Pt(12)
         run_titulo.font.name = 'Arial'
 
-        # 2. TEXTO DA DECLARAÇÃO (Idêntico ao modelo)
-        proprietario_origem = dados_projeto.get("proprietario", "AGOSTINHO IZOTON").upper()
-        cpf_origem = dados_projeto.get("cpf_proprietario", "215.894.707-10")
-        localidade_origem = dados_projeto.get("local", "Vila Valério-ES")
+        # 2. DADOS DO PROPRIETÁRIO EXTRAÍDOS DO PRÓPRIO MEMORIAL PELA IA
+        proprietario_origem = str(dados_origem.get("proprietario", "AGOSTINHO IZOTON")).upper()
+        cpf_origem = str(dados_origem.get("cpf", "___.___.___-__"))
+        localidade_origem = str(dados_origem.get("localidade", "Vila Valério - ES"))
 
         tecnico_nome = self.dados_tecnico.get("nome", "Régis Campo da Silva")
         tecnico_cfta = self.dados_tecnico.get("cfta", "1119851971-1")
@@ -274,33 +279,28 @@ class GeradorAnuenciaIncraWord:
         p_corpo.paragraph_format.space_after = Pt(12)
         p_corpo.paragraph_format.line_spacing = 1.15
         
-        run_corpo1 = p_corpo.add_run("Eu, ")
-        run_corpo1.font.name = 'Arial'
-        run_corpo2 = p_corpo.add_run(f"{proprietario_origem}, CPF {cpf_origem}")
-        run_corpo2.bold = True
-        run_corpo2.font.name = 'Arial'
-        run_corpo3 = p_corpo.add_run(f", residente no Jurama, Corrego Sete Quedas, {localidade_origem}, e eu, ")
-        run_corpo3.font.name = 'Arial'
-        run_corpo4 = p_corpo.add_run(f"{tecnico_nome}")
-        run_corpo4.bold = True
-        run_corpo4.font.name = 'Arial'
-        run_corpo5 = p_corpo.add_run(f", Técnico em Agropecuária, CFTA {tecnico_cfta}, credenciado pelo INCRA sob o código ")
-        run_corpo5.font.name = 'Arial'
-        run_corpo6 = p_corpo.add_run(f"{codigo_incra}")
-        run_corpo6.bold = True
-        run_corpo6.font.name = 'Arial'
-        run_corpo7 = p_corpo.add_run(f", declaramos sob as penas da Lei que quando dos trabalhos topográficos executados na citada propriedade ")
-        run_corpo7.font.name = 'Arial'
-        run_corpo8 = p_corpo.add_run("foram respeitados os limites de \"divisas in loco\"")
-        run_corpo8.bold = True
-        run_corpo8.font.name = 'Arial'
-        run_corpo9 = p_corpo.add_run(" com os confrontantes abaixo relacionados, ")
-        run_corpo9.font.name = 'Arial'
-        run_corpo10 = p_corpo.add_run("não havendo qualquer litígio entre as partes.")
-        run_corpo10.bold = True
-        run_corpo10.font.name = 'Arial'
+        p_corpo.add_run("Eu, ").font.name = 'Arial'
+        run_corp2 = p_corpo.add_run(f"{proprietario_origem}, CPF {cpf_origem}")
+        run_corp2.bold = True
+        run_corp2.font.name = 'Arial'
+        p_corpo.add_run(f", residente no Jurama, Corrego Sete Quedas, {localidade_origem}, e eu, ").font.name = 'Arial'
+        run_corp4 = p_corpo.add_run(f"{tecnico_nome}")
+        run_corp4.bold = True
+        run_corp4.font.name = 'Arial'
+        p_corpo.add_run(f", Técnico em Agropecuária, CFTA {tecnico_cfta}, credenciado pelo INCRA sob o código ").font.name = 'Arial'
+        run_corp6 = p_corpo.add_run(f"{codigo_incra}")
+        run_corp6.bold = True
+        run_corp6.font.name = 'Arial'
+        p_corpo.add_run(f", declaramos sob as penas da Lei que quando dos trabalhos topográficos executados na citada propriedade ").font.name = 'Arial'
+        run_corp8 = p_corpo.add_run("foram respeitados os limites de \"divisas in loco\"")
+        run_corp8.bold = True
+        run_corp8.font.name = 'Arial'
+        p_corpo.add_run(" com os confrontantes abaixo relacionados, ").font.name = 'Arial'
+        run_corp10 = p_corpo.add_run("não havendo qualquer litígio entre as partes.")
+        run_corp10.bold = True
+        run_corp10.font.name = 'Arial'
 
-        # 3. CABEÇALHO CONFRONTANTES E DATA (Idêntico ao modelo)
+        # 3. CABEÇALHO CONFRONTANTES E DATA
         p_confrontantes_label = doc.add_paragraph()
         p_confrontantes_label.paragraph_format.space_after = Pt(4)
         run_conf_label = p_confrontantes_label.add_run(" Confrontantes:")
@@ -317,10 +317,9 @@ class GeradorAnuenciaIncraWord:
         p_data = doc.add_paragraph()
         p_data.paragraph_format.space_after = Pt(8)
         p_data.alignment = WD_ALIGN_PARAGRAPH.LEFT
-        run_data = p_data.add_run(texto_data)
-        run_data.font.name = 'Arial'
+        p_data.add_run(texto_data).font.name = 'Arial'
 
-        # 4. TABELA 1: DADOS DO CONFRONTANTE (Idêntico ao modelo)
+        # 4. TABELA 1: DADOS DO CONFRONTANTE
         tabela_conf = doc.add_table(rows=2, cols=4)
         tabela_conf.style = 'Table Grid'
         tabela_conf.autofit = False
@@ -353,22 +352,19 @@ class GeradorAnuenciaIncraWord:
                 p.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 p.paragraph_format.space_after = Pt(2)
                 p.paragraph_format.space_before = Pt(2)
-                if len(p.runs) > 0:
-                    p.runs[0].font.size = Pt(9)
 
         # 5. DIVISOR DESCRIÇÃO DA PARCELA
         p_desc = doc.add_paragraph()
         p_desc.paragraph_format.space_before = Pt(12)
         p_desc.paragraph_format.space_after = Pt(6)
-        run_desc = p_desc.add_run("DESCRIÇÃO DA PARCELA")
-        run_desc.bold = True
+        p_desc.add_run("DESCRIÇÃO DA PARCELA").bold = True
 
-        # 6. TABELA 2: PARCELA / VÉRTICES / VANTE (Idêntico ao modelo)
-        tabela_vert = doc.add_table(rows=1, cols=8)
+        # 6. TABELA 2: PARCELA / VÉRTICES / VANTE
+        tabela_vert = doc.add_table(rows=2, cols=8)
         tabela_vert.style = 'Table Grid'
         tabela_vert.autofit = False
 
-        hdr_p = tabela_parcela.rows[0].cells
+        hdr_p = tabela_vert.rows[0].cells
         hdr_p[0].merge(hdr_p[3])
         hdr_p[0].text = "VÉRTICE"
         hdr_p[0].paragraphs[0].runs[0].font.bold = True
@@ -383,12 +379,11 @@ class GeradorAnuenciaIncraWord:
             "Código", "Longitude", "Latitude", "Altitude (m)",
             "Código", "Azimute", "Dist. (m)", "Confrontações"
         ]
-        sub_cells = tabela_parcela.rows[1].cells
+        sub_cells = tabela_vert.rows[1].cells
         for idx, text in enumerate(sub_headers):
             sub_cells[idx].text = text
             sub_cells[idx].paragraphs[0].runs[0].font.bold = True
             sub_cells[idx].paragraphs[0].runs[0].font.size = Pt(9)
-
 
         larguras_t2 = [
             Inches(1.0), Inches(1.1), Inches(1.1), Inches(0.8),
@@ -396,17 +391,8 @@ class GeradorAnuenciaIncraWord:
         ]
 
         vertices_dados = dados_ia.get("vertices", [])
-        if not vertices_dados:
-            vertices_dados = [
-                {
-                    "codigo": "G1D-P-06815", "longitude": "-40°17'14,014\"", "latitude": "-18°59'22,007\"", "altitude": "58.39",
-                    "vante": "G1D-P-06816", "azimute": "02°15'", "distancia": "41,66",
-                    "confrontacao_completa": f"CNS: 02.170-9 | Mat. {dados_ia.get('confrontante_matricula', '')} | {dados_ia.get('confrontante_imovel', '')}; {dados_ia.get('confrontante_proprietario', '')}"
-                }
-            ]
-
         for v in vertices_dados:
-            row = tabela_parcela.add_row()
+            row = tabela_vert.add_row()
             cells = row.cells
             cells[0].text = str(v.get("codigo", ""))
             cells[1].text = str(v.get("longitude", ""))
@@ -417,9 +403,8 @@ class GeradorAnuenciaIncraWord:
             cells[6].text = str(v.get("distancia", ""))
             cells[7].text = str(v.get("confrontacao_completa", ""))
 
-        tabela_parcela._tbl.remove(tabela_parcela.rows[2]._tr)
-
-        for r_idx, row in enumerate(tabela_parcela.rows):
+        # Formatação das larguras e fontes da tabela 2
+        for r_idx, row in enumerate(tabela_vert.rows):
             for c_idx, cell in enumerate(row.cells):
                 cell.width = larguras_t2[c_idx]
                 p = cell.paragraphs[0]
@@ -429,14 +414,11 @@ class GeradorAnuenciaIncraWord:
                 if len(p.runs) > 0:
                     p.runs[0].font.size = Pt(8.5)
                     p.runs[0].font.name = 'Arial'
-                if r_idx == 0:
-                    p.runs[0].font.size = Pt(9.5)
 
-        # Quebra de Espaço antes das Assinaturas
-        p_espaco = doc.add_paragraph()
-        p_espaco.paragraph_format.space_before = Pt(36)
+        # Espaço antes das Assinaturas
+        doc.add_paragraph().paragraph_format.space_before = Pt(36)
 
-        # 7. TABELA DE ASSINATURAS HORIZONTAIS (Origem e Confrontante alinhados lado a lado)
+        # 7. TABELA DE ASSINATURAS HORIZONTAIS
         tabela_assinaturas = doc.add_table(rows=2, cols=2)
         tabela_assinaturas.autofit = False
         tabela_assinaturas.columns[0].width = Inches(3.7)
@@ -469,10 +451,8 @@ class GeradorAnuenciaIncraWord:
                         run.font.size = Pt(9.5)
                         run.font.name = 'Arial'
 
-        # 8. ASSINATURA DO RESPONSÁVEL TÉCNICO (Centralizado abaixo das outras duas)
-        p_rt_espaco = doc.add_paragraph()
-        p_rt_espaco.paragraph_format.space_before = Pt(28)
-
+        # 8. ASSINATURA DO RESPONSÁVEL TÉCNICO
+        doc.add_paragraph().paragraph_format.space_before = Pt(28)
         p_linha_rt = doc.add_paragraph()
         p_linha_rt.alignment = WD_ALIGN_PARAGRAPH.CENTER
         p_linha_rt.add_run("_____________________________________")
@@ -487,18 +467,14 @@ class GeradorAnuenciaIncraWord:
             run.font.size = Pt(9.5)
             run.font.name = 'Arial'
 
-        # 9. ANEXOS (Idêntico ao modelo)
-        p_anexos_espaco = doc.add_paragraph()
-        p_anexos_espaco.paragraph_format.space_before = Pt(24)
-
+        # 9. ANEXOS
+        doc.add_paragraph().paragraph_format.space_before = Pt(24)
         p_anexos = doc.add_paragraph()
-        run_anexos_label = p_anexos.add_run("Anexos: ")
-        run_anexos_label.bold = True
+        p_anexos.add_run("Anexos: ").bold = True
         p_anexos.add_run("Planta do Imóvel \t\t Memorial Descritivo do Imóvel")
-        p_anexos.runs[0].font.size = Pt(9)
-        p_anexos.runs[0].font.name = 'Arial'
-        p_anexos.runs[1].font.size = Pt(9)
-        p_anexos.runs[1].font.name = 'Arial'
+        for run in p_anexos.runs:
+            run.font.size = Pt(9)
+            run.font.name = 'Arial'
 
         buffer = io.BytesIO()
         doc.save(buffer)
