@@ -130,8 +130,12 @@ def main():
         dpi_conversao = st.slider("Resolução (DPI)", 100, 400, int(PROCESSAMENTO_CONFIG.DPI_PADRAO), 50)
         tamanho_max = st.slider("Upload Máximo (MB)", 10, 100, int(PROCESSAMENTO_CONFIG.TAMANHO_MAX_PDF_MB), 10)
 
-    # Abas Principais
-    tab_memorial, tab_anuencias = st.tabs(["📝 Memorial Descritivo", "🤝 Anuências Co-proprietários"])
+    # Abas Principais (ADIÇÃO DA ABA DE ANUÊNCIAS INCRA)
+    tab_memorial, tab_anuencias, tab_anuencias_incra = st.tabs([
+        "📝 Memorial Descritivo", 
+        "🤝 Anuências Co-proprietários", 
+        "🌾 Anuências INCRA"
+    ])
 
     with tab_memorial:
         st.markdown("### 📥 Entrada de Dados do Memorial")
@@ -242,18 +246,18 @@ def main():
             st.warning("⚠️ Nenhum memorial descritivo processado nesta sessão. Processe os dados na aba anterior.")
         else:
             segmentos = dados_memoriais.get("segmentos", [])
-            termos_ignorados = ["AV.", "RUA", "AVENIDA", "ESTRADA", "PROJEÇÃO", "VALA", "CORREGO", "VALAO"]
+            termos_indigo = ["AV.", "RUA", "AVENIDA", "ESTRADA", "PROJEÇÃO", "VALA", "CORREGO", "VALAO"]
             
             confrontantes_validos = sorted(list(set(
                 [str(s.get("confrontante", "")).strip().upper() for s in segmentos
-                 if s.get("confrontante") and not any(t in str(s.get("confrontante", "")).strip().upper() for t in termos_ignorados)]
+                 if s.get("confrontante") and not any(t in str(s.get("confrontante", "")).strip().upper() for t in termos_indigo)]
             )))
 
             if not confrontantes_validos:
                 st.info("ℹ️ Nenhum proprietário confrontante individual elegível foi mapeado na poligonal deste imóvel.")
             else:
                 st.success(f"🔍 Encontrados **{len(confrontantes_validos)}** confrontantes elegíveis para Termos de Anuência.")
-                trt_numero = st.text_input("Número da TRT / ART vinculada:", value="")
+                trt_numero = st.text_input("Número da TRT / ART vinculada:", value="", key="trt_anuencias")
 
                 from gerador_anuencias import GeradorAnuenciaWord
                 dados_empresa_dict = {"nome": empresa_nome, "endereco": empresa_endereco, "telefone": empresa_telefone, "email": empresa_email}
@@ -290,6 +294,79 @@ def main():
                                     )
                                 except Exception as err:
                                     st.error(f"Falha na compilação: {err}")
+
+    # ------------------------------------------
+    # ABA 3: ANUÊNCIAS INCRA (NOVA FUNCIONALIDADE)
+    # ------------------------------------------
+    with tab_anuencias_incra:
+        st.markdown("### 🌾 Geração Automatizada de Declarações de Anuência INCRA")
+        
+        # Campo para carregar o arquivo "memorial" necessário para o INCRA
+        memorial_incra_file = st.file_uploader(
+            "Carregar arquivo Memorial (TXT, PDF ou DOCX correspondente):", 
+            type=["txt", "pdf", "docx"], 
+            key="memorial_incra"
+        )
+        
+        if not memorial_incra_file:
+            st.info("💡 Por favor, carregue o arquivo de Memorial correspondente acima para iniciar a geração das anuências do INCRA.")
+        else:
+            st.success("📄 Arquivo de Memorial carregado com sucesso!")
+            trt_incra_numero = st.text_input("Número da TRT / ART vinculada (INCRA):", value="", key="trt_incra")
+            
+            # Botão de processamento da Anuência INCRA
+            if st.button("⚙️ PROCESSAR E GERAR ANUÊNCIAS INCRA", type="primary", use_container_width=True):
+                with st.spinner("Analisando o memorial e estruturando dados do INCRA..."):
+                    try:
+                        # Importação condicional do novo módulo que será criado
+                        from gerador_anuencia_incra import GeradorAnuenciaIncraWord
+                        
+                        dados_empresa_dict = {
+                            "nome": empresa_nome, 
+                            "endereco": empresa_endereco, 
+                            "telefone": empresa_telefone, 
+                            "email": empresa_email
+                        }
+                        dados_tecnico_dict = {
+                            "nome": technico_nome, 
+                            "cfta": tecnico_cfta, 
+                            "trt": trt_incra_numero, 
+                            "cpf": cpf_tecnico
+                        }
+                        
+                        # Instanciação do novo gerador
+                        gerador_incra = GeradorAnuenciaIncraWord(dados_empresa_dict, dados_tecnico_dict)
+                        
+                        # Processamento do arquivo enviado pelo usuário
+                        arquivo_conteudo = memorial_incra_file.read()
+                        
+                        # Chamada para o método que vai processar e gerar o Word
+                        # Nota: A lógica interna deste método será construída na sequência
+                        documento_gerado = gerador_incra.gerar_documento_pelo_memorial(
+                            arquivo_conteudo, 
+                            memorial_incra_file.name,
+                            {
+                                "proprietario": cliente_proprietario,
+                                "imovel": cliente_imovel,
+                                "local": cliente_local,
+                                "area": cliente_area,
+                                "perimetro": cliente_perimetro
+                            }
+                        )
+                        
+                        st.balloons()
+                        st.success("🎉 Anuência INCRA gerada com sucesso!")
+                        
+                        st.download_button(
+                            label="📥 BAIXAR ANUÊNCIA INCRA (.DOCX)",
+                            data=documento_gerado,
+                            file_name=f"ANUENCIA_INCRA_{sanitizar_nome_arquivo(cliente_proprietario.upper())}.docx",
+                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            use_container_width=True
+                        )
+                    except Exception as err:
+                        st.error(f"Erro ao processar as anuências INCRA: {err}")
+                        logger.error(f"Erro INCRA: {str(err)}", exc_info=True)
 
 if __name__ == "__main__":
     main()
