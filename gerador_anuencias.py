@@ -11,10 +11,10 @@ from typing import Dict, List, Any
 import streamlit as st
 import google.generativeai as genai
 from docx import Document
-from docx.shared import Pt, Inches, RGBColor
+from docx.shared import Pt, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.oxml import parse_xml
-from docx.oxml.ns import nsdecls
+from docx.oxml import parse_xml, OxmlElement
+from docx.oxml.ns import nsdecls, qn
 
 logger = logging.getLogger(__name__)
 
@@ -71,33 +71,11 @@ class GeradorAnuenciaWord:
         """
         try:
             string_limpa = str(valor_distancia).strip()
-            # Mantém apenas números, pontos e vírgulas
             string_limpa = re.sub(r"[^\d,.]", "", string_limpa)
-            # Substitui vírgula por ponto para conversão americana padrão
             string_limpa = string_limpa.replace(",", ".")
             return float(string_limpa) if string_limpa else 0.0
         except Exception:
             return 0.0
-
-    def _definir_bordas_tabela(self, tabela):
-        """Aplica bordas finas e discretas nas células da tabela."""
-        tblPr = tabela._tbl.tblPr
-        tblBorders = parse_xml(
-            r'<w:tblBorders %s>'
-            r'  <w:top w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/>'
-            r'  <w:left w:val="none"/>'
-            r'  <w:bottom w:val="single" w:sz="4" w:space="0" w:color="CCCCCC"/>'
-            r'  <w:right w:val="none"/>'
-            r'  <w:insideH w:val="single" w:sz="4" w:space="0" w:color="E2E8F0"/>'
-            r'  <w:insideV w:val="none"/>'
-            r'</w:tblBorders>' % nsdecls('w')
-        )
-        tblPr.append(tblBorders)
-
-    def _colorir_celula(self, celula, hex_color):
-        """Aplica cor de fundo (shading) a uma célula específica."""
-        shading = parse_xml(f'<w:shd {nsdecls("w")} w:fill="{hex_color}"/>')
-        celula._tc.get_or_add_tcPr().append(shading)
 
     def gerar_documento(self, dados_anuencia: Dict[str, Any]) -> io.BytesIO:
         """
@@ -110,77 +88,72 @@ class GeradorAnuenciaWord:
 
         doc = Document()
 
-        # Configuração de Margens (Exatamente 2.54 cm / 1 polegada)
+        # Configuração de Margens Padrão (2.54 cm / 1 polegada)
         for section in doc.sections:
             section.top_margin = Inches(1)
             section.bottom_margin = Inches(1)
             section.left_margin = Inches(1)
             section.right_margin = Inches(1)
 
-        # Configuração de Estilo e Fonte Base
+        # Configuração de Estilo e Fonte (Calibri 11)
         style = doc.styles['Normal']
         style.font.name = 'Calibri'
         style.font.size = Pt(11)
-        style.font.color.rgb = RGBColor(51, 65, 85) # Slate 700
 
-        # 1. TÍTULO
+        # 1. TÍTULO: Negrito, Centralizado e em Letras Maiúsculas 
         p_titulo = doc.add_paragraph()
         p_titulo.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p_titulo.paragraph_format.space_after = Pt(24)
+        p_titulo.paragraph_format.space_before = Pt(0)
+        p_titulo.paragraph_format.space_after = Pt(18)
         run_titulo = p_titulo.add_run("DECLARAÇÃO DE RECONHECIMENTO DE LIMITES")
         run_titulo.bold = True
-        run_titulo.font.size = Pt(14)
-        run_titulo.font.color.rgb = RGBColor(15, 23, 42) # Slate 900
+        run_titulo.font.size = Pt(12) # Tamanho padrão do modelo físico
 
-        # 2. TEXTO DE ABERTURA
+        # 2. TEXTO DE ABERTURA: Alinhamento Justificado [cite: 26, 38]
         texto_abertura = (
             f"Eu, {confrontante.title()}, proprietário do imóvel confrontante, e eu, "
             f"{proprietario.title()}, proprietário do imóvel urbano, declaramos não "
             f"existir nenhuma disputa ou discordância sobre os limites comuns existentes entre os citados imóveis."
         )
         p_abertura = doc.add_paragraph(texto_abertura)
+        p_abertura.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
         p_abertura.paragraph_format.line_spacing = 1.15
-        p_abertura.paragraph_format.space_after = Pt(14)
+        p_abertura.paragraph_format.space_after = Pt(12)
 
-        # 3. DESCRIÇÃO DO TRECHO
+        # 3. DESCRIÇÃO DO TRECHO (Via Inteligência Artificial) [cite: 27, 39]
         p_desc_tit = doc.add_paragraph()
+        p_desc_tit.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
         p_desc_tit.paragraph_format.space_after = Pt(6)
-        run_desc_tit = p_desc_tit.add_run("Descrição do trecho de confrontação:")
-        run_desc_tit.bold = True
-        run_desc_tit.font.color.rgb = RGBColor(15, 23, 42)
+        p_desc_tit.add_run("Descrição do trecho de confrontação:").bold = True
         
         texto_ia = self.consultar_gemini_para_trecho(confrontante, proprietario, segmentos)
         p_desc_corpo = doc.add_paragraph(texto_ia)
+        p_desc_corpo.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
         p_desc_corpo.paragraph_format.line_spacing = 1.15
-        p_desc_corpo.paragraph_format.space_after = Pt(18)
+        p_desc_corpo.paragraph_format.space_after = Pt(12)
 
-        # 4. TABELA TÉCNICA DO TRECHO
+        # 4. TABELA TÉCNICA: Mantém linhas de grade visíveis ('Table Grid') 
         tabela = doc.add_table(rows=1, cols=7)
+        tabela.style = 'Table Grid'
         tabela.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        self._definir_bordas_tabela(tabela)
         
         hdr_cells = tabela.rows[0].cells
         headers = ["De", "Para", "Azimute", "Distância (m)", "E(X)", "N(Y)", "Altitude"]
-        cor_cabecalho_hex = "1E293B" 
-        
         for i, header in enumerate(headers):
             hdr_cells[i].text = header
-            self._colorir_celula(hdr_cells[i], cor_cabecalho_hex)
             p = hdr_cells[i].paragraphs[0]
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER
             run = p.runs[0]
             run.font.bold = True
             run.font.size = Pt(10)
-            run.font.color.rgb = RGBColor(255, 255, 255)
 
         total_distancia = 0.0
-        for r_idx, s in enumerate(segmentos):
+        for s in segmentos:
             row_cells = tabela.add_row().cells
             row_cells[0].text = str(s['de'])
             row_cells[1].text = str(s['para'])
             row_cells[2].text = str(s['azimute'])
             
-            # ✅ RESOLUÇÃO DO SEU PROBLEMA: Conversão e tratamento seguro de distância
             dist_val = self._limpar_e_converter_distancia(s['distancia'])
             total_distancia += dist_val
             row_cells[3].text = f"{dist_val:.2f}".replace('.', ',')
@@ -188,65 +161,64 @@ class GeradorAnuenciaWord:
             row_cells[4].text = str(s.get('e_x', '0,00'))
             row_cells[5].text = str(s.get('n_y', '0,00'))
             row_cells[6].text = "0,00"
-
-            cor_linha = "F8FAFC" if r_idx % 2 == 0 else "FFFFFF"
+            
+            # Centralizar células de dados da tabela
             for cell in row_cells:
-                self._colorir_celula(cell, cor_linha)
                 p = cell.paragraphs[0]
                 p.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 if p.runs:
                     p.runs[0].font.size = Pt(9.5)
 
-        # Linha de Totais Estilizada
+        # Linha de Totais da Tabela 
         row_totais = tabela.add_row().cells
-        cor_total_hex = "F1F5F9"
-        
-        for cell in row_totais:
-            self._colorir_celula(cell, cor_total_hex)
-            
         row_totais[0].text = "Total"
-        p_tot = row_totais[0].paragraphs[0]
-        p_tot.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p_tot.runs[0].font.bold = True
-        p_tot.runs[0].font.size = Pt(9.5)
-        p_tot.runs[0].font.color.rgb = RGBColor(15, 23, 42)
+        row_totais[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        row_totais[0].paragraphs[0].runs[0].font.bold = True
+        row_totais[0].paragraphs[0].runs[0].font.size = Pt(9.5)
 
         row_totais[3].text = f"{total_distancia:.2f}".replace('.', ',')
-        p_dist_tot = row_totais[3].paragraphs[0]
-        p_dist_tot.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p_dist_tot.runs[0].font.bold = True
-        p_dist_tot.runs[0].font.size = Pt(9.5)
-        p_dist_tot.runs[0].font.color.rgb = RGBColor(15, 23, 42)
+        row_totais[3].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        row_totais[3].paragraphs[0].runs[0].font.bold = True
+        row_totais[3].paragraphs[0].runs[0].font.size = Pt(9.5)
         
+        # Garante células vazias centralizadas e limpas
         for idx in [1, 2, 4, 5, 6]:
             row_totais[idx].text = ""
+            row_totais[idx].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
         # Espaço pós tabela
         p_espaco = doc.add_paragraph("")
-        p_espaco.paragraph_format.space_before = Pt(12)
+        p_espaco.paragraph_format.space_before = Pt(6)
 
-        # 5. PARÁGRAFO DE RESPONSABILIDADE TÉCNICA
+        # 5. PARÁGRAFO DE RESPONSABILIDADE TÉCNICA: Justificado [cite: 29, 30, 41, 42]
+        # Inserido o campo de RG e a estrutura correta extraída do modelo original
+        rg_rt = self.dados_tecnico.get('rg', '1.936.653') # Padrão extraído do modelo físico
+        codigo_incra = self.dados_tecnico.get('codigo_incra', 'G1D')
+        
         texto_tecnico = (
             f"Declaramos ainda que o profissional {self.dados_tecnico.get('nome')} "
-            f"(CPF nº {self.dados_tecnico.get('cpf', '111.985.197-11')}), Resp. Técnico "
-            f"(CFTA {self.dados_tecnico.get('cfta')}), credenciado pelo INCRA sob o cod. G1D, com a emissão da TRT nº "
-            f"{self.dados_tecnico.get('trt', '')}, nos indicou as demarcações do limite entre as nossas propriedades, tanto no campo como "
+            f"(RG nº {rg_rt} e CPF nº {self.dados_tecnico.get('cpf', '111.985.197-11')}), Resp. "
+            f"Técnico (CFTA {self.dados_tecnico.get('cfta')}), credenciado pelo INCRA sob o cod. {codigo_incra}, com a emissão da TRT nº "
+            f"{self.dados_tecnico.get('trt')}, nos indicou as demarcações do limite entre as nossas propriedades, tanto no campo como "
             f"nas suas apresentações gráficas. Concordamos com essa demarcação, expressa na planta e no memorial descritivo, "
             f"ambos em anexo, e reconhecemos esta descrição como o limite legal entre nossas propriedades."
         )
         p_tecnico = doc.add_paragraph(texto_tecnico)
+        p_tecnico.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
         p_tecnico.paragraph_format.line_spacing = 1.15
-        p_tecnico.paragraph_format.space_after = Pt(24)
+        p_tecnico.paragraph_format.space_after = Pt(20)
 
-        # 6. ENCERRAMENTO COM DATA
+        # 6. ENCERRAMENTO COM DATA [cite: 31, 43]
+        # Ajusta para a cidade correta
         data_atual = datetime.now().strftime('%d de %m de %Y')
         p_data = doc.add_paragraph(f"{local}, {data_atual}.")
-        p_data.paragraph_format.space_after = Pt(36)
+        p_data.paragraph_format.space_after = Pt(28)
 
-        # 7. CAMPOS DE ASSINATURA DOS PROPRIETÁRIOS (Sem bordas)
+        # 7. CAMPOS DE ASSINATURA LADO A LADO: Tabela Invisível de 2 colunas 
         tab_assinatura = doc.add_table(rows=2, cols=2)
         tab_assinatura.alignment = WD_ALIGN_PARAGRAPH.CENTER
         
+        # Esconder bordas para a seção de assinatura ficar perfeitamente limpa
         tblPr = tab_assinatura._tbl.tblPr
         tblBorders = parse_xml(
             r'<w:tblBorders %s>'
@@ -263,7 +235,6 @@ class GeradorAnuenciaWord:
         celulas_l1 = tab_assinatura.rows[0].cells
         celulas_l1[0].text = "__________________________________________________"
         celulas_l1[1].text = "__________________________________________________"
-        
         celulas_l1[0].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
         celulas_l1[1].paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
         
@@ -277,24 +248,25 @@ class GeradorAnuenciaWord:
             p.paragraph_format.space_before = Pt(4)
             if p.runs:
                 p.runs[0].font.size = Pt(10)
-                p.runs[0].font.color.rgb = RGBColor(71, 85, 105)
 
-        doc.add_paragraph("\n\n")
+        # Espaçamento para a assinatura do RT
+        p_espaco_final = doc.add_paragraph("\n")
 
-        # 8. ASSINATURA DO RESPONSÁVEL TÉCNICO
+        # 8. ASSINATURA DO RESPONSÁVEL TÉCNICO: Centralizada abaixo das duas 
         p_ass_tec = doc.add_paragraph()
         p_ass_tec.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_ass_tec.paragraph_format.space_before = Pt(18)
+        
         run_linha = p_ass_tec.add_run("______________________________\n")
         run_linha.bold = True
         
         run_nome_tec = p_ass_tec.add_run(f"{self.dados_tecnico.get('nome')}\n")
         run_nome_tec.bold = True
-        run_nome_tec.font.color.rgb = RGBColor(15, 23, 42)
         
         run_cargo = p_ass_tec.add_run(f"Resp. Técnico\nCFTA: {self.dados_tecnico.get('cfta')}")
         run_cargo.font.size = Pt(10)
-        run_cargo.font.color.rgb = RGBColor(71, 85, 105)
 
+        # Salva o arquivo final em memória para disponibilizar no Streamlit
         buffer = io.BytesIO()
         doc.save(buffer)
         buffer.seek(0)
