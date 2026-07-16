@@ -16,7 +16,6 @@ except ImportError:
 from docx import Document
 from docx.shared import Pt, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.oxml import parse_xml
 from docx.oxml.ns import nsdecls
 
@@ -91,7 +90,7 @@ class GeradorAnuenciaIncraWord:
         \"\"\"
 
         REGRAS DE EXTRAÇÃO:
-        1. Identifique cada confrontante distincto (por nome de proprietário, matrícula ou imóvel) ao longo do perímetro.
+        1. Identifique cada confrontante distinto (por nome de proprietário, matrícula ou imóvel) ao longo do perímetro.
         2. Agrupe sob cada confrontante APENAS os vértices/segmentos cujo trecho de "vante" faz divisa com ele.
         3. Se o texto for incompreensível, simule dados verossímeis baseados no contexto para manter o JSON estruturado.
         4. Tente encontrar ou estimar o CPF do confrontante se houver menção, caso contrário, deixe em branco para preenchimento manual (ex: "___.___.___-__").
@@ -322,13 +321,14 @@ class GeradorAnuenciaIncraWord:
         run_data.font.name = 'Arial'
 
         # =====================================================================
-        # 4. TABELA 1: DADOS DO CONFRONTANTE (Ajuste Automático ao Conteúdo)
+        # 4. TABELA 1: DADOS DO CONFRONTANTE (Larguras Ajustadas e Compactas)
         # =====================================================================
         tabela_conf = doc.add_table(rows=2, cols=4)
         tabela_conf.style = 'Table Grid'
-        tabela_conf.alignment = WD_TABLE_ALIGNMENT.CENTER
-        tabela_conf.autofit = True  # Habilita o auto-ajuste inteligente das colunas
+        tabela_conf.autofit = False
 
+        # Reduzido para ficar mais perto dos dados reais, evitando vácuo
+        larguras_t1 = [Inches(1.8), Inches(1.0), Inches(1.2), Inches(3.0)]
         headers_t1 = ["Nome Imóvel Rural", "Mat. /Trans.", "Comarca", "Nome do Proprietário"]
 
         hdr_cells = tabela_conf.rows[0].cells
@@ -350,7 +350,8 @@ class GeradorAnuenciaIncraWord:
                     run.font.size = Pt(9.5)
 
         for row in tabela_conf.rows:
-            for cell in row.cells:
+            for idx, cell in enumerate(row.cells):
+                cell.width = larguras_t1[idx]
                 p = cell.paragraphs[0]
                 p.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 p.paragraph_format.space_after = Pt(2)
@@ -366,13 +367,14 @@ class GeradorAnuenciaIncraWord:
         run_desc.bold = True
 
         # =====================================================================
-        # 6. TABELA 2: PARCELA / VÉRTICES / VANTE (Ajuste Automático ao Conteúdo)
+        # 6. TABELA 2: PARCELA / VÉRTICES / VANTE (Corrigido e Compactado)
         # =====================================================================
+        # Iniciado com 2 linhas para acomodar o cabeçalho composto corretamente
         tabela_vert = doc.add_table(rows=2, cols=8)
         tabela_vert.style = 'Table Grid'
-        tabela_vert.alignment = WD_TABLE_ALIGNMENT.CENTER
-        tabela_vert.autofit = True  # Habilita o auto-ajuste inteligente das colunas
+        tabela_vert.autofit = False
 
+        # Primeira Linha do Cabeçalho
         hdr_p = tabela_vert.rows[0].cells
         hdr_p[0].merge(hdr_p[3])
         hdr_p[0].text = "VÉRTICE"
@@ -384,6 +386,7 @@ class GeradorAnuenciaIncraWord:
         hdr_p[4].paragraphs[0].runs[0].font.bold = True
         hdr_p[4].paragraphs[0].runs[0].font.size = Pt(9.5)
 
+        # Segunda Linha (Sub-cabeçalhos)
         sub_headers = [
             "Código", "Longitude", "Latitude", "Altitude (m)",
             "Código", "Azimute", "Dist. (m)", "Confrontações"
@@ -393,6 +396,19 @@ class GeradorAnuenciaIncraWord:
             sub_cells[idx].text = text
             sub_cells[idx].paragraphs[0].runs[0].font.bold = True
             sub_cells[idx].paragraphs[0].runs[0].font.size = Pt(9)
+
+        # Larguras calculadas para remover todo o espaço vago das colunas curtas
+        # e entregar o restante do espaço para a descrição da Confrontação.
+        larguras_t2 = [
+            Inches(0.75),  # Código Vértice (ex: G1D-M-03281) - Justo!
+            Inches(0.95),  # Longitude
+            Inches(0.95),  # Latitude
+            Inches(0.65),  # Altitude (m)
+            Inches(0.75),  # Código Vante (ex: G1D-M-03282) - Justo!
+            Inches(0.60),  # Azimute
+            Inches(0.55),  # Dist. (m) (ex: 210.00) - Compacto!
+            Inches(1.80)   # Confrontações (Ocupa o espaço restante perfeitamente)
+        ]
 
         vertices_dados = dados_ia.get("vertices", [])
         if not vertices_dados:
@@ -416,8 +432,10 @@ class GeradorAnuenciaIncraWord:
             cells[6].text = str(v.get("distancia", ""))
             cells[7].text = str(v.get("confrontacao_completa", ""))
 
+        # Formata células e aplica larguras personalizadas linha por linha
         for r_idx, row in enumerate(tabela_vert.rows):
-            for cell in row.cells:
+            for c_idx, cell in enumerate(row.cells):
+                cell.width = larguras_t2[c_idx]
                 p = cell.paragraphs[0]
                 p.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 p.paragraph_format.space_before = Pt(2)
