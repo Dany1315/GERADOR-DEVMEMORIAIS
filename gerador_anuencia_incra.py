@@ -90,7 +90,7 @@ class GeradorAnuenciaIncraWord:
         \"\"\"
 
         REGRAS DE EXTRAÇÃO:
-        1. Identifique cada confrontante distinto (por nome de proprietário, matrícula ou imóvel) ao longo do perímetro.
+        1. Identifique cada confrontante distinct (por nome de proprietário, matrícula ou imóvel) ao longo do perímetro.
         2. Agrupe sob cada confrontante APENAS os vértices/segmentos cujo trecho de "vante" faz divisa com ele.
         3. Se o texto for incompreensível, simule dados verossímeis baseados no contexto para manter o JSON estruturado.
         4. Tente encontrar ou estimar o CPF do confrontante se houver menção, caso contrário, deixe em branco para preenchimento manual (ex: "___.___.___-__").
@@ -247,18 +247,18 @@ class GeradorAnuenciaIncraWord:
         self, dados_ia: Dict[str, Any], dados_projeto: Dict[str, Any]
     ) -> io.BytesIO:
         """
-        Gera o documento Word otimizado, compacto e idêntico ao modelo físico real.
+        Gera o documento Word otimizado e idêntico ao modelo físico real (com cabeçalho de tabela de linha única).
         """
         doc = Document()
 
-        # Configura margens estreitas no documento
+        # Configura margens estreitas no documento (idêntico ao modelo físico)
         for section in doc.sections:
             section.top_margin = Inches(0.75)
             section.bottom_margin = Inches(0.75)
             section.left_margin = Inches(0.75)
             section.right_margin = Inches(0.75)
 
-        # Configura estilo normal como Arial
+        # Configura estilo normal como Arial 11pt
         style = doc.styles['Normal']
         font = style.font
         font.name = 'Arial'
@@ -288,35 +288,28 @@ class GeradorAnuenciaIncraWord:
         p_corpo.paragraph_format.space_after = Pt(12)
         p_corpo.paragraph_format.line_spacing = 1.15
         
-        run_corpo1 = p_corpo.add_run("Eu, ")
-        run_corpo1.font.name = 'Arial'
-        run_corpo2 = p_corpo.add_run(f"{proprietario_origem}, CPF {cpf_origem}")
-        run_corpo2.bold = True
-        run_corpo2.font.name = 'Arial'
-        run_corpo3 = p_corpo.add_run(f", residente em {localidade_origem}, e eu, ")
-        run_corpo3.font.name = 'Arial'
-        run_corpo4 = p_corpo.add_run(f"{tecnico_nome}")
-        run_corpo4.bold = True
-        run_corpo4.font.name = 'Arial'
-        run_corpo5 = p_corpo.add_run(f", Técnico em Agropecuária, CFTA {tecnico_cfta}, credenciado pelo INCRA sob o código ")
-        run_corpo5.font.name = 'Arial'
-        run_corpo6 = p_corpo.add_run(f"{codigo_incra}")
-        run_corpo6.bold = True
-        run_corpo6.font.name = 'Arial'
-        run_corpo7 = p_corpo.add_run(f", declaramos sob as penas da Lei que quando dos trabalhos topográficos executados na citada propriedade ")
-        run_corpo7.font.name = 'Arial'
-        run_corpo8 = p_corpo.add_run("foram respeitados os limites de \"divisas in loco\"")
-        run_corpo8.bold = True
-        run_corpo8.font.name = 'Arial'
-        run_corpo9 = p_corpo.add_run(" com os confrontantes abaixo relacionados, ")
-        run_corpo9.font.name = 'Arial'
-        run_corpo10 = p_corpo.add_run("não havendo qualquer litígio entre as partes.")
-        run_corpo10.bold = True
-        run_corpo10.font.name = 'Arial'
+        p_corpo.add_run("Eu, ").font.name = 'Arial'
+        run_prop = p_corpo.add_run(f" {proprietario_origem}, CPF {cpf_origem} ")
+        run_prop.bold = True
+        p_corpo.add_run(f", residente em {localidade_origem}, e eu, ").font.name = 'Arial'
+        run_tec = p_corpo.add_run(f" {tecnico_nome} ")
+        run_tec.bold = True
+        p_corpo.add_run(", Tecnico em Agropecuaria, CFTA ").font.name = 'Arial'
+        run_cfta = p_corpo.add_run(f" {tecnico_cfta} ")
+        run_cfta.bold = True
+        p_corpo.add_run(", credenciado pelo INCRA sob o codigo ").font.name = 'Arial'
+        run_incra = p_corpo.add_run(f" {codigo_incra} ")
+        run_incra.bold = True
+        p_corpo.add_run(", declaramos sob as penas da Lei que quando dos trabalhos topograficos executados na citada propriedade ").font.name = 'Arial'
+        run_resp = p_corpo.add_run(" foram respeitados os limites de \"divisas in loco\" ")
+        run_resp.bold = True
+        p_corpo.add_run(" com os confrontantes abaixo relacionados, ").font.name = 'Arial'
+        run_lit = p_corpo.add_run(" não havendo qualquer litigio entre as partes.")
+        run_lit.bold = True
 
         # 3. CABEÇALHO CONFRONTANTES E DATA
         p_confrontantes_label = doc.add_paragraph()
-        p_confrontantes_label.paragraph_format.space_after = Pt(4)
+        p_confrontantes_label.paragraph_format.space_after = Pt(2)
         run_conf_label = p_confrontantes_label.add_run(" Confrontantes:")
         run_conf_label.bold = True
         run_conf_label.font.name = 'Arial'
@@ -329,93 +322,46 @@ class GeradorAnuenciaIncraWord:
         texto_data = f"{localidade_origem}, {data_atual.day} de {meses[data_atual.month - 1]} de {data_atual.year}."
 
         p_data = doc.add_paragraph()
-        p_data.paragraph_format.space_after = Pt(8)
+        p_data.paragraph_format.space_after = Pt(12)
         p_data.alignment = WD_ALIGN_PARAGRAPH.LEFT
         run_data = p_data.add_run(texto_data)
         run_data.font.name = 'Arial'
 
         # =====================================================================
-        # 4. TABELA 1: DADOS DO CONFRONTANTE (Ajustada)
+        # 4. TABELA DE VÉRTICES / VANTE (Linha Única de Cabeçalho)
         # =====================================================================
-        tabela_conf = doc.add_table(rows=2, cols=4)
-        tabela_conf.style = 'Table Grid'
-        tabela_conf.autofit = False
-
-        larguras_t1 = [Inches(1.8), Inches(1.0), Inches(1.2), Inches(3.0)]
-        headers_t1 = ["Nome Imóvel Rural", "Mat. /Trans.", "Comarca", "Nome do Proprietário"]
-
-        hdr_cells = tabela_conf.rows[0].cells
-        for idx, text in enumerate(headers_t1):
-            hdr_cells[idx].text = text
-            hdr_cells[idx].paragraphs[0].runs[0].font.bold = True
-            hdr_cells[idx].paragraphs[0].runs[0].font.size = Pt(9.5)
-            hdr_cells[idx].paragraphs[0].runs[0].font.name = 'Arial'
-
-        row_cells = tabela_conf.rows[1].cells
-        row_cells[0].text = str(dados_ia.get("confrontante_imovel", ""))
-        row_cells[1].text = str(dados_ia.get("confrontante_matricula", ""))
-        row_cells[2].text = str(dados_ia.get("confrontante_comarca", ""))
-        row_cells[3].text = str(dados_ia.get("confrontante_proprietario", ""))
-
-        for row in tabela_conf.rows:
-            for idx, cell in enumerate(row.cells):
-                cell.width = larguras_t1[idx]
-                self._definir_margens_celulas_zero(cell)
-                p = cell.paragraphs[0]
-                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                p.paragraph_format.space_after = Pt(2)
-                p.paragraph_format.space_before = Pt(2)
-                if len(p.runs) > 0:
-                    p.runs[0].font.size = Pt(9)
-                    p.runs[0].font.name = 'Arial'
-
-        # 5. DIVISOR DESCRIÇÃO DA PARCELA
-        p_desc = doc.add_paragraph()
-        p_desc.paragraph_format.space_before = Pt(12)
-        p_desc.paragraph_format.space_after = Pt(6)
-        run_desc = p_desc.add_run("DESCRIÇÃO DA PARCELA")
-        run_desc.bold = True
-
-        # =====================================================================
-        # 6. TABELA 2: PARCELA / VÉRTICES / VANTE (Perfeitamente Compactada)
-        # =====================================================================
-        tabela_vert = doc.add_table(rows=2, cols=8)
+        # Removido a Tabela 1 de cadastro anterior por não constar no modelo real
+        tabela_vert = doc.add_table(rows=1, cols=8)
         tabela_vert.style = 'Table Grid'
         tabela_vert.autofit = False
 
-        # Primeira Linha do Cabeçalho Composto
-        hdr_p = tabela_vert.rows[0].cells
-        hdr_p[0].merge(hdr_p[3])
-        hdr_p[0].text = "VÉRTICE"
-        hdr_p[0].paragraphs[0].runs[0].font.bold = True
-        hdr_p[0].paragraphs[0].runs[0].font.size = Pt(9.5)
-
-        hdr_p[4].merge(hdr_p[7])
-        hdr_p[4].text = "SEGMENTO VANTE"
-        hdr_p[4].paragraphs[0].runs[0].font.bold = True
-        hdr_p[4].paragraphs[0].runs[0].font.size = Pt(9.5)
-
-        # Segunda Linha (Sub-cabeçalhos)
-        sub_headers = [
+        # Cabeçalho simplificado de 1 única linha
+        headers_t2 = [
             "Código", "Longitude", "Latitude", "Altitude (m)",
             "Código", "Azimute", "Dist. (m)", "Confrontante"
         ]
-        sub_cells = tabela_vert.rows[1].cells
-        for idx, text in enumerate(sub_headers):
-            sub_cells[idx].text = text
-            sub_cells[idx].paragraphs[0].runs[0].font.bold = True
-            sub_cells[idx].paragraphs[0].runs[0].font.size = Pt(9)
+        
+        hdr_cells = tabela_vert.rows[0].cells
+        for idx, text in enumerate(headers_t2):
+            hdr_cells[idx].text = text
+            p = hdr_cells[idx].paragraphs[0]
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            p.paragraph_format.space_before = Pt(3)
+            p.paragraph_format.space_after = Pt(3)
+            run = p.runs[0]
+            run.font.bold = True
+            run.font.size = Pt(8.5)
+            run.font.name = 'Arial'
 
-        # Medidas precisas em polegadas. O código do vértice ocupa apenas 0.85 polegadas.
-        # A maior parte do espaço livre vai inteiramente para a coluna de Confrontação (2.25").
+        # Medidas precisas baseadas no layout para ocupar perfeitamente a página horizontalmente
         larguras_t2 = [
-            Inches(0.85),  # Código Vértice (ex: G1D-M-03281)
+            Inches(0.95),  # Código Vértice
             Inches(0.95),  # Longitude
             Inches(0.95),  # Latitude
-            Inches(0.65),  # Altitude (m)
-            Inches(0.85),  # Código Vante (ex: G1D-M-03282)
-            Inches(0.55),  # Azimute
-            Inches(0.60),  # Dist. (m)
+            Inches(0.70),  # Altitude (m)
+            Inches(0.95),  # Código Vante
+            Inches(0.60),  # Azimute
+            Inches(0.65),  # Dist. (m)
             Inches(2.25)   # Confrontante
         ]
 
@@ -425,7 +371,7 @@ class GeradorAnuenciaIncraWord:
                 {
                     "codigo": "G1D-M-03281", "longitude": "40°22'10.639\"", "latitude": "19°00'24.525\"", "altitude": "162.10",
                     "vante": "G1D-M-03282", "azimute": "06°49'", "distancia": "640.71",
-                    "confrontacao_completa": f"CNS: 02.170-9 | Mat. {dados_ia.get('confrontante_matricula', '')} | {dados_ia.get('confrontante_imovel', '')}; {dados_ia.get('confrontante_proprietario', '')}"
+                    "confrontacao_completa": f"CNS: 02.170-9 | Mat. {dados_ia.get('confrontante_matricula', '6093')} | {dados_ia.get('confrontante_imovel', 'Sitio Bravin')}; {dados_ia.get('confrontante_proprietario', 'ANTONIO BRAVIN')}"
                 }
             ]
 
@@ -441,14 +387,13 @@ class GeradorAnuenciaIncraWord:
             cells[6].text = str(v.get("distancia", ""))
             cells[7].text = str(v.get("confrontacao_completa", ""))
 
-        # Formatação das linhas da tabela
+        # Formatação das linhas e células
         for r_idx, row in enumerate(tabela_vert.rows):
             for c_idx, cell in enumerate(row.cells):
                 cell.width = larguras_t2[c_idx]
-                self._definir_margens_celulas_zero(cell)  # Aplica margem zero em cada célula!
+                self._definir_margens_celulas_zero(cell)
                 
                 p = cell.paragraphs[0]
-                # A coluna 7 (Confrontações) fica melhor alinhada à esquerda. As outras centralizadas.
                 if c_idx == 7:
                     p.alignment = WD_ALIGN_PARAGRAPH.LEFT
                 else:
@@ -460,47 +405,46 @@ class GeradorAnuenciaIncraWord:
                 if len(p.runs) > 0:
                     p.runs[0].font.size = Pt(8.5)
                     p.runs[0].font.name = 'Arial'
-                if r_idx == 0:
-                    p.runs[0].font.size = Pt(9.5)
 
         # Espaço antes das Assinaturas
         p_espaco = doc.add_paragraph()
         p_espaco.paragraph_format.space_before = Pt(36)
 
-        # 7. TABELA DE ASSINATURAS HORIZONTAIS
+        # 5. TABELA DE ASSINATURAS HORIZONTAIS
         tabela_assinaturas = doc.add_table(rows=2, cols=2)
         tabela_assinaturas.autofit = False
         tabela_assinaturas.columns[0].width = Inches(3.7)
         tabela_assinaturas.columns[1].width = Inches(3.7)
 
         cells_as = tabela_assinaturas.rows[0].cells
-        cells_as[0].text = "              _______________________________________________"
-        cells_as[1].text = "_______________________________________________"
+        cells_as[0].text = "__________________________________________________"
+        cells_as[1].text = "__________________________________________________"
 
         cells_nomes = tabela_assinaturas.rows[1].cells
 
         p_origem = cells_nomes[0].paragraphs[0]
         p_origem.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run_o1 = p_origem.add_run(f"\n{proprietario_origem}\n")
+        run_o1 = p_origem.add_run(f"{proprietario_origem}\n")
         run_o1.bold = True
         p_origem.add_run(f"CPF: {cpf_origem}")
 
         p_confrontante = cells_nomes[1].paragraphs[0]
         p_confrontante.alignment = WD_ALIGN_PARAGRAPH.CENTER
         nome_vizinho = str(dados_ia.get("confrontante_proprietario", "")).upper()
-        cpf_vizinho = str(dados_ia.get("confrontante_cpf", "___.___.___-__"))
-        run_v1 = p_confrontante.add_run(f"\n{nome_vizinho}\n")
+        run_v1 = p_confrontante.add_run(f"{nome_vizinho}")
         run_v1.bold = True
-        p_confrontante.add_run(f"CPF: {cpf_vizinho}")
 
         for row in tabela_assinaturas.rows:
             for cell in row.cells:
                 for p in cell.paragraphs:
+                    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    p.paragraph_format.space_before = Pt(2)
+                    p.paragraph_format.space_after = Pt(2)
                     for run in p.runs:
                         run.font.size = Pt(9.5)
                         run.font.name = 'Arial'
 
-        # 8. ASSINATURA DO RESPONSÁVEL TÉCNICO
+        # 6. ASSINATURA DO RESPONSÁVEL TÉCNICO
         p_rt_espaco = doc.add_paragraph()
         p_rt_espaco.paragraph_format.space_before = Pt(28)
 
@@ -512,24 +456,23 @@ class GeradorAnuenciaIncraWord:
         p_info_rt.alignment = WD_ALIGN_PARAGRAPH.CENTER
         run_rt1 = p_info_rt.add_run(f"{tecnico_nome}\n")
         run_rt1.bold = True
-        p_info_rt.add_run(f"CFTA {tecnico_cfta}")
+        p_info_rt.add_run(f"CFTA: {tecnico_cfta}")
 
         for run in p_info_rt.runs:
             run.font.size = Pt(9.5)
             run.font.name = 'Arial'
 
-        # 9. ANEXOS
+        # 7. ANEXOS
         p_anexos_espaco = doc.add_paragraph()
         p_anexos_espaco.paragraph_format.space_before = Pt(24)
 
         p_anexos = doc.add_paragraph()
-        run_anexos_label = p_anexos.add_run("Anexos: ")
+        run_anexos_label = p_anexos.add_run("Anexos:   ")
         run_anexos_label.bold = True
-        p_anexos.add_run("Planta do Imóvel \t\t Memorial Descritivo do Imóvel")
-        p_anexos.runs[0].font.size = Pt(9)
-        p_anexos.runs[0].font.name = 'Arial'
-        p_anexos.runs[1].font.size = Pt(9)
-        p_anexos.runs[1].font.name = 'Arial'
+        p_anexos.add_run("Planta do Imóvel  Memorial Descritivo do Imóvel")
+        for run in p_anexos.runs:
+            run.font.size = Pt(9)
+            run.font.name = 'Arial'
 
         buffer = io.BytesIO()
         doc.save(buffer)
