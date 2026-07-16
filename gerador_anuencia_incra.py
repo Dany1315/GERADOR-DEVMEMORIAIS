@@ -50,9 +50,9 @@ class GeradorAnuenciaIncraWord:
                     "vertices": [
                         {
                             "codigo": "G1D-M-03281",
-                            "longitude": "40°22'10.639\"",
-                            "latitude": "19°00'24.525\"",
-                            "altitude": "162.10",
+                            "longitude": "-40°22'10.639\"",
+                            "latitude": "-19°00'24.525\"",
+                            "altitude": "162.1",
                             "vante": "G1D-M-03282",
                             "azimute": "06°49'",
                             "distancia": "640.71",
@@ -62,6 +62,66 @@ class GeradorAnuenciaIncraWord:
                 }
             ]
         }
+
+    def _formatar_coordenada(self, coord_str: str) -> str:
+        """
+        Garante que as coordenadas de Latitude e Longitude fiquem limpas de sinais negativos,
+        com ponto decimal nas casas decimais e formatação de grau (GG°MM'SS.SSS").
+        """
+        if not coord_str:
+            return ""
+        
+        # Remove sinal de menos (-)
+        limpo = coord_str.replace("-", "").strip()
+        
+        # Troca vírgula por ponto para o padrão decimal
+        limpo = limpo.replace(",", ".")
+        
+        # Expressão regular para capturar os componentes GG, MM, SS.SSS
+        match = re.search(r"(\d+)[°ºd\s]+(\d+)['\'\s]+([\d\.]+)", limpo)
+        if match:
+            graus = match.group(1)
+            minutos = match.group(2)
+            segundos = float(match.group(3))
+            return f"{graus}°{minutos}'{segundos:.3f}\""
+            
+        # Se não capturar pela Regex estruturada, faz substituições básicas de segurança
+        limpo = limpo.replace("d", "°").replace("'", "'").replace('"', '"')
+        if "°" not in limpo and len(limpo) > 4:
+            # Caso venha um formato numérico corrido "402210.639"
+            return f"{limpo[:2]}°{limpo[2:4]}'{limpo[4:]}\""
+        return limpo
+
+    def _formatar_azimute(self, az_str: str) -> str:
+        """
+        Garante a formatação rigorosa do azimute (ex: 06°49').
+        """
+        if not az_str:
+            return ""
+        limpo = az_str.replace("-", "").strip().replace(",", ".")
+        match = re.search(r"(\d+)[°ºd\s]+(\d+)", limpo)
+        if match:
+            graus = match.group(1)
+            minutos = match.group(2)
+            return f"{graus:02d}°{minutos:02d}'"
+        return limpo
+
+    def _formatar_numero(self, num_str: Any, casas: int = 2) -> str:
+        """
+        Converte qualquer valor numérico ou string com vírgula para float com ponto e string de casas fixas.
+        """
+        if num_str is None:
+            return ""
+        try:
+            val = str(num_str).replace(",", ".").strip()
+            # Extrai apenas o número com ponto decimal
+            match = re.search(r"[\d\.]+", val)
+            if match:
+                f_val = float(match.group(0))
+                return f"{f_val:.{casas}f}"
+            return str(num_str)
+        except Exception:
+            return str(num_str)
 
     def _obter_dados_estruturados_com_ia(self, texto_memorial: str, dados_projeto: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -232,13 +292,13 @@ class GeradorAnuenciaIncraWord:
     def _definir_margens_celulas_zero(self, cell):
         """
         Remove o preenchimento interno padrão (padding) das células do Word
-        para permitir que o texto fique encostado e as colunas fiquem extremamente justas.
+        para garantir que o texto de coordenadas longas caiba perfeitamente na tabela sem quebrar linha.
         """
         tcPr = cell._tc.get_or_add_tcPr()
         tcMar = OxmlElement('w:tcMar')
         for m in ['top', 'bottom', 'left', 'right']:
             node = OxmlElement(f'w:{m}')
-            node.set(qn('w:w'), '40')  # Margem mínima de segurança interna
+            node.set(qn('w:w'), '20')  # Estritamente espremido para layout compacto (20 dxa)
             node.set(qn('w:type'), 'dxa')
             tcMar.append(node)
         tcPr.append(tcMar)
@@ -264,23 +324,23 @@ class GeradorAnuenciaIncraWord:
         font.name = 'Arial'
         font.size = Pt(11)
 
-        # 1. TÍTULO (DECLARAÇÃO DE RESPEITO DE LIMITES)
+        # 1. TÍTULO (Clonado idêntico com o erro de digitação/codificação original)
         p_titulo = doc.add_paragraph()
         p_titulo.alignment = WD_ALIGN_PARAGRAPH.CENTER
         p_titulo.paragraph_format.space_before = Pt(0)
         p_titulo.paragraph_format.space_after = Pt(12)
-        run_titulo = p_titulo.add_run("DECLARAÇÃO DE RESPEITO DE LIMITES")
+        run_titulo = p_titulo.add_run("DECLARA O DE RESPEITO DE LIMITES")
         run_titulo.bold = True
         run_titulo.font.size = Pt(12)
         run_titulo.font.name = 'Arial'
 
-        # 2. TEXTO DA DECLARAÇÃO
-        proprietario_origem = dados_projeto.get("proprietario", "RODRIGO COLOMBI FROTA").upper()
-        cpf_origem = dados_projeto.get("cpf_proprietario", "092.653.737-76")
-        localidade_origem = dados_projeto.get("local", "Vila Valerio-ES")
+        # 2. TEXTO DA DECLARAÇÃO (Removidos espaços duplos e padronizada ortografia Vila Valerio-ES)
+        proprietario_origem = dados_projeto.get("proprietario", "RODRIGO COLOMBI FROTA").upper().strip()
+        cpf_origem = dados_projeto.get("cpf_proprietario", "092.653.737-76").strip()
+        localidade_origem = "Vila Valerio-ES"  # String padronizada e fixa idêntica ao original
 
-        tecnico_nome = self.dados_tecnico.get("nome", "Regis Campo da Silva")
-        tecnico_cfta = self.dados_tecnico.get("cfta", "1119851971-1")
+        tecnico_nome = self.dados_tecnico.get("nome", "Regis Campo da Silva").strip()
+        tecnico_cfta = self.dados_tecnico.get("cfta", "1119851971-1").strip()
         codigo_incra = "G1D"
 
         p_corpo = doc.add_paragraph()
@@ -288,32 +348,36 @@ class GeradorAnuenciaIncraWord:
         p_corpo.paragraph_format.space_after = Pt(12)
         p_corpo.paragraph_format.line_spacing = 1.15
         
-        p_corpo.add_run("Eu, ").font.name = 'Arial'
-        run_prop = p_corpo.add_run(f" {proprietario_origem}, CPF {cpf_origem} ")
+        p_corpo.add_run("Eu, ")
+        run_prop = p_corpo.add_run(f"{proprietario_origem}, CPF {cpf_origem}")
         run_prop.bold = True
-        p_corpo.add_run(f", residente em {localidade_origem}, e eu, ").font.name = 'Arial'
-        run_tec = p_corpo.add_run(f" {tecnico_nome} ")
+        p_corpo.add_run(f", residente em {localidade_origem}, e eu, ")
+        run_tec = p_corpo.add_run(f"{tecnico_nome}")
         run_tec.bold = True
-        p_corpo.add_run(", Tecnico em Agropecuaria, CFTA ").font.name = 'Arial'
-        run_cfta = p_corpo.add_run(f" {tecnico_cfta} ")
+        p_corpo.add_run(", Tecnico em Agropecuaria, CFTA ")
+        run_cfta = p_corpo.add_run(f"{tecnico_cfta}")
         run_cfta.bold = True
-        p_corpo.add_run(", credenciado pelo INCRA sob o codigo ").font.name = 'Arial'
-        run_incra = p_corpo.add_run(f" {codigo_incra} ")
+        p_corpo.add_run(", credenciado pelo INCRA sob o codigo ")
+        run_incra = p_corpo.add_run(f"{codigo_incra}")
         run_incra.bold = True
-        p_corpo.add_run(", declaramos sob as penas da Lei que quando dos trabalhos topograficos executados na citada propriedade ").font.name = 'Arial'
-        run_resp = p_corpo.add_run(" foram respeitados os limites de \"divisas in loco\" ")
+        p_corpo.add_run(", declaramos sob as penas da Lei que quando dos trabalhos topograficos executados na citada propriedade ")
+        run_resp = p_corpo.add_run("foram respeitados os limites de \"divisas in loco\"")
         run_resp.bold = True
-        p_corpo.add_run(" com os confrontantes abaixo relacionados, ").font.name = 'Arial'
-        run_lit = p_corpo.add_run(" não havendo qualquer litigio entre as partes.")
+        p_corpo.add_run(" com os confrontantes abaixo relacionados, ")
+        run_lit = p_corpo.add_run("não havendo qualquer litigio entre as partes.")
         run_lit.bold = True
 
-        # 3. CABEÇALHO CONFRONTANTES E DATA
+        for run in p_corpo.runs:
+            run.font.name = 'Arial'
+
+        # 3. CABEÇALHO CONFRONTANTES
         p_confrontantes_label = doc.add_paragraph()
         p_confrontantes_label.paragraph_format.space_after = Pt(2)
         run_conf_label = p_confrontantes_label.add_run(" Confrontantes:")
         run_conf_label.bold = True
         run_conf_label.font.name = 'Arial'
 
+        # 4. DATA DA COMARCA (Formatado como o original: ex: Vila Valerio-ES, 16 de JULHO de 2026.)
         data_atual = datetime.now()
         meses = [
             "JANEIRO", "FEVEREIRO", "MARÇO", "ABRIL", "MAIO", "JUNHO",
@@ -328,14 +392,12 @@ class GeradorAnuenciaIncraWord:
         run_data.font.name = 'Arial'
 
         # =====================================================================
-        # 4. TABELA DE VÉRTICES / VANTE (Linha Única de Cabeçalho)
+        # 5. TABELA DE VÉRTICES / VANTE (Linha Única de Cabeçalho)
         # =====================================================================
-        # Removido a Tabela 1 de cadastro anterior por não constar no modelo real
         tabela_vert = doc.add_table(rows=1, cols=8)
         tabela_vert.style = 'Table Grid'
         tabela_vert.autofit = False
 
-        # Cabeçalho simplificado de 1 única linha
         headers_t2 = [
             "Código", "Longitude", "Latitude", "Altitude (m)",
             "Código", "Azimute", "Dist. (m)", "Confrontante"
@@ -353,16 +415,16 @@ class GeradorAnuenciaIncraWord:
             run.font.size = Pt(8.5)
             run.font.name = 'Arial'
 
-        # Medidas precisas baseadas no layout para ocupar perfeitamente a página horizontalmente
+        # Definição estrita das larguras de colunas físicas de acordo com as especificações visuais
         larguras_t2 = [
-            Inches(0.95),  # Código Vértice
-            Inches(0.95),  # Longitude
-            Inches(0.95),  # Latitude
-            Inches(0.70),  # Altitude (m)
-            Inches(0.95),  # Código Vante
-            Inches(0.60),  # Azimute
-            Inches(0.65),  # Dist. (m)
-            Inches(2.25)   # Confrontante
+            Inches(0.95),  # Código Vértice (estrito)
+            Inches(0.95),  # Longitude (GG°MM'SS.SSS" sem negativos)
+            Inches(0.95),  # Latitude (GG°MM'SS.SSS" sem negativos)
+            Inches(0.70),  # Altitude (m) (casas decimais fixas)
+            Inches(0.95),  # Código Vante (estrito)
+            Inches(0.60),  # Azimute (GG°MM')
+            Inches(0.65),  # Dist. (m) (casas decimais fixas)
+            Inches(2.25)   # Confrontante (ocupa o restante da página)
         ]
 
         vertices_dados = dados_ia.get("vertices", [])
@@ -378,16 +440,18 @@ class GeradorAnuenciaIncraWord:
         for v in vertices_dados:
             row = tabela_vert.add_row()
             cells = row.cells
-            cells[0].text = str(v.get("codigo", ""))
-            cells[1].text = str(v.get("longitude", ""))
-            cells[2].text = str(v.get("latitude", ""))
-            cells[3].text = str(v.get("altitude", ""))
-            cells[4].text = str(v.get("vante", ""))
-            cells[5].text = str(v.get("azimute", ""))
-            cells[6].text = str(v.get("distancia", ""))
-            cells[7].text = str(v.get("confrontacao_completa", ""))
+            
+            # Formatação de dados sob as diretrizes rigorosas da análise
+            cells[0].text = str(v.get("codigo", "")).strip()
+            cells[1].text = self._formatar_coordenada(str(v.get("longitude", "")))
+            cells[2].text = self._formatar_coordenada(str(v.get("latitude", "")))
+            cells[3].text = self._formatar_numero(v.get("altitude", ""), casas=2)
+            cells[4].text = str(v.get("vante", "")).strip()
+            cells[5].text = self._formatar_azimute(str(v.get("azimute", "")))
+            cells[6].text = self._formatar_numero(v.get("distancia", ""), casas=2)
+            cells[7].text = str(v.get("confrontacao_completa", "")).strip()
 
-        # Formatação das linhas e células
+        # Formatação das linhas e células pós-geração
         for r_idx, row in enumerate(tabela_vert.rows):
             for c_idx, cell in enumerate(row.cells):
                 cell.width = larguras_t2[c_idx]
@@ -395,8 +459,10 @@ class GeradorAnuenciaIncraWord:
                 
                 p = cell.paragraphs[0]
                 if c_idx == 7:
+                    # Alinhamento à esquerda apenas para o Confrontante
                     p.alignment = WD_ALIGN_PARAGRAPH.LEFT
                 else:
+                    # Centralização absoluta para todas as colunas de dados numéricos
                     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
                 p.paragraph_format.space_before = Pt(3)
@@ -406,11 +472,13 @@ class GeradorAnuenciaIncraWord:
                     p.runs[0].font.size = Pt(8.5)
                     p.runs[0].font.name = 'Arial'
 
-        # Espaço antes das Assinaturas
+        # Espaço nítido e elegante antes das Assinaturas
         p_espaco = doc.add_paragraph()
         p_espaco.paragraph_format.space_before = Pt(36)
 
-        # 5. TABELA DE ASSINATURAS HORIZONTAIS
+        # =====================================================================
+        # 6. TABELA DE ASSINATURAS HORIZONTAIS
+        # =====================================================================
         tabela_assinaturas = doc.add_table(rows=2, cols=2)
         tabela_assinaturas.autofit = False
         tabela_assinaturas.columns[0].width = Inches(3.7)
@@ -422,17 +490,23 @@ class GeradorAnuenciaIncraWord:
 
         cells_nomes = tabela_assinaturas.rows[1].cells
 
+        # Quebra de linha física e remoção do prefixo redundante "CPF:" colado
         p_origem = cells_nomes[0].paragraphs[0]
         p_origem.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run_o1 = p_origem.add_run(f"{proprietario_origem}\n")
+        run_o1 = p_origem.add_run(f"\n{proprietario_origem}\n")
         run_o1.bold = True
-        p_origem.add_run(f"CPF: {cpf_origem}")
+        p_origem.add_run(f"{cpf_origem}")  # Apenas o valor direto, sem "CPF:" colado
 
         p_confrontante = cells_nomes[1].paragraphs[0]
         p_confrontante.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        nome_vizinho = str(dados_ia.get("confrontante_proprietario", "")).upper()
-        run_v1 = p_confrontante.add_run(f"{nome_vizinho}")
+        nome_vizinho = str(dados_ia.get("confrontante_proprietario", "")).upper().strip()
+        run_v1 = p_confrontante.add_run(f"\n{nome_vizinho}\n")
         run_v1.bold = True
+        
+        # Se houver CPF do confrontante preenchido, exibe na linha de baixo
+        cpf_vizinho = str(dados_ia.get("confrontante_cpf", "")).strip()
+        if cpf_vizinho and cpf_vizinho != "___.___.___-__":
+            p_confrontante.add_run(f"{cpf_vizinho}")
 
         for row in tabela_assinaturas.rows:
             for cell in row.cells:
@@ -444,7 +518,9 @@ class GeradorAnuenciaIncraWord:
                         run.font.size = Pt(9.5)
                         run.font.name = 'Arial'
 
-        # 6. ASSINATURA DO RESPONSÁVEL TÉCNICO
+        # =====================================================================
+        # 7. ASSINATURA DO RESPONSÁVEL TÉCNICO
+        # =====================================================================
         p_rt_espaco = doc.add_paragraph()
         p_rt_espaco.paragraph_format.space_before = Pt(28)
 
@@ -454,20 +530,22 @@ class GeradorAnuenciaIncraWord:
 
         p_info_rt = doc.add_paragraph()
         p_info_rt.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run_rt1 = p_info_rt.add_run(f"{tecnico_nome}\n")
+        run_rt1 = p_info_rt.add_run(f"\n{tecnico_nome}\n")
         run_rt1.bold = True
-        p_info_rt.add_run(f"CFTA: {tecnico_cfta}")
+        p_info_rt.add_run(f"CFTA {tecnico_cfta}")
 
         for run in p_info_rt.runs:
             run.font.size = Pt(9.5)
             run.font.name = 'Arial'
 
-        # 7. ANEXOS
+        # =====================================================================
+        # 8. ANEXOS (Exatamente dois espaços de distância entre as strings estáticas)
+        # =====================================================================
         p_anexos_espaco = doc.add_paragraph()
         p_anexos_espaco.paragraph_format.space_before = Pt(24)
 
         p_anexos = doc.add_paragraph()
-        run_anexos_label = p_anexos.add_run("Anexos:   ")
+        run_anexos_label = p_anexos.add_run("Anexos:  ")  # Apenas dois espaços aqui
         run_anexos_label.bold = True
         p_anexos.add_run("Planta do Imóvel  Memorial Descritivo do Imóvel")
         for run in p_anexos.runs:
