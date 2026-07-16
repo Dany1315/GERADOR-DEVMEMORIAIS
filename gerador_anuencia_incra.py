@@ -1,5 +1,5 @@
 # ==========================================
-# ARQUIVO: gerador_anuencia_incra.py (VERSÃO 100% IDÊNTICA AO NOVO MODELO)
+# ARQUIVO: gerador_anuencia_incra.py (VERSÃO ULTRA-LIMPA)
 # ==========================================
 import io
 import re
@@ -240,7 +240,7 @@ class GeradorAnuenciaIncraWord:
             return ""
         
         texto = str(valor).replace('-', '').strip()
-        texto = texto.replace(',', '.')
+        texto = text = texto.replace(',', '.')
 
         # Se a coordenada perdeu o símbolo de grau original, tenta reinserir baseando-se no padrão
         if "°" not in texto and len(texto) >= 4:
@@ -290,8 +290,8 @@ class GeradorAnuenciaIncraWord:
         self, dados_ia: Dict[str, Any], dados_origem: Dict[str, str]
     ) -> io.BytesIO:
         """
-        Gera o documento Word da declaração de anuência do INCRA no formato paisagem (Landscape)
-        com as novas diretrizes simplificadas do modelo original.
+        Gera o documento Word da declaração de anuência do INCRA no formato paisagem (Landscape).
+        Contém apenas as colunas principais na tabela, totalmente limpa de informações redundantes.
         """
         doc = Document()
 
@@ -322,12 +322,12 @@ class GeradorAnuenciaIncraWord:
         run_titulo.font.size = Pt(12)
         run_titulo.font.name = 'Arial'
 
-        # 2. DADOS DO PROPRIETÁRIO - SIMPLIFICADOS E SEM ACENTOS ESPECIAIS
+        # 2. DADOS DO PROPRIETÁRIO - SIMPLIFICADOS E SEM ACENTOS
         proprietario_origem = str(dados_origem.get("proprietario", "AGOSTINHO IZOTON")).upper()
         cpf_origem = str(dados_origem.get("cpf", "___.___.___-__"))
         localidade_origem = "Vila Valerio-ES"
 
-        # Dados institucionais simplificados do novo modelo original (sem caracteres acentuados)
+        # Dados institucionais do novo modelo original
         tecnico_nome = "Regis Campo da Silva"
         tecnico_cfta = "1119851971-1"
         codigo_incra = "G1D"
@@ -342,7 +342,6 @@ class GeradorAnuenciaIncraWord:
         run_corp2.bold = True
         run_corp2.font.name = 'Arial'
         
-        # AJUSTE 1: Endereço simplificado sem menções antigas e texto totalmente revisado
         p_corpo.add_run(f", residente em {localidade_origem}, e eu, ").font.name = 'Arial'
         run_corp4 = p_corpo.add_run(f"{tecnico_nome}")
         run_corp4.bold = True
@@ -380,7 +379,6 @@ class GeradorAnuenciaIncraWord:
             "JANEIRO", "FEVEREIRO", "MARÇO", "ABRIL", "MAIO", "JUNHO",
             "JULHO", "AGOSTO", "SETEMBRO", "OUTUBRO", "NOVEMBRO", "DEZEMBRO"
         ]
-        # Garante grafia "Vila Valerio-ES" sem acento inconsistente na data
         texto_data = f"Vila Valerio-ES, {data_atual.day} de {meses[data_atual.month - 1]} de {data_atual.year}."
 
         p_data = doc.add_paragraph()
@@ -388,40 +386,31 @@ class GeradorAnuenciaIncraWord:
         p_data.alignment = WD_ALIGN_PARAGRAPH.LEFT
         p_data.add_run(texto_data).font.name = 'Arial'
 
-        # 4. TABELA: PARCELA / VÉRTICES (Nativa, cabeçalho de 2 linhas)
-        # AJUSTE 2: Tabela simplificada de 2 linhas de cabeçalho.
-        tabela_vert = doc.add_table(rows=2, cols=8)
+        # 4. TABELA: APENAS AS INFORMAÇÕES PRINCIPAIS (1 única linha de cabeçalho)
+        # Removido "DESCRIÇÃO DA PARCELA", "VÉRTICE", "SEGMENTO VANTE" e "Confronta".
+        tabela_vert = doc.add_table(rows=1, cols=8)
         tabela_vert.style = 'Table Grid'
         tabela_vert.autofit = False
 
-        # --- LINHA 1 DO CABEÇALHO (Mesclada inteira para "DESCRIÇÃO DA PARCELA") ---
-        row1 = tabela_vert.rows[0]
-        row1.cells[0].merge(row1.cells[7]) 
-        row1.cells[0].text = "DESCRIÇÃO DA PARCELA"
-        run_desc = row1.cells[0].paragraphs[0].runs[0]
-        run_desc.font.bold = True
-        run_desc.font.size = Pt(10)
-        run_desc.font.name = 'Arial'
-
-        # --- LINHA 2 DO CABEÇALHO (Subdivisões de dados diretamente, sem intermediários) ---
+        # --- LINHA 1: Cabeçalhos das Colunas de Dados ---
         sub_headers = [
             "Código", "Longitude", "Latitude", "Altitude (m)",
             "Código", "Azimute", "Dist. (m)", "Confrontante"
         ]
-        row2 = tabela_vert.rows[1]
+        row_headers = tabela_vert.rows[0]
         for idx, text in enumerate(sub_headers):
-            row2.cells[idx].text = text
-            row2.cells[idx].paragraphs[0].runs[0].font.bold = True
-            row2.cells[idx].paragraphs[0].runs[0].font.size = Pt(9)
-            row2.cells[idx].paragraphs[0].runs[0].font.name = 'Arial'
+            row_headers.cells[idx].text = text
+            run_h = row_headers.cells[idx].paragraphs[0].runs[0]
+            run_h.font.bold = True
+            run_h.font.size = Pt(9)
+            run_h.font.name = 'Arial'
 
         larguras_t2 = [
             Inches(1.2), Inches(1.3), Inches(1.3), Inches(0.9),
             Inches(1.2), Inches(0.8), Inches(0.8), Inches(2.1)
         ]
 
-        # --- ADICIONAR DADOS DOS VÉRTICES (Com formatação estrita de precisão) ---
-        # AJUSTE 3: Preserva graus (°), separadores de ponto (.) e formata com duas casas decimais.
+        # --- ADICIONAR DADOS DOS VÉRTICES ---
         vertices_dados = dados_ia.get("vertices", [])
         for v in vertices_dados:
             row = tabela_vert.add_row()
@@ -469,15 +458,14 @@ class GeradorAnuenciaIncraWord:
 
         cells_nomes = tabela_assinaturas.rows[1].cells
 
-        # Coluna Proprietário de Origem (Mantém CPF no proprietário de origem)
+        # Coluna Proprietário de Origem
         p_origem = cells_nomes[0].paragraphs[0]
         p_origem.alignment = WD_ALIGN_PARAGRAPH.CENTER
         run_o1 = p_origem.add_run(f"\n{proprietario_origem}\n")
         run_o1.bold = True
         p_origem.add_run(f"CPF: {cpf_origem}")
 
-        # Coluna Proprietário Confrontante
-        # AJUSTE 4: Exibe apenas o nome limpo do confrontante, sem "CPF:"
+        # Coluna Proprietário Confrontante (Nome limpo)
         p_confrontante = cells_nomes[1].paragraphs[0]
         p_confrontante.alignment = WD_ALIGN_PARAGRAPH.CENTER
         nome_vizinho = str(dados_ia.get("confrontante_proprietario", "")).upper()
@@ -503,7 +491,6 @@ class GeradorAnuenciaIncraWord:
         p_info_rt = doc.add_paragraph()
         p_info_rt.alignment = WD_ALIGN_PARAGRAPH.CENTER
         
-        # AJUSTE 5: Nome do profissional limpo sem acento ("Regis")
         run_rt1 = p_info_rt.add_run(f"{tecnico_nome}\n")
         run_rt1.bold = True
         p_info_rt.add_run(f"CFTA: {tecnico_cfta}")
@@ -512,7 +499,7 @@ class GeradorAnuenciaIncraWord:
             run.font.size = Pt(9.5)
             run.font.name = 'Arial'
 
-        # 7. ANEXOS (Espaçamento duplo simples)
+        # 7. ANEXOS (Espaçamento simples)
         doc.add_paragraph().paragraph_format.space_before = Pt(18)
         p_anexos = doc.add_paragraph()
         p_anexos.add_run("Anexos:  ").bold = True
