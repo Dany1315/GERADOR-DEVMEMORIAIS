@@ -16,8 +16,8 @@ except ImportError:
 from docx import Document
 from docx.shared import Pt, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.oxml import parse_xml
-from docx.oxml.ns import nsdecls
+from docx.oxml import parse_xml, OxmlElement
+from docx.oxml.ns import nsdecls, qn
 
 logger = logging.getLogger(__name__)
 
@@ -37,26 +37,26 @@ class GeradorAnuenciaIncraWord:
 
     def _estrutura_padrao(self) -> Dict[str, Any]:
         """
-        Estrutura de fallback baseada fielmente nos modelos reais fornecidos (Elias/Evaldo).
+        Estrutura de fallback baseada fielmente nos modelos reais fornecidos.
         """
         return {
             "confrontantes": [
                 {
-                    "confrontante_imovel": "Sítio Sete Quedas",
-                    "confrontante_matricula": "8280",
+                    "confrontante_imovel": "Sitio Bravin",
+                    "confrontante_matricula": "6093",
                     "confrontante_comarca": "São Gabriel da Palha",
-                    "confrontante_proprietario": "Elias Moro, Luiz Valentin Moro",
-                    "confrontante_cpf": "780.485.677-68",
+                    "confrontante_proprietario": "ANTONIO BRAVIN",
+                    "confrontante_cpf": "___.___.___-__",
                     "vertices": [
                         {
-                            "codigo": "G1D-P-06815",
-                            "longitude": "-40°17'14,014\"",
-                            "latitude": "-18°59'22,007\"",
-                            "altitude": "58.39",
-                            "vante": "G1D-P-06816",
-                            "azimute": "02°15'",
-                            "distancia": "41,66",
-                            "confrontacao_completa": "CNS: 02.170-9 | Mat. 8280 | Sitio Sete Quedas; Elias Moro, Luiz Valentin Moro"
+                            "codigo": "G1D-M-03281",
+                            "longitude": "40°22'10.639\"",
+                            "latitude": "19°00'24.525\"",
+                            "altitude": "162.10",
+                            "vante": "G1D-M-03282",
+                            "azimute": "06°49'",
+                            "distancia": "640.71",
+                            "confrontacao_completa": "CNS: 02.170-9 | Mat. 6093 | Sitio Bravin; Antonio Bravin"
                         }
                     ]
                 }
@@ -80,9 +80,9 @@ class GeradorAnuenciaIncraWord:
         informações de TODOS os confrontantes (vizinhos) identificados ao longo da poligonal.
 
         DADOS DE CONTEXTO DO PROJETO (ORIGEM):
-        - Proprietário Origem: {dados_projeto.get('proprietario', 'Agostinho Izoton')}
+        - Proprietário Origem: {dados_projeto.get('proprietario', 'RODRIGO COLOMBI FROTA')}
         - Imóvel Origem: {dados_projeto.get('imovel', 'Gleba A')}
-        - Município: {dados_projeto.get('local', 'Vila Valério - ES')}
+        - Município: {dados_projeto.get('local', 'Vila Valerio-ES')}
 
         TEXTO DO MEMORIAL DESCRITIVO / RELATÓRIO EXTRAÍDO:
         \"\"\"
@@ -107,13 +107,13 @@ class GeradorAnuenciaIncraWord:
                     "vertices": [
                         {{
                             "codigo": "Código do Vértice",
-                            "longitude": "Longitude formatada (Graus Minutos Segundos)",
-                            "latitude": "Latitude formatada (Graus Minutos Segundos)",
+                            "longitude": "Longitude formatada",
+                            "latitude": "Latitude formatada",
                             "altitude": "Altitude com duas casas",
                             "vante": "Código do Vértice de Vante",
-                            "azimute": "Azimute formatado (Graus Minutos)",
+                            "azimute": "Azimute formatado",
                             "distancia": "Distância formatada com duas casas",
-                            "confrontacao_completa": "Descrição completa da confrontação conforme os modelos"
+                            "confrontacao_completa": "Descrição completa da confrontação"
                         }}
                     ]
                 }}
@@ -229,22 +229,36 @@ class GeradorAnuenciaIncraWord:
         zip_buffer.seek(0)
         return zip_buffer
 
+    def _definir_margens_celulas_zero(self, cell):
+        """
+        Remove o preenchimento interno padrão (padding) das células do Word
+        para permitir que o texto fique encostado e as colunas fiquem extremamente justas.
+        """
+        tcPr = cell._tc.get_or_add_tcPr()
+        tcMar = OxmlElement('w:tcMar')
+        for m in ['top', 'bottom', 'left', 'right']:
+            node = OxmlElement(f'w:{m}')
+            node.set(qn('w:w'), '40')  # Margem mínima de segurança interna
+            node.set(qn('w:type'), 'dxa')
+            tcMar.append(node)
+        tcPr.append(tcMar)
+
     def _montar_documento_confrontante(
         self, dados_ia: Dict[str, Any], dados_projeto: Dict[str, Any]
     ) -> io.BytesIO:
         """
-        Gera o documento idêntico aos modelos reais enviados.
+        Gera o documento Word otimizado, compacto e idêntico ao modelo físico real.
         """
         doc = Document()
 
-        # Margens Estreitas conforme os modelos enviados
+        # Configura margens estreitas no documento
         for section in doc.sections:
             section.top_margin = Inches(0.75)
             section.bottom_margin = Inches(0.75)
             section.left_margin = Inches(0.75)
             section.right_margin = Inches(0.75)
 
-        # Estilo de Fonte Padrão (Times New Roman, 11pt)
+        # Configura estilo normal como Arial
         style = doc.styles['Normal']
         font = style.font
         font.name = 'Arial'
@@ -260,12 +274,12 @@ class GeradorAnuenciaIncraWord:
         run_titulo.font.size = Pt(12)
         run_titulo.font.name = 'Arial'
 
-        # 2. TEXTO DA DECLARAÇÃO (Idêntico ao modelo)
-        proprietario_origem = dados_projeto.get("proprietario", "AGOSTINHO IZOTON").upper()
-        cpf_origem = dados_projeto.get("cpf_proprietario", "215.894.707-10")
-        localidade_origem = dados_projeto.get("local", "Vila Valério-ES")
+        # 2. TEXTO DA DECLARAÇÃO
+        proprietario_origem = dados_projeto.get("proprietario", "RODRIGO COLOMBI FROTA").upper()
+        cpf_origem = dados_projeto.get("cpf_proprietario", "092.653.737-76")
+        localidade_origem = dados_projeto.get("local", "Vila Valerio-ES")
 
-        tecnico_nome = self.dados_tecnico.get("nome", "Régis Campo da Silva")
+        tecnico_nome = self.dados_tecnico.get("nome", "Regis Campo da Silva")
         tecnico_cfta = self.dados_tecnico.get("cfta", "1119851971-1")
         codigo_incra = "G1D"
 
@@ -279,7 +293,7 @@ class GeradorAnuenciaIncraWord:
         run_corpo2 = p_corpo.add_run(f"{proprietario_origem}, CPF {cpf_origem}")
         run_corpo2.bold = True
         run_corpo2.font.name = 'Arial'
-        run_corpo3 = p_corpo.add_run(f", residente no Jurama, Corrego Sete Quedas, {localidade_origem}, e eu, ")
+        run_corpo3 = p_corpo.add_run(f", residente em {localidade_origem}, e eu, ")
         run_corpo3.font.name = 'Arial'
         run_corpo4 = p_corpo.add_run(f"{tecnico_nome}")
         run_corpo4.bold = True
@@ -300,7 +314,7 @@ class GeradorAnuenciaIncraWord:
         run_corpo10.bold = True
         run_corpo10.font.name = 'Arial'
 
-        # 3. CABEÇALHO CONFRONTANTES E DATA (Idêntico ao modelo)
+        # 3. CABEÇALHO CONFRONTANTES E DATA
         p_confrontantes_label = doc.add_paragraph()
         p_confrontantes_label.paragraph_format.space_after = Pt(4)
         run_conf_label = p_confrontantes_label.add_run(" Confrontantes:")
@@ -312,7 +326,7 @@ class GeradorAnuenciaIncraWord:
             "JANEIRO", "FEVEREIRO", "MARÇO", "ABRIL", "MAIO", "JUNHO",
             "JULHO", "AGOSTO", "SETEMBRO", "OUTUBRO", "NOVEMBRO", "DEZEMBRO"
         ]
-        texto_data = f"Vila Valério - ES, {data_atual.day} de {meses[data_atual.month - 1]} de {data_atual.year}."
+        texto_data = f"{localidade_origem}, {data_atual.day} de {meses[data_atual.month - 1]} de {data_atual.year}."
 
         p_data = doc.add_paragraph()
         p_data.paragraph_format.space_after = Pt(8)
@@ -321,13 +335,12 @@ class GeradorAnuenciaIncraWord:
         run_data.font.name = 'Arial'
 
         # =====================================================================
-        # 4. TABELA 1: DADOS DO CONFRONTANTE (Larguras Ajustadas e Compactas)
+        # 4. TABELA 1: DADOS DO CONFRONTANTE (Ajustada)
         # =====================================================================
         tabela_conf = doc.add_table(rows=2, cols=4)
         tabela_conf.style = 'Table Grid'
         tabela_conf.autofit = False
 
-        # Reduzido para ficar mais perto dos dados reais, evitando vácuo
         larguras_t1 = [Inches(1.8), Inches(1.0), Inches(1.2), Inches(3.0)]
         headers_t1 = ["Nome Imóvel Rural", "Mat. /Trans.", "Comarca", "Nome do Proprietário"]
 
@@ -343,21 +356,18 @@ class GeradorAnuenciaIncraWord:
         row_cells[1].text = str(dados_ia.get("confrontante_matricula", ""))
         row_cells[2].text = str(dados_ia.get("confrontante_comarca", ""))
         row_cells[3].text = str(dados_ia.get("confrontante_proprietario", ""))
-        for cell in row_cells:
-            for paragraph in cell.paragraphs:
-                for run in paragraph.runs:
-                    run.font.name = 'Arial'
-                    run.font.size = Pt(9.5)
 
         for row in tabela_conf.rows:
             for idx, cell in enumerate(row.cells):
                 cell.width = larguras_t1[idx]
+                self._definir_margens_celulas_zero(cell)
                 p = cell.paragraphs[0]
                 p.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 p.paragraph_format.space_after = Pt(2)
                 p.paragraph_format.space_before = Pt(2)
                 if len(p.runs) > 0:
                     p.runs[0].font.size = Pt(9)
+                    p.runs[0].font.name = 'Arial'
 
         # 5. DIVISOR DESCRIÇÃO DA PARCELA
         p_desc = doc.add_paragraph()
@@ -367,14 +377,13 @@ class GeradorAnuenciaIncraWord:
         run_desc.bold = True
 
         # =====================================================================
-        # 6. TABELA 2: PARCELA / VÉRTICES / VANTE (Corrigido e Compactado)
+        # 6. TABELA 2: PARCELA / VÉRTICES / VANTE (Perfeitamente Compactada)
         # =====================================================================
-        # Iniciado com 2 linhas para acomodar o cabeçalho composto corretamente
         tabela_vert = doc.add_table(rows=2, cols=8)
         tabela_vert.style = 'Table Grid'
         tabela_vert.autofit = False
 
-        # Primeira Linha do Cabeçalho
+        # Primeira Linha do Cabeçalho Composto
         hdr_p = tabela_vert.rows[0].cells
         hdr_p[0].merge(hdr_p[3])
         hdr_p[0].text = "VÉRTICE"
@@ -389,7 +398,7 @@ class GeradorAnuenciaIncraWord:
         # Segunda Linha (Sub-cabeçalhos)
         sub_headers = [
             "Código", "Longitude", "Latitude", "Altitude (m)",
-            "Código", "Azimute", "Dist. (m)", "Confrontações"
+            "Código", "Azimute", "Dist. (m)", "Confrontante"
         ]
         sub_cells = tabela_vert.rows[1].cells
         for idx, text in enumerate(sub_headers):
@@ -397,25 +406,25 @@ class GeradorAnuenciaIncraWord:
             sub_cells[idx].paragraphs[0].runs[0].font.bold = True
             sub_cells[idx].paragraphs[0].runs[0].font.size = Pt(9)
 
-        # Larguras calculadas para remover todo o espaço vago das colunas curtas
-        # e entregar o restante do espaço para a descrição da Confrontação.
+        # Medidas precisas em polegadas. O código do vértice ocupa apenas 0.85 polegadas.
+        # A maior parte do espaço livre vai inteiramente para a coluna de Confrontação (2.25").
         larguras_t2 = [
-            Inches(0.75),  # Código Vértice (ex: G1D-M-03281) - Justo!
+            Inches(0.85),  # Código Vértice (ex: G1D-M-03281)
             Inches(0.95),  # Longitude
             Inches(0.95),  # Latitude
             Inches(0.65),  # Altitude (m)
-            Inches(0.75),  # Código Vante (ex: G1D-M-03282) - Justo!
-            Inches(0.60),  # Azimute
-            Inches(0.55),  # Dist. (m) (ex: 210.00) - Compacto!
-            Inches(1.80)   # Confrontações (Ocupa o espaço restante perfeitamente)
+            Inches(0.85),  # Código Vante (ex: G1D-M-03282)
+            Inches(0.55),  # Azimute
+            Inches(0.60),  # Dist. (m)
+            Inches(2.25)   # Confrontante
         ]
 
         vertices_dados = dados_ia.get("vertices", [])
         if not vertices_dados:
             vertices_dados = [
                 {
-                    "codigo": "G1D-P-06815", "longitude": "-40°17'14,014\"", "latitude": "-18°59'22,007\"", "altitude": "58.39",
-                    "vante": "G1D-P-06816", "azimute": "02°15'", "distancia": "41,66",
+                    "codigo": "G1D-M-03281", "longitude": "40°22'10.639\"", "latitude": "19°00'24.525\"", "altitude": "162.10",
+                    "vante": "G1D-M-03282", "azimute": "06°49'", "distancia": "640.71",
                     "confrontacao_completa": f"CNS: 02.170-9 | Mat. {dados_ia.get('confrontante_matricula', '')} | {dados_ia.get('confrontante_imovel', '')}; {dados_ia.get('confrontante_proprietario', '')}"
                 }
             ]
@@ -432,25 +441,33 @@ class GeradorAnuenciaIncraWord:
             cells[6].text = str(v.get("distancia", ""))
             cells[7].text = str(v.get("confrontacao_completa", ""))
 
-        # Formata células e aplica larguras personalizadas linha por linha
+        # Formatação das linhas da tabela
         for r_idx, row in enumerate(tabela_vert.rows):
             for c_idx, cell in enumerate(row.cells):
                 cell.width = larguras_t2[c_idx]
+                self._definir_margens_celulas_zero(cell)  # Aplica margem zero em cada célula!
+                
                 p = cell.paragraphs[0]
-                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                p.paragraph_format.space_before = Pt(2)
-                p.paragraph_format.space_after = Pt(2)
+                # A coluna 7 (Confrontações) fica melhor alinhada à esquerda. As outras centralizadas.
+                if c_idx == 7:
+                    p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                else:
+                    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+                p.paragraph_format.space_before = Pt(3)
+                p.paragraph_format.space_after = Pt(3)
+                
                 if len(p.runs) > 0:
                     p.runs[0].font.size = Pt(8.5)
                     p.runs[0].font.name = 'Arial'
                 if r_idx == 0:
                     p.runs[0].font.size = Pt(9.5)
 
-        # Quebra de Espaço antes das Assinaturas
+        # Espaço antes das Assinaturas
         p_espaco = doc.add_paragraph()
         p_espaco.paragraph_format.space_before = Pt(36)
 
-        # 7. TABELA DE ASSINATURAS HORIZONTAIS (Origem e Confrontante alinhados lado a lado)
+        # 7. TABELA DE ASSINATURAS HORIZONTAIS
         tabela_assinaturas = doc.add_table(rows=2, cols=2)
         tabela_assinaturas.autofit = False
         tabela_assinaturas.columns[0].width = Inches(3.7)
@@ -483,7 +500,7 @@ class GeradorAnuenciaIncraWord:
                         run.font.size = Pt(9.5)
                         run.font.name = 'Arial'
 
-        # 8. ASSINATURA DO RESPONSÁVEL TÉCNICO (Centralizado abaixo das outras duas)
+        # 8. ASSINATURA DO RESPONSÁVEL TÉCNICO
         p_rt_espaco = doc.add_paragraph()
         p_rt_espaco.paragraph_format.space_before = Pt(28)
 
@@ -501,7 +518,7 @@ class GeradorAnuenciaIncraWord:
             run.font.size = Pt(9.5)
             run.font.name = 'Arial'
 
-        # 9. ANEXOS (Idêntico ao modelo)
+        # 9. ANEXOS
         p_anexos_espaco = doc.add_paragraph()
         p_anexos_espaco.paragraph_format.space_before = Pt(24)
 
