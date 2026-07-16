@@ -1,5 +1,5 @@
 # ==========================================
-# ARQUIVO: gerador_anuencia_incra.py (TABELA ESTETICAMENTE ALINHADA À ESQUERDA)
+# ARQUIVO: gerador_anuencia_incra.py
 # ==========================================
 import io
 import re
@@ -289,7 +289,7 @@ class GeradorAnuenciaIncraWord:
     ) -> io.BytesIO:
         """
         Gera o documento Word da declaração de anuência do INCRA no formato paisagem (Landscape).
-        Tabela ajustada esteticamente: cabeçalhos e dados alinhados inteiramente à esquerda.
+        Tabela com cabeçalho de 1 linha e alinhamento à esquerda conforme modelo do usuário.
         """
         doc = Document()
 
@@ -383,11 +383,12 @@ class GeradorAnuenciaIncraWord:
         p_data.alignment = WD_ALIGN_PARAGRAPH.LEFT
         p_data.add_run(texto_data).font.name = 'Arial'
 
-        # 4. TABELA: 1 ÚNICA LINHA DE CABEÇALHO ALINHADA À ESQUERDA
+        # 4. TABELA: ESTRUTURA REQUISITADA (1 ÚNICA LINHA DE CABEÇALHO)
         tabela_vert = doc.add_table(rows=1, cols=8)
         tabela_vert.style = 'Table Grid'
         tabela_vert.autofit = False
 
+        # Cabeçalhos das Colunas baseados exatamente no seu modelo
         sub_headers = [
             "Código", "Longitude", "Latitude", "Altitude (m)",
             "Código", "Azimute", "Dist. (m)", "Confrontante"
@@ -433,10 +434,10 @@ class GeradorAnuenciaIncraWord:
                 cell.width = larguras_t2[c_idx]
                 p = cell.paragraphs[0]
                 
-                # ALTERAÇÃO SOLICITADA: Todo o conteúdo agora é alinhado à ESQUERDA
+                # Todo o conteúdo e cabeçalhos agora são alinhados à esquerda (esquerda)
                 p.alignment = WD_ALIGN_PARAGRAPH.LEFT
                 
-                # Pequeno espaçamento interno e recuo (indentation) para o texto não encostar nas bordas
+                # Pequeno espaçamento interno e recuo para o texto não encostar nas bordas das células
                 p.paragraph_format.left_indent = Inches(0.06) 
                 p.paragraph_format.space_before = Pt(3)
                 p.paragraph_format.space_after = Pt(3)
