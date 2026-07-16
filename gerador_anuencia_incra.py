@@ -1,4 +1,4 @@
-import io
+ import io
 import re
 import json
 import logging
@@ -16,8 +16,8 @@ except ImportError:
 from docx import Document
 from docx.shared import Pt, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.oxml import parse_xml
-from docx.oxml.ns import nsdecls
+from docx.oxml import parse_xml, OxmlElement
+from docx.oxml.ns import nsdecls, qn
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +66,7 @@ class GeradorAnuenciaIncraWord:
     def _obter_dados_estruturados_com_ia(self, texto_memorial: str, dados_projeto: Dict[str, Any]) -> Dict[str, Any]:
         """
         Usa o Gemini para analisar o memorial e separar TODOS os confrontantes com seus respectivos
-        vértices e dados cadastrais.
+        vertíces e dados cadastrais.
         """
         estrutura_padrao = self._estrutura_padrao()
 
@@ -229,6 +229,40 @@ class GeradorAnuenciaIncraWord:
         zip_buffer.seek(0)
         return zip_buffer
 
+    def _definir_larguras_tabela(self, tabela, larguras: List[Inches]):
+        """
+        Aplica larguras de coluna estritas no XML da tabela para prevenir o auto-ajuste indesejado do Word.
+        """
+        # 1. Desabilita AutoFit no elemento de propriedades da tabela (tblPr)
+        tblPr = tabela._tbl.tblPr
+        tblLayout = parse_xml(f'<w:tblLayout {nsdecls("w")} w:type="fixed"/>')
+        tblPr.append(tblLayout)
+
+        # 2. Define o grid de colunas (tblGrid)
+        tblGrid = OxmlElement('w:tblGrid')
+        for l in larguras:
+            gridCol = OxmlElement('w:gridCol')
+            gridCol.set(qn('w:w'), str(int(l.dxa)))
+            tblGrid.append(gridCol)
+        # Substitui ou adiciona o tblGrid na estrutura do XML da tabela
+        tabela._tbl.insert(1, tblGrid)
+
+        # 3. Força a largura em cada célula individual de todas as linhas
+        for row in tabela.rows:
+            trPr = row._tr.get_or_add_trPr()
+            # Garante que a linha não quebre de forma estranha
+            trHeight = parse_xml(f'<w:trHeight {nsdecls("w")} w:hRule="atLeast"/>')
+            trPr.append(trHeight)
+            
+            for idx, cell in enumerate(row.cells):
+                if idx < len(larguras):
+                    # Define a largura no python-docx (compatibilidade de API)
+                    cell.width = larguras[idx]
+                    # Define a largura diretamente no XML da célula (<w:tcW>)
+                    tcPr = cell._tc.get_or_add_tcPr()
+                    tcW = parse_xml(f'<w:tcW {nsdecls("w")} w:w="{int(larguras[idx].dxa)}" w:type="dxa"/>')
+                    tcPr.append(tcW)
+
     def _montar_documento_confrontante(
         self, dados_ia: Dict[str, Any], dados_projeto: Dict[str, Any]
     ) -> io.BytesIO:
@@ -321,14 +355,14 @@ class GeradorAnuenciaIncraWord:
         run_data.font.name = 'Arial'
 
         # =====================================================================
-        # 4. TABELA 1: DADOS DO CONFRONTANTE (Larguras Ajustadas e Compactas)
+        # 4. TABELA 1: DADOS DO CONFRONTANTE (Larguras XML Fixas)
         # =====================================================================
         tabela_conf = doc.add_table(rows=2, cols=4)
         tabela_conf.style = 'Table Grid'
         tabela_conf.autofit = False
 
-        # Reduzido para ficar mais perto dos dados reais, evitando vácuo
-        larguras_t1 = [Inches(1.8), Inches(1.0), Inches(1.2), Inches(3.0)]
+        # Larguras que totalizam 7.0 polegadas (espaço útil padrão de margens estreitas)
+        larguras_t1 = [Inches(1.5), Inches(1.0), Inches(1.3), Inches(3.2)]
         headers_t1 = ["Nome Imóvel Rural", "Mat. /Trans.", "Comarca", "Nome do Proprietário"]
 
         hdr_cells = tabela_conf.rows[0].cells
@@ -343,21 +377,25 @@ class GeradorAnuenciaIncraWord:
         row_cells[1].text = str(dados_ia.get("confrontante_matricula", ""))
         row_cells[2].text = str(dados_ia.get("confrontante_comarca", ""))
         row_cells[3].text = str(dados_ia.get("confrontante_proprietario", ""))
+        
         for cell in row_cells:
             for paragraph in cell.paragraphs:
                 for run in paragraph.runs:
                     run.font.name = 'Arial'
                     run.font.size = Pt(9.5)
 
+        # Aplica alinhamento do texto e depois injeta a correção estrutural de larguras
         for row in tabela_conf.rows:
             for idx, cell in enumerate(row.cells):
-                cell.width = larguras_t1[idx]
                 p = cell.paragraphs[0]
                 p.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 p.paragraph_format.space_after = Pt(2)
                 p.paragraph_format.space_before = Pt(2)
                 if len(p.runs) > 0:
                     p.runs[0].font.size = Pt(9)
+
+        # Força as larguras diretamente nas colunas e células do XML (Tabela 1)
+        self._definir_larguras_tabela(tabela_conf, larguras_t1)
 
         # 5. DIVISOR DESCRIÇÃO DA PARCELA
         p_desc = doc.add_paragraph()
@@ -367,9 +405,8 @@ class GeradorAnuenciaIncraWord:
         run_desc.bold = True
 
         # =====================================================================
-        # 6. TABELA 2: PARCELA / VÉRTICES / VANTE (Corrigido e Compactado)
+        # 6. TABELA 2: PARCELA / VÉRTICES / VANTE (Larguras XML Fixas)
         # =====================================================================
-        # Iniciado com 2 linhas para acomodar o cabeçalho composto corretamente
         tabela_vert = doc.add_table(rows=2, cols=8)
         tabela_vert.style = 'Table Grid'
         tabela_vert.autofit = False
@@ -397,17 +434,16 @@ class GeradorAnuenciaIncraWord:
             sub_cells[idx].paragraphs[0].runs[0].font.bold = True
             sub_cells[idx].paragraphs[0].runs[0].font.size = Pt(9)
 
-        # Larguras calculadas para remover todo o espaço vago das colunas curtas
-        # e entregar o restante do espaço para a descrição da Confrontação.
+        # Distribuição milimétrica de larguras para preencher os 7.0 polegadas disponíveis:
         larguras_t2 = [
-            Inches(0.75),  # Código Vértice (ex: G1D-M-03281) - Justo!
+            Inches(0.75),  # Código Vértice
             Inches(0.95),  # Longitude
             Inches(0.95),  # Latitude
-            Inches(0.65),  # Altitude (m)
-            Inches(0.75),  # Código Vante (ex: G1D-M-03282) - Justo!
+            Inches(0.65),  # Altitude
+            Inches(0.75),  # Código Vante
             Inches(0.60),  # Azimute
-            Inches(0.55),  # Dist. (m) (ex: 210.00) - Compacto!
-            Inches(1.80)   # Confrontações (Ocupa o espaço restante perfeitamente)
+            Inches(0.55),  # Distância
+            Inches(1.80)   # Confrontação Completa (Espaço ideal para evitar quebra de linha excessiva)
         ]
 
         vertices_dados = dados_ia.get("vertices", [])
@@ -432,10 +468,9 @@ class GeradorAnuenciaIncraWord:
             cells[6].text = str(v.get("distancia", ""))
             cells[7].text = str(v.get("confrontacao_completa", ""))
 
-        # Formata células e aplica larguras personalizadas linha por linha
+        # Formata as propriedades visuais dos textos das células
         for r_idx, row in enumerate(tabela_vert.rows):
             for c_idx, cell in enumerate(row.cells):
-                cell.width = larguras_t2[c_idx]
                 p = cell.paragraphs[0]
                 p.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 p.paragraph_format.space_before = Pt(2)
@@ -446,18 +481,20 @@ class GeradorAnuenciaIncraWord:
                 if r_idx == 0:
                     p.runs[0].font.size = Pt(9.5)
 
+        # Força o layout estrito de colunas no XML da tabela (Tabela 2)
+        self._definir_larguras_tabela(tabela_vert, larguras_t2)
+
         # Quebra de Espaço antes das Assinaturas
         p_espaco = doc.add_paragraph()
         p_espaco.paragraph_format.space_before = Pt(36)
 
-        # 7. TABELA DE ASSINATURAS HORIZONTAIS (Origem e Confrontante alinhados lado a lado)
+        # 7. TABELA DE ASSINATURAS HORIZONTAIS
         tabela_assinaturas = doc.add_table(rows=2, cols=2)
         tabela_assinaturas.autofit = False
-        tabela_assinaturas.columns[0].width = Inches(3.7)
-        tabela_assinaturas.columns[1].width = Inches(3.7)
+        self._definir_larguras_tabela(tabela_assinaturas, [Inches(3.5), Inches(3.5)])
 
         cells_as = tabela_assinaturas.rows[0].cells
-        cells_as[0].text = "              _______________________________________________"
+        cells_as[0].text = "             _______________________________________________"
         cells_as[1].text = "_______________________________________________"
 
         cells_nomes = tabela_assinaturas.rows[1].cells
@@ -483,7 +520,7 @@ class GeradorAnuenciaIncraWord:
                         run.font.size = Pt(9.5)
                         run.font.name = 'Arial'
 
-        # 8. ASSINATURA DO RESPONSÁVEL TÉCNICO (Centralizado abaixo das outras duas)
+        # 8. ASSINATURA DO RESPONSÁVEL TÉCNICO
         p_rt_espaco = doc.add_paragraph()
         p_rt_espaco.paragraph_format.space_before = Pt(28)
 
@@ -501,7 +538,7 @@ class GeradorAnuenciaIncraWord:
             run.font.size = Pt(9.5)
             run.font.name = 'Arial'
 
-        # 9. ANEXOS (Idêntico ao modelo)
+        # 9. ANEXOS
         p_anexos_espaco = doc.add_paragraph()
         p_anexos_espaco.paragraph_format.space_before = Pt(24)
 
