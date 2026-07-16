@@ -1,5 +1,5 @@
 # ==========================================
-# ARQUIVO: gerador_anuencia_incra.py (VERSÃO FINAL PAISAGEM REVISADA)
+# ARQUIVO: gerador_anuencia_incra.py (VERSÃO REVISADA DE ALTA PRECISÃO)
 # ==========================================
 import io
 import re
@@ -52,18 +52,18 @@ class GeradorAnuenciaIncraWord:
                 {
                     "confrontante_imovel": "Sitio Sete Quedas",
                     "confrontante_matricula": "8280",
-                    "confrontante_comarca": "São Gabriel da Palha",
+                    "confrontante_comarca": "o Gabriel da Palha",
                     "confrontante_proprietario": "Elias Moro, Luiz Valentin Moro",
                     "confrontante_cpf": "780.485.677-68",
                     "vertices": [
                         {
                             "codigo": "G1D-P-06815",
-                            "longitude": "40°17'14,014\"",
-                            "latitude": "18°59'22,007\"",
+                            "longitude": "40°17'14.014\"",
+                            "latitude": "18°59'22.007\"",
                             "altitude": "58.39",
                             "vante": "G1D-P-06816",
                             "azimute": "02°15'",
-                            "distancia": "41,66",
+                            "distancia": "41.66",
                             "confrontacao_completa": "CNS: 02.170-9 | Mat. 8280 | Sitio Sete Quedas; Elias Moro, Luiz Valentin Moro"
                         }
                     ]
@@ -90,6 +90,10 @@ class GeradorAnuenciaIncraWord:
         {texto_memorial}
         \"\"\"
 
+        REGRAS DE FORMATAÇÃO DOS VALORES:
+        - Para as coordenadas (longitude e latitude), mantenha os símbolos de graus (°), minutos (') e segundos (") intactos. 
+        - Utilize ponto (.) como separador decimal para altitude, distância e segundos das coordenadas.
+
         Responda APENAS com o JSON estruturado abaixo, sem markdown ou textos explicativos:
         {{
             "imovel_origem": {{
@@ -108,12 +112,12 @@ class GeradorAnuenciaIncraWord:
                     "vertices": [
                         {{
                             "codigo": "Código do Vértice",
-                            "longitude": "Longitude formatada",
-                            "latitude": "Latitude formatada",
-                            "altitude": "Altitude",
+                            "longitude": "Ex: 40°17'14.014\\"",
+                            "latitude": "Ex: 18°59'22.007\\"",
+                            "altitude": "Ex: 58.39",
                             "vante": "Código de Vante",
                             "azimute": "Azimute",
-                            "distancia": "Distância",
+                            "distancia": "Ex: 41.66",
                             "confrontacao_completa": "Descrição completa da confrontação"
                         }}
                     ]
@@ -225,20 +229,35 @@ class GeradorAnuenciaIncraWord:
         zip_buffer.seek(0)
         return zip_buffer
 
-    def _limpar_sinal_coordenada(self, valor: Any) -> str:
+    def _limpar_e_formatar_sinal_coordenada(self, valor: Any) -> str:
         """
-        Remove o sinal negativo '-' das coordenadas geográficas.
+        Preserva os símbolos de graus (°), minutos (') e segundos (") de coordenadas,
+        removendo apenas o sinal de menos (-) e garantindo o ponto decimal nos segundos.
         """
         if not valor:
             return ""
-        return re.sub(r'[-\s]', '', str(valor))
+        # Remove sinal negativo (-)
+        texto = str(valor).replace('-', '').strip()
+        # Substitui vírgula por ponto caso exista nos segundos decimais
+        if "," in texto:
+            # Substitui apenas a vírgula do decimal de segundos (que costuma vir antes das aspas finais)
+            texto = re.sub(r',(\d+)"', r'.\1"', texto)
+        return texto
+
+    def _formatar_decimal_ponto(self, valor: Any) -> str:
+        """
+        Garante que valores numéricos (altitude, distância) usem ponto (.) como separador decimal.
+        """
+        if not valor:
+            return ""
+        texto = str(valor).strip()
+        return texto.replace(",", ".")
 
     def _montar_documento_confrontante(
         self, dados_ia: Dict[str, Any], dados_origem: Dict[str, str]
     ) -> io.BytesIO:
         """
         Gera o documento Word da declaração de anuência do INCRA no formato paisagem (Landscape).
-        Removida completamente a Tabela 1 de confrontantes, pulando da data direto para a Parcela.
         """
         doc = Document()
 
@@ -309,7 +328,8 @@ class GeradorAnuenciaIncraWord:
         run_corp8.font.name = 'Arial'
         
         p_corpo.add_run(" com os confrontantes abaixo relacionados, ").font.name = 'Arial'
-        run_corp10 = p_corpo.add_run("n o havendo qualquer lit gio entre as partes.")
+        # CORREÇÃO ORTOGRÁFICA: "não havendo"
+        run_corp10 = p_corpo.add_run("não havendo qualquer lit gio entre as partes.")
         run_corp10.bold = True
         run_corp10.font.name = 'Arial'
 
@@ -331,9 +351,6 @@ class GeradorAnuenciaIncraWord:
         p_data.paragraph_format.space_after = Pt(14)
         p_data.alignment = WD_ALIGN_PARAGRAPH.LEFT
         p_data.add_run(texto_data).font.name = 'Arial'
-
-        # --- TABELA DE CONFRONTANTES COMPLETAMENTE REMOVIDA ---
-        # O fluxo do documento pula da data diretamente para a Tabela de Parcela.
 
         # 4. TABELA: PARCELA / VÉRTICES (Nativa, cabeçalho triplo mesclado)
         tabela_vert = doc.add_table(rows=3, cols=8)
@@ -385,22 +402,24 @@ class GeradorAnuenciaIncraWord:
             Inches(1.2), Inches(0.8), Inches(0.8), Inches(2.1)
         ]
 
-        # --- ADICIONAR DADOS DOS VÉRTICES (Sem sinal negativo '-') ---
+        # --- ADICIONAR DADOS DOS VÉRTICES (Sem sinal negativo '-' e usando ponto decimal) ---
         vertices_dados = dados_ia.get("vertices", [])
         for v in vertices_dados:
             row = tabela_vert.add_row()
             cells = row.cells
             
-            long_limpa = self._limpar_sinal_coordenada(v.get("longitude", ""))
-            lat_limpa = self._limpar_sinal_coordenada(v.get("latitude", ""))
+            long_limpa = self._limpar_e_formatar_sinal_coordenada(v.get("longitude", ""))
+            lat_limpa = self._limpar_e_formatar_sinal_coordenada(v.get("latitude", ""))
+            alt_limpa = self._formatar_decimal_ponto(v.get("altitude", ""))
+            dist_limpa = self._formatar_decimal_ponto(v.get("distancia", ""))
 
             cells[0].text = str(v.get("codigo", ""))
             cells[1].text = long_limpa
             cells[2].text = lat_limpa
-            cells[3].text = str(v.get("altitude", ""))
+            cells[3].text = alt_limpa
             cells[4].text = str(v.get("vante", ""))
             cells[5].text = str(v.get("azimute", ""))
-            cells[6].text = str(v.get("distancia", ""))
+            cells[6].text = dist_limpa
             cells[7].text = str(v.get("confrontacao_completa", ""))
 
         # Formatação de larguras, alinhamento e fontes da tabela
@@ -437,13 +456,21 @@ class GeradorAnuenciaIncraWord:
         run_o1.bold = True
         p_origem.add_run(f"CPF: {cpf_origem}")
 
-        # Coluna Proprietário Confrontante
+        # Coluna Proprietário Confrontante (Tratamento para CPF em branco com máscara)
         p_confrontante = cells_nomes[1].paragraphs[0]
         p_confrontante.alignment = WD_ALIGN_PARAGRAPH.CENTER
         nome_vizinho = str(dados_ia.get("confrontante_proprietario", "")).upper()
-        cpf_vizinho = str(dados_ia.get("confrontante_cpf", "___.___.___-__"))
+        
+        cpf_vizinho_raw = str(dados_ia.get("confrontante_cpf", "")).strip()
+        # Se estiver vazio ou for uma máscara parcial, gera a máscara completa perfeitamente espaçada
+        if not cpf_vizinho_raw or "___" in cpf_vizinho_raw:
+            cpf_vizinho = "___.___.___-__"
+        else:
+            cpf_vizinho = cpf_vizinho_raw
+
         run_v1 = p_confrontante.add_run(f"\n{nome_vizinho}\n")
         run_v1.bold = True
+        # Espaço nítido adicionado antes de 'CPF:' para evitar termos juntos
         p_confrontante.add_run(f"CPF: {cpf_vizinho}")
 
         for row in tabela_assinaturas.rows:
