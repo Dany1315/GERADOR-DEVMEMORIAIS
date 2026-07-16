@@ -1,5 +1,5 @@
 # ==========================================
-# ARQUIVO: gerador_anuencia_incra.py (VERSÃO FINAL PAISAGEM)
+# ARQUIVO: gerador_anuencia_incra.py (VERSÃO FINAL PAISAGEM SEM TABELA 1)
 # ==========================================
 import io
 import re
@@ -32,14 +32,14 @@ class GeradorAnuenciaIncraWord:
         self.dados_empresa = dados_empresa
         self.dados_tecnico = dados_tecnico
 
-        # Configuração da API do Gemini
+        # Configuração da API do Gemini obtida de forma segura dos secrets do Streamlit
         self.api_key = st.secrets.get("GEMINI_API_KEY")
         if self.api_key:
             genai.configure(api_key=self.api_key)
 
     def _estrutura_padrao(self) -> Dict[str, Any]:
         """
-        Estrutura de fallback baseada nos modelos reais.
+        Estrutura de fallback baseada fielmente nos modelos reais fornecidos (Elias/Evaldo).
         """
         return {
             "imovel_origem": {
@@ -137,7 +137,6 @@ class GeradorAnuenciaIncraWord:
             )
 
             texto_resposta = response.text.strip()
-            # Tratamento de segurança para wraps de markdown
             if texto_resposta.startswith("```json"):
                 texto_resposta = texto_resposta.split("```json")[1].split("```")[0].strip()
             elif texto_resposta.startswith("```"):
@@ -184,8 +183,7 @@ class GeradorAnuenciaIncraWord:
         self, conteudo_arquivo: bytes, nome_arquivo: str, dados_projeto: Dict[str, Any] = None
     ) -> List[Tuple[str, io.BytesIO]]:
         """
-        Gera um documento Word separado para cada confrontante identificado no memorial,
-        extraindo todas as informações do documento original.
+        Gera um documento Word separado para cada confrontante identificado no memorial.
         """
         if not conteudo_arquivo:
             raise ValueError("O conteúdo do arquivo está vazio ou corrompido.")
@@ -236,7 +234,7 @@ class GeradorAnuenciaIncraWord:
 
     def _limpar_sinal_coordenada(self, valor: Any) -> str:
         """
-        Remove o sinal negativo '-' das coordenadas (ex: de '-40°17'14"' para '40°17'14"').
+        Remove o sinal negativo '-' das coordenadas.
         """
         if not valor:
             return ""
@@ -247,18 +245,16 @@ class GeradorAnuenciaIncraWord:
     ) -> io.BytesIO:
         """
         Gera o documento Word da declaração de anuência do INCRA no formato paisagem (Landscape)
-        com replicação exata do layout e grafia original (sem acentuação original).
+        com replicação exata do layout original, REMOVENDO a primeira tabela desatualizada.
         """
         doc = Document()
 
         # Configurar Orientação para PAISAGEM (Landscape)
         for section in doc.sections:
             section.orientation = WD_ORIENT.LANDSCAPE
-            # Inverte largura e altura padrão para paisagem
             new_width, new_height = section.page_height, section.page_width
             section.page_width = new_width
             section.page_height = new_height
-            # Margens otimizadas para o formato paisagem horizontal
             section.top_margin = Inches(0.65)
             section.bottom_margin = Inches(0.65)
             section.left_margin = Inches(0.7)
@@ -270,7 +266,7 @@ class GeradorAnuenciaIncraWord:
         font.name = 'Arial'
         font.size = Pt(11)
 
-        # 1. TÍTULO ORIGINAL (Com espaçamento simulando falta de acento)
+        # 1. TÍTULO ORIGINAL (Sem acentuação clássica)
         p_titulo = doc.add_paragraph()
         p_titulo.alignment = WD_ALIGN_PARAGRAPH.CENTER
         p_titulo.paragraph_format.space_before = Pt(0)
@@ -283,8 +279,6 @@ class GeradorAnuenciaIncraWord:
         # 2. DADOS DO PROPRIETÁRIO COM GRAFIA IDÊNTICA AO MODELO
         proprietario_origem = str(dados_origem.get("proprietario", "AGOSTINHO IZOTON")).upper()
         cpf_origem = str(dados_origem.get("cpf", "___.___.___-__"))
-        
-        # Correção forçada para 'Vila Val rio-ES'
         localidade_origem = "Vila Val rio-ES"
 
         # Variáveis do técnico fixadas de acordo com as regras exatas informadas
@@ -306,7 +300,6 @@ class GeradorAnuenciaIncraWord:
         run_corp4.bold = True
         run_corp4.font.name = 'Arial'
         
-        # Uso estrito da grafia "T cnico em Agropecu ria" e "topogr ficos"
         p_corpo.add_run(", T cnico em Agropecu ria, CFTA ").font.name = 'Arial'
         run_cfta_val = p_corpo.add_run(f"{tecnico_cfta}")
         run_cfta_val.bold = True
@@ -339,74 +332,23 @@ class GeradorAnuenciaIncraWord:
             "JANEIRO", "FEVEREIRO", "MARÇO", "ABRIL", "MAIO", "JUNHO",
             "JULHO", "AGOSTO", "SETEMBRO", "OUTUBRO", "NOVEMBRO", "DEZEMBRO"
         ]
-        
-        # Aplicado 'Vila Val rio-ES' também na data
         texto_data = f"Vila Val rio-ES, {data_atual.day} de {meses[data_atual.month - 1]} de {data_atual.year}."
 
         p_data = doc.add_paragraph()
-        p_data.paragraph_format.space_after = Pt(8)
+        p_data.paragraph_format.space_after = Pt(12)
         p_data.alignment = WD_ALIGN_PARAGRAPH.LEFT
         p_data.add_run(texto_data).font.name = 'Arial'
 
-        # 4. TABELA 1: DADOS DO CONFRONTANTE (Nativa Word, sem pipes)
-        tabela_conf = doc.add_table(rows=2, cols=4)
-        tabela_conf.style = 'Table Grid'
-        tabela_conf.autofit = False
+        # --- TABELA 1 (DE CONFRONTANTES) REMOVIDA DE ACORDO COM OS NOVOS MODELOS ---
 
-        # Redimensionamento de larguras adaptados para o formato paisagem (Total horizontal ~9.6 polegadas livres)
-        larguras_t1 = [Inches(2.5), Inches(1.5), Inches(2.1), Inches(3.5)]
-        headers_t1 = ["Nome Imóvel Rural", "Mat. /Trans.", "Comarca", "Nome do Proprietário"]
-
-        hdr_cells = tabela_conf.rows[0].cells
-        for idx, text in enumerate(headers_t1):
-            hdr_cells[idx].text = text
-            hdr_cells[idx].paragraphs[0].runs[0].font.bold = True
-            hdr_cells[idx].paragraphs[0].runs[0].font.size = Pt(9.5)
-            hdr_cells[idx].paragraphs[0].runs[0].font.name = 'Arial'
-
-        # Trata o bug do "o Gabriel da Palha" conforme apontado
-        comarca_original = str(dados_ia.get("confrontante_comarca", "o Gabriel da Palha"))
-        if "São" in comarca_original:
-            comarca_original = comarca_original.replace("São", "o")
-        elif "So" in comarca_original:
-            comarca_original = comarca_original.replace("So", "o")
-        # Remove a sigla "- ES" ou similar para bater com o original
-        comarca_original = comarca_original.split("-")[0].strip()
-
-        row_cells = tabela_conf.rows[1].cells
-        row_cells[0].text = str(dados_ia.get("confrontante_imovel", ""))
-        row_cells[1].text = str(dados_ia.get("confrontante_matricula", ""))
-        row_cells[2].text = comarca_original
-        row_cells[3].text = str(dados_ia.get("confrontante_proprietario", ""))
-        
-        for cell in row_cells:
-            for paragraph in cell.paragraphs:
-                for run in paragraph.runs:
-                    run.font.name = 'Arial'
-                    run.font.size = Pt(9.5)
-
-        for row in tabela_conf.rows:
-            for idx, cell in enumerate(row.cells):
-                cell.width = larguras_t1[idx]
-                p = cell.paragraphs[0]
-                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                p.paragraph_format.space_after = Pt(3)
-                p.paragraph_format.space_before = Pt(3)
-
-        # Adiciona um pequeno espaçamento entre tabelas
-        p_spacer = doc.add_paragraph()
-        p_spacer.paragraph_format.space_before = Pt(8)
-        p_spacer.paragraph_format.space_after = Pt(0)
-
-        # 5. TABELA 2: PARCELA / VÉRTICES (Totalmente Nativa do Word)
-        # Criada com 3 linhas de cabeçalho iniciais + linhas de dados
+        # 4. TABELA: PARCELA / VÉRTICES (Nativa, cabeçalho triplo mesclado)
         tabela_vert = doc.add_table(rows=3, cols=8)
         tabela_vert.style = 'Table Grid'
         tabela_vert.autofit = False
 
         # --- LINHA 1 DO CABEÇALHO (Mesclada inteira para "DESCRIÇÃO DA PARCELA") ---
         row1 = tabela_vert.rows[0]
-        row1.cells[0].merge(row1.cells[7]) # Mescla todas as 8 colunas
+        row1.cells[0].merge(row1.cells[7]) 
         row1.cells[0].text = "DESCRIÇÃO DA PARCELA"
         run_desc = row1.cells[0].paragraphs[0].runs[0]
         run_desc.font.bold = True
@@ -415,19 +357,14 @@ class GeradorAnuenciaIncraWord:
 
         # --- LINHA 2 DO CABEÇALHO (Mesclagem tripla) ---
         row2 = tabela_vert.rows[1]
-        
-        # Mescla colunas 1 a 4 (0 a 3) para "VÉRTICE"
         row2.cells[0].merge(row2.cells[3])
         row2.cells[0].text = "VÉRTICE"
         
-        # Mescla colunas 5 a 7 (4 a 6) para "SEGMENTO VANTE"
         row2.cells[4].merge(row2.cells[6])
         row2.cells[4].text = "SEGMENTO VANTE"
         
-        # Coluna 8 (7) simples: "Confronta"
         row2.cells[7].text = "Confronta"
 
-        # Aplicar estilos para a Linha 2
         for idx in [0, 4, 7]:
             cell = row2.cells[idx]
             if len(cell.paragraphs[0].runs) > 0:
@@ -448,19 +385,17 @@ class GeradorAnuenciaIncraWord:
             row3.cells[idx].paragraphs[0].runs[0].font.size = Pt(9)
             row3.cells[idx].paragraphs[0].runs[0].font.name = 'Arial'
 
-        # Larguras ideais horizontais para as 8 colunas em modo paisagem
         larguras_t2 = [
             Inches(1.2), Inches(1.3), Inches(1.3), Inches(0.9),
             Inches(1.2), Inches(0.8), Inches(0.8), Inches(2.1)
         ]
 
-        # --- ADICIONAR DADOS DOS VÉRTICES ---
+        # --- ADICIONAR DADOS DOS VÉRTICES (Sem sinal negativo '-') ---
         vertices_dados = dados_ia.get("vertices", [])
         for v in vertices_dados:
             row = tabela_vert.add_row()
             cells = row.cells
             
-            # Remove o sinal de negativo (-) das coordenadas de Longitude e Latitude
             long_limpa = self._limpar_sinal_coordenada(v.get("longitude", ""))
             lat_limpa = self._limpar_sinal_coordenada(v.get("latitude", ""))
 
@@ -473,7 +408,7 @@ class GeradorAnuenciaIncraWord:
             cells[6].text = str(v.get("distancia", ""))
             cells[7].text = str(v.get("confrontacao_completa", ""))
 
-        # Formatação das larguras, alinhamento e fontes de todas as células da tabela 2
+        # Formatação estrutural de toda a tabela
         for r_idx, row in enumerate(tabela_vert.rows):
             for c_idx, cell in enumerate(row.cells):
                 cell.width = larguras_t2[c_idx]
@@ -486,16 +421,14 @@ class GeradorAnuenciaIncraWord:
                     p.runs[0].font.name = 'Arial'
 
         # Espaço proporcional antes das Assinaturas
-        doc.add_paragraph().paragraph_format.space_before = Pt(28)
+        doc.add_paragraph().paragraph_format.space_before = Pt(32)
 
-        # 6. TABELA DE ASSINATURAS HORIZONTAIS PARALELAS (Sem pipes!)
-        # Criada sobre uma estrutura invisível de 2 colunas largas
+        # 5. TABELA DE ASSINATURAS HORIZONTAIS PARALELAS (Invisível, sem pipes)
         tabela_assinaturas = doc.add_table(rows=2, cols=2)
         tabela_assinaturas.autofit = False
         tabela_assinaturas.columns[0].width = Inches(4.7)
         tabela_assinaturas.columns[1].width = Inches(4.7)
 
-        # Linhas de assinatura contínuas e paralelas
         cells_as = tabela_assinaturas.rows[0].cells
         cells_as[0].text = "__________________________________________________"
         cells_as[1].text = "__________________________________________________"
@@ -505,7 +438,6 @@ class GeradorAnuenciaIncraWord:
         # Coluna Proprietário de Origem
         p_origem = cells_nomes[0].paragraphs[0]
         p_origem.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        # Quebra de linha física (\n) separando perfeitamente o nome do CPF
         run_o1 = p_origem.add_run(f"\n{proprietario_origem}\n")
         run_o1.bold = True
         p_origem.add_run(f"CPF: {cpf_origem}")
@@ -515,15 +447,12 @@ class GeradorAnuenciaIncraWord:
         p_confrontante.alignment = WD_ALIGN_PARAGRAPH.CENTER
         nome_vizinho = str(dados_ia.get("confrontante_proprietario", "")).upper()
         cpf_vizinho = str(dados_ia.get("confrontante_cpf", "___.___.___-__"))
-        # Quebra de linha física (\n) separando perfeitamente o nome do CPF
         run_v1 = p_confrontante.add_run(f"\n{nome_vizinho}\n")
         run_v1.bold = True
         p_confrontante.add_run(f"CPF: {cpf_vizinho}")
 
-        # Estilizar fontes das assinaturas
         for row in tabela_assinaturas.rows:
             for cell in row.cells:
-                # Remove as bordas visíveis da tabela para as assinaturas parecerem flutuantes
                 cell.width = Inches(4.7)
                 p = cell.paragraphs[0]
                 p.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -531,7 +460,7 @@ class GeradorAnuenciaIncraWord:
                     run.font.size = Pt(9.5)
                     run.font.name = 'Arial'
 
-        # 7. BLOCO DO RESPONSÁVEL TÉCNICO (Organizado em linhas separadas)
+        # 6. BLOCO DO RESPONSÁVEL TÉCNICO (Linhas independentes)
         doc.add_paragraph().paragraph_format.space_before = Pt(22)
         p_linha_rt = doc.add_paragraph()
         p_linha_rt.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -539,7 +468,6 @@ class GeradorAnuenciaIncraWord:
 
         p_info_rt = doc.add_paragraph()
         p_info_rt.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        # Nome e CFTA em linhas totalmente independentes
         run_rt1 = p_info_rt.add_run(f"{tecnico_nome}\n")
         run_rt1.bold = True
         p_info_rt.add_run(f"CFTA: {tecnico_cfta}")
@@ -548,7 +476,7 @@ class GeradorAnuenciaIncraWord:
             run.font.size = Pt(9.5)
             run.font.name = 'Arial'
 
-        # 8. ANEXOS (Com espaçamento duplo simples sem \t invisíveis)
+        # 7. ANEXOS (Espaçamento duplo limpo)
         doc.add_paragraph().paragraph_format.space_before = Pt(18)
         p_anexos = doc.add_paragraph()
         p_anexos.add_run("Anexos:  ").bold = True
@@ -558,7 +486,6 @@ class GeradorAnuenciaIncraWord:
             run.font.size = Pt(9)
             run.font.name = 'Arial'
 
-        # Salva em memória
         buffer = io.BytesIO()
         doc.save(buffer)
         buffer.seek(0)
