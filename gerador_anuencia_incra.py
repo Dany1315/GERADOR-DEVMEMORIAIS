@@ -74,8 +74,8 @@ class GeradorAnuenciaIncraWord:
         if not coord_str:
             return ""
         
-        # Remove sinal de menos (-)
-        limpo = coord_str.replace("-", "").strip()
+        # Remove sinal de menos (-) e aspas duplas duplicadas
+        limpo = coord_str.replace("-", "").replace('""', '"').strip()
         
         # Troca vírgula por ponto para o padrão decimal
         limpo = limpo.replace(",", ".")
@@ -311,7 +311,7 @@ class GeradorAnuenciaIncraWord:
         tcMar = OxmlElement('w:tcMar')
         for m in ['top', 'bottom', 'left', 'right']:
             node = OxmlElement(f'w:{m}')
-            node.set(qn('w:w'), '40')  # Margem mínima de segurança interna
+            node.set(qn('w:w'), '40')  # Margem mínima de segurança interna (2 dxa)
             node.set(qn('w:type'), 'dxa')
             tcMar.append(node)
         tcPr.append(tcMar)
@@ -321,7 +321,7 @@ class GeradorAnuenciaIncraWord:
     ) -> io.BytesIO:
         """
         Gera o documento Word otimizado, compacto, em modo PAISAGEM com tabelas em tamanho de fonte 7,
-        sem a tabela superior de dados cadastrais do confrontante (focado estritamente na tabela de vértices).
+        sem a tabela superior de dados cadastrais e com larguras de coluna perfeitamente otimizadas.
         """
         doc = Document()
 
@@ -333,7 +333,7 @@ class GeradorAnuenciaIncraWord:
             section.page_width = new_width
             section.page_height = new_height
             
-            # Margens estreitas para melhor aproveitamento horizontal
+            # Margens estreitas para melhor aproveitamento horizontal (Total horizontal de 10 polegadas)
             section.top_margin = Inches(0.5)
             section.bottom_margin = Inches(0.5)
             section.left_margin = Inches(0.5)
@@ -355,7 +355,7 @@ class GeradorAnuenciaIncraWord:
         run_titulo.font.size = Pt(12)
         run_titulo.font.name = 'Arial'
 
-        # 2. TEXTO DA DECLARAÇÃO (Proprietário agora extraído pela IA do memorial)
+        # 2. TEXTO DA DECLARAÇÃO (Proprietário extraído pela IA do memorial)
         proprietario_origem = dados_projeto.get("proprietario", "RODRIGO COLOMBI FROTA").upper().strip()
         cpf_origem = dados_projeto.get("cpf_proprietario", "092.653.737-76").strip()
         localidade_origem = dados_projeto.get("local", "Vila Valerio-ES")
@@ -412,13 +412,13 @@ class GeradorAnuenciaIncraWord:
         run_data.font.name = 'Arial'
 
         # =====================================================================
-        # 4. TABELA DE VÉRTICES / SEGMENTOS (Início Direto com Linha Única de Cabeçalho)
+        # 4. TABELA DE VÉRTICES / SEGMENTOS (Larguras Extremamente Otimizadas)
         # =====================================================================
         tabela_vert = doc.add_table(rows=1, cols=8)
         tabela_vert.style = 'Table Grid'
         tabela_vert.autofit = False
 
-        # Linha Única de Cabeçalhos (Como no seu modelo físico ideal)
+        # Linha Única de Cabeçalhos
         headers_t2 = [
             "Código", "Longitude", "Latitude", "Altitude (m)",
             "Código", "Azimute", "Dist. (m)", "Confrontante"
@@ -436,16 +436,17 @@ class GeradorAnuenciaIncraWord:
             run.font.size = Pt(7)  # Rigorosamente 7pt
             run.font.name = 'Arial'
 
-        # Distribuição de larguras no modo paisagem (Total de 10 polegadas úteis)
+        # Redução agressiva dos dados normais para dar o máximo de largura para Confrontante
+        # A área horizontal total útil da página Paisagem (A4) com margem de 0.5" é de 10 polegadas.
         larguras_t2 = [
-            Inches(1.0),  # Código Vértice
-            Inches(1.2),  # Longitude (GG°MM'SS.SSS")
-            Inches(1.2),  # Latitude (GG°MM'SS.SSS")
-            Inches(0.8),  # Altitude (m)
-            Inches(1.0),  # Código Vante
-            Inches(0.7),  # Azimute (GG°MM')
-            Inches(0.8),  # Dist. (m)
-            Inches(3.3)   # Confrontante (Aproveita o restante horizontal)
+            Inches(0.7),  # Código Vértice (ex: G1D-M-03279 cabe perfeitamente em 0.7")
+            Inches(0.9),  # Longitude (ex: 40°21'56.603" cabe perfeitamente em 0.9" no tamanho 7)
+            Inches(0.9),  # Latitude (ex: 19°00'25.571" cabe perfeitamente em 0.9" no tamanho 7)
+            Inches(0.5),  # Altitude (m) (ex: 227.02 cabe perfeitamente em 0.5")
+            Inches(0.7),  # Código Vante
+            Inches(0.5),  # Azimute (ex: 271°14' cabe em 0.5")
+            Inches(0.5),  # Dist. (m) (ex: 110.29 cabe em 0.5")
+            Inches(5.3)   # Confrontante (Aumentado de 3.3" para 5.3" -> O dobro de espaço!)
         ]
 
         vertices_dados = dados_ia.get("vertices", [])
@@ -472,13 +473,14 @@ class GeradorAnuenciaIncraWord:
 
         # Formatação das linhas da tabela para fonte 7pt e alinhamento correto
         for r_idx, row in enumerate(tabela_vert.rows):
-            # Ignora a primeira linha se for o cabeçalho já formatado
-            if r_idx == 0:
-                continue
             for c_idx, cell in enumerate(row.cells):
                 cell.width = larguras_t2[c_idx]
                 self._definir_margens_celulas_zero(cell)
                 
+                # Ignora a primeira linha se for o cabeçalho já formatado
+                if r_idx == 0:
+                    continue
+                    
                 p = cell.paragraphs[0]
                 if c_idx == 7:
                     p.alignment = WD_ALIGN_PARAGRAPH.LEFT
@@ -553,7 +555,7 @@ class GeradorAnuenciaIncraWord:
             run.font.name = 'Arial'
 
         # =====================================================================
-        # 7. ANEXOS (Dois espaços idênticos ao modelo original)
+        # 7. ANEXOS
         # =====================================================================
         p_anexos_espaco = doc.add_paragraph()
         p_anexos_espaco.paragraph_format.space_before = Pt(16)
