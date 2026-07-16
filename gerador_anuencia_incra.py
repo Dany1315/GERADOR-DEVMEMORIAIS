@@ -1,5 +1,5 @@
 # ==========================================
-# ARQUIVO: gerador_anuencia_incra.py (VERSÃO REVISADA DE ALTA PRECISÃO)
+# ARQUIVO: gerador_anuencia_incra.py (VERSÃO 100% IDÊNTICA AO NOVO MODELO)
 # ==========================================
 import io
 import re
@@ -46,7 +46,7 @@ class GeradorAnuenciaIncraWord:
                 "proprietario": "AGOSTINHO IZOTON",
                 "cpf": "215.894.707-10",
                 "imovel": "GLEBA A",
-                "localidade": "Vila Val rio-ES"
+                "localidade": "Vila Valerio-ES"
             },
             "confrontantes": [
                 {
@@ -58,8 +58,8 @@ class GeradorAnuenciaIncraWord:
                     "vertices": [
                         {
                             "codigo": "G1D-P-06815",
-                            "longitude": "40°17'14.014\"",
-                            "latitude": "18°59'22.007\"",
+                            "longitude": "40°17'14.01\"",
+                            "latitude": "18°59'22.00\"",
                             "altitude": "58.39",
                             "vante": "G1D-P-06816",
                             "azimute": "02°15'",
@@ -79,7 +79,8 @@ class GeradorAnuenciaIncraWord:
 
         if not self.api_key:
             logger.warning("Chave de API do Gemini não configurada nos secrets. Usando dados padrão.")
-            return estrutura_padrao
+            return_data = estrutura_padrao
+            return return_data
 
         prompt = f"""
         Você é um engenheiro cartógrafo especialista em georreferenciamento do INCRA.
@@ -90,9 +91,10 @@ class GeradorAnuenciaIncraWord:
         {texto_memorial}
         \"\"\"
 
-        REGRAS DE FORMATAÇÃO DOS VALORES:
-        - Para as coordenadas (longitude e latitude), mantenha os símbolos de graus (°), minutos (') e segundos (") intactos. 
-        - Utilize ponto (.) como separador decimal para altitude, distância e segundos das coordenadas.
+        REGRAS CRÍTICAS DE FORMATAÇÃO DOS VALORES:
+        - Para as coordenadas (longitude e latitude), você DEVE obrigatoriamente usar o símbolo de graus (°), minutos (') e segundos ("). Exemplo: 40°24'35.39"
+        - Utilize sempre ponto (.) como separador decimal para altitude, distância e segundos das coordenadas.
+        - Para Azimutes, garanta a presença do símbolo de grau (°). Exemplo: 292°21'
 
         Responda APENAS com o JSON estruturado abaixo, sem markdown ou textos explicativos:
         {{
@@ -112,11 +114,11 @@ class GeradorAnuenciaIncraWord:
                     "vertices": [
                         {{
                             "codigo": "Código do Vértice",
-                            "longitude": "Ex: 40°17'14.014\\"",
-                            "latitude": "Ex: 18°59'22.007\\"",
+                            "longitude": "Ex: 40°17'14.01\\"",
+                            "latitude": "Ex: 18°59'22.00\\"",
                             "altitude": "Ex: 58.39",
                             "vante": "Código de Vante",
-                            "azimute": "Azimute",
+                            "azimute": "Ex: 292°21'",
                             "distancia": "Ex: 41.66",
                             "confrontacao_completa": "Descrição completa da confrontação"
                         }}
@@ -229,35 +231,67 @@ class GeradorAnuenciaIncraWord:
         zip_buffer.seek(0)
         return zip_buffer
 
-    def _limpar_e_formatar_sinal_coordenada(self, valor: Any) -> str:
+    def _formatar_coordenada_estrita(self, valor: Any) -> str:
         """
-        Preserva os símbolos de graus (°), minutos (') e segundos (") de coordenadas,
-        removendo apenas o sinal de menos (-) e garantindo o ponto decimal nos segundos.
+        Preserva e corrige a formatação das coordenadas para manter o padrão de graus (°).
+        Remove o sinal de menos (-) e garante o separador de ponto para os segundos decimais.
         """
         if not valor:
             return ""
-        # Remove sinal negativo (-)
+        
         texto = str(valor).replace('-', '').strip()
-        # Substitui vírgula por ponto caso exista nos segundos decimais
-        if "," in texto:
-            # Substitui apenas a vírgula do decimal de segundos (que costuma vir antes das aspas finais)
-            texto = re.sub(r',(\d+)"', r'.\1"', texto)
+        texto = texto.replace(',', '.')
+
+        # Se a coordenada perdeu o símbolo de grau original, tenta reinserir baseando-se no padrão
+        if "°" not in texto and len(texto) >= 4:
+            # Encontra os primeiros dígitos numéricos para aplicar o grau °
+            match = re.match(r'^(\d{2})\s*([\d\']{2,})\s*([\d\.\"]+)', texto)
+            if match:
+                graus = match.group(1)
+                minutos = match.group(2).replace("'", "")
+                segundos = match.group(3).replace('"', '')
+                texto = f"{graus}°{minutos}'{segundos}\""
+
         return texto
 
-    def _formatar_decimal_ponto(self, valor: Any) -> str:
+    def _formatar_azimute_estrito(self, valor: Any) -> str:
         """
-        Garante que valores numéricos (altitude, distância) usem ponto (.) como separador decimal.
+        Garante que o azimute contenha o símbolo de graus (°) e separador de ponto.
         """
         if not valor:
             return ""
-        texto = str(valor).strip()
-        return texto.replace(",", ".")
+        texto = str(valor).strip().replace(",", ".")
+        if "°" not in texto and len(texto) >= 2:
+            match = re.match(r'^(\d{2,3})[\s\']?(\d{2})?', texto)
+            if match:
+                graus = match.group(1)
+                minutos = match.group(2) if match.group(2) else "00"
+                texto = f"{graus}°{minutos}'"
+        return texto
+
+    def _formatar_decimal_estrito_2_casas(self, valor: Any) -> str:
+        """
+        Força separador decimal por ponto (.) e garante exatamente 2 casas decimais.
+        """
+        if not valor:
+            return "0.00"
+        
+        # Remove eventuais caracteres não numéricos, mantendo ponto e vírgula
+        texto_limpo = re.sub(r'[^\d\.,]', '', str(valor).strip())
+        texto_limpo = texto_limpo.replace(",", ".")
+        
+        try:
+            num_float = float(texto_limpo)
+            return f"{num_float:.2f}"
+        except ValueError:
+            return texto_limpo
 
     def _montar_documento_confrontante(
         self, dados_ia: Dict[str, Any], dados_origem: Dict[str, str]
     ) -> io.BytesIO:
         """
-        Gera o documento Word da declaração de anuência do INCRA no formato paisagem (Landscape).
+        Gera o documento Word da declaração de anuência do INCRA no formato paisagem (Landscape)
+        com as novas diretrizes simplificadas do modelo original.
         """
         doc = Document()
 
@@ -278,7 +312,7 @@ class GeradorAnuenciaIncraWord:
         font.name = 'Arial'
         font.size = Pt(11)
 
-        # 1. TÍTULO ORIGINAL (Com os espaçamentos clássicos de importação)
+        # 1. TÍTULO ORIGINAL
         p_titulo = doc.add_paragraph()
         p_titulo.alignment = WD_ALIGN_PARAGRAPH.CENTER
         p_titulo.paragraph_format.space_before = Pt(0)
@@ -288,13 +322,13 @@ class GeradorAnuenciaIncraWord:
         run_titulo.font.size = Pt(12)
         run_titulo.font.name = 'Arial'
 
-        # 2. DADOS DO PROPRIETÁRIO COM GRAFIA IDÊNTICA AO MODELO
+        # 2. DADOS DO PROPRIETÁRIO - SIMPLIFICADOS E SEM ACENTOS ESPECIAIS
         proprietario_origem = str(dados_origem.get("proprietario", "AGOSTINHO IZOTON")).upper()
         cpf_origem = str(dados_origem.get("cpf", "___.___.___-__"))
-        localidade_origem = "Vila Val rio-ES"
+        localidade_origem = "Vila Valerio-ES"
 
-        # Dados institucionais padronizados
-        tecnico_nome = "R gis Campo da Silva"
+        # Dados institucionais simplificados do novo modelo original (sem caracteres acentuados)
+        tecnico_nome = "Regis Campo da Silva"
         tecnico_cfta = "1119851971-1"
         codigo_incra = "G1D"
 
@@ -307,12 +341,14 @@ class GeradorAnuenciaIncraWord:
         run_corp2 = p_corpo.add_run(f"{proprietario_origem}, CPF {cpf_origem}")
         run_corp2.bold = True
         run_corp2.font.name = 'Arial'
-        p_corpo.add_run(f", residente no Jurama, Corrego Sete Quedas, {localidade_origem}, e eu, ").font.name = 'Arial'
+        
+        # AJUSTE 1: Endereço simplificado sem menções antigas e texto totalmente revisado
+        p_corpo.add_run(f", residente em {localidade_origem}, e eu, ").font.name = 'Arial'
         run_corp4 = p_corpo.add_run(f"{tecnico_nome}")
         run_corp4.bold = True
         run_corp4.font.name = 'Arial'
         
-        p_corpo.add_run(", T cnico em Agropecu ria, CFTA ").font.name = 'Arial'
+        p_corpo.add_run(", Tecnico em Agropecuaria, CFTA ").font.name = 'Arial'
         run_cfta_val = p_corpo.add_run(f"{tecnico_cfta}")
         run_cfta_val.bold = True
         run_cfta_val.font.name = 'Arial'
@@ -322,14 +358,13 @@ class GeradorAnuenciaIncraWord:
         run_corp6.bold = True
         run_corp6.font.name = 'Arial'
         
-        p_corpo.add_run(", declaramos sob as penas da Lei que quando dos trabalhos topogr ficos executados na citada propriedade ").font.name = 'Arial'
+        p_corpo.add_run(", declaramos sob as penas da Lei que quando dos trabalhos topograficos executados na citada propriedade ").font.name = 'Arial'
         run_corp8 = p_corpo.add_run("foram respeitados os limites de \"divisas in loco\"")
         run_corp8.bold = True
         run_corp8.font.name = 'Arial'
         
         p_corpo.add_run(" com os confrontantes abaixo relacionados, ").font.name = 'Arial'
-        # CORREÇÃO ORTOGRÁFICA: "não havendo"
-        run_corp10 = p_corpo.add_run("não havendo qualquer lit gio entre as partes.")
+        run_corp10 = p_corpo.add_run("não havendo qualquer litigio entre as partes.")
         run_corp10.bold = True
         run_corp10.font.name = 'Arial'
 
@@ -345,15 +380,17 @@ class GeradorAnuenciaIncraWord:
             "JANEIRO", "FEVEREIRO", "MARÇO", "ABRIL", "MAIO", "JUNHO",
             "JULHO", "AGOSTO", "SETEMBRO", "OUTUBRO", "NOVEMBRO", "DEZEMBRO"
         ]
-        texto_data = f"Vila Val rio-ES, {data_atual.day} de {meses[data_atual.month - 1]} de {data_atual.year}."
+        # Garante grafia "Vila Valerio-ES" sem acento inconsistente na data
+        texto_data = f"Vila Valerio-ES, {data_atual.day} de {meses[data_atual.month - 1]} de {data_atual.year}."
 
         p_data = doc.add_paragraph()
         p_data.paragraph_format.space_after = Pt(14)
         p_data.alignment = WD_ALIGN_PARAGRAPH.LEFT
         p_data.add_run(texto_data).font.name = 'Arial'
 
-        # 4. TABELA: PARCELA / VÉRTICES (Nativa, cabeçalho triplo mesclado)
-        tabela_vert = doc.add_table(rows=3, cols=8)
+        # 4. TABELA: PARCELA / VÉRTICES (Nativa, cabeçalho de 2 linhas)
+        # AJUSTE 2: Tabela simplificada de 2 linhas de cabeçalho.
+        tabela_vert = doc.add_table(rows=2, cols=8)
         tabela_vert.style = 'Table Grid'
         tabela_vert.autofit = False
 
@@ -366,59 +403,42 @@ class GeradorAnuenciaIncraWord:
         run_desc.font.size = Pt(10)
         run_desc.font.name = 'Arial'
 
-        # --- LINHA 2 DO CABEÇALHO (Mesclagem tripla) ---
-        row2 = tabela_vert.rows[1]
-        row2.cells[0].merge(row2.cells[3])
-        row2.cells[0].text = "VÉRTICE"
-        
-        row2.cells[4].merge(row2.cells[6])
-        row2.cells[4].text = "SEGMENTO VANTE"
-        
-        row2.cells[7].text = "Confronta"
-
-        for idx in [0, 4, 7]:
-            cell = row2.cells[idx]
-            if len(cell.paragraphs[0].runs) > 0:
-                run = cell.paragraphs[0].runs[0]
-                run.font.bold = True
-                run.font.size = Pt(9.5)
-                run.font.name = 'Arial'
-
-        # --- LINHA 3 DO CABEÇALHO (Subdivisões) ---
-        # AJUSTADO: Última coluna alterada de 'Confronta' para 'Confrontante'
+        # --- LINHA 2 DO CABEÇALHO (Subdivisões de dados diretamente, sem intermediários) ---
         sub_headers = [
             "Código", "Longitude", "Latitude", "Altitude (m)",
             "Código", "Azimute", "Dist. (m)", "Confrontante"
         ]
-        row3 = tabela_vert.rows[2]
+        row2 = tabela_vert.rows[1]
         for idx, text in enumerate(sub_headers):
-            row3.cells[idx].text = text
-            row3.cells[idx].paragraphs[0].runs[0].font.bold = True
-            row3.cells[idx].paragraphs[0].runs[0].font.size = Pt(9)
-            row3.cells[idx].paragraphs[0].runs[0].font.name = 'Arial'
+            row2.cells[idx].text = text
+            row2.cells[idx].paragraphs[0].runs[0].font.bold = True
+            row2.cells[idx].paragraphs[0].runs[0].font.size = Pt(9)
+            row2.cells[idx].paragraphs[0].runs[0].font.name = 'Arial'
 
         larguras_t2 = [
             Inches(1.2), Inches(1.3), Inches(1.3), Inches(0.9),
             Inches(1.2), Inches(0.8), Inches(0.8), Inches(2.1)
         ]
 
-        # --- ADICIONAR DADOS DOS VÉRTICES (Sem sinal negativo '-' e usando ponto decimal) ---
+        # --- ADICIONAR DADOS DOS VÉRTICES (Com formatação estrita de precisão) ---
+        # AJUSTE 3: Preserva graus (°), separadores de ponto (.) e formata com duas casas decimais.
         vertices_dados = dados_ia.get("vertices", [])
         for v in vertices_dados:
             row = tabela_vert.add_row()
             cells = row.cells
             
-            long_limpa = self._limpar_e_formatar_sinal_coordenada(v.get("longitude", ""))
-            lat_limpa = self._limpar_e_formatar_sinal_coordenada(v.get("latitude", ""))
-            alt_limpa = self._formatar_decimal_ponto(v.get("altitude", ""))
-            dist_limpa = self._formatar_decimal_ponto(v.get("distancia", ""))
+            long_limpa = self._formatar_coordenada_estrita(v.get("longitude", ""))
+            lat_limpa = self._formatar_coordenada_estrita(v.get("latitude", ""))
+            alt_limpa = self._formatar_decimal_estrito_2_casas(v.get("altitude", ""))
+            azimute_limpo = self._formatar_azimute_estrito(v.get("azimute", ""))
+            dist_limpa = self._formatar_decimal_estrito_2_casas(v.get("distancia", ""))
 
             cells[0].text = str(v.get("codigo", ""))
             cells[1].text = long_limpa
             cells[2].text = lat_limpa
             cells[3].text = alt_limpa
             cells[4].text = str(v.get("vante", ""))
-            cells[5].text = str(v.get("azimute", ""))
+            cells[5].text = azimute_limpo
             cells[6].text = dist_limpa
             cells[7].text = str(v.get("confrontacao_completa", ""))
 
@@ -449,29 +469,21 @@ class GeradorAnuenciaIncraWord:
 
         cells_nomes = tabela_assinaturas.rows[1].cells
 
-        # Coluna Proprietário de Origem
+        # Coluna Proprietário de Origem (Mantém CPF no proprietário de origem)
         p_origem = cells_nomes[0].paragraphs[0]
         p_origem.alignment = WD_ALIGN_PARAGRAPH.CENTER
         run_o1 = p_origem.add_run(f"\n{proprietario_origem}\n")
         run_o1.bold = True
         p_origem.add_run(f"CPF: {cpf_origem}")
 
-        # Coluna Proprietário Confrontante (Tratamento para CPF em branco com máscara)
+        # Coluna Proprietário Confrontante
+        # AJUSTE 4: Exibe apenas o nome limpo do confrontante, sem "CPF:"
         p_confrontante = cells_nomes[1].paragraphs[0]
         p_confrontante.alignment = WD_ALIGN_PARAGRAPH.CENTER
         nome_vizinho = str(dados_ia.get("confrontante_proprietario", "")).upper()
         
-        cpf_vizinho_raw = str(dados_ia.get("confrontante_cpf", "")).strip()
-        # Se estiver vazio ou for uma máscara parcial, gera a máscara completa perfeitamente espaçada
-        if not cpf_vizinho_raw or "___" in cpf_vizinho_raw:
-            cpf_vizinho = "___.___.___-__"
-        else:
-            cpf_vizinho = cpf_vizinho_raw
-
         run_v1 = p_confrontante.add_run(f"\n{nome_vizinho}\n")
         run_v1.bold = True
-        # Espaço nítido adicionado antes de 'CPF:' para evitar termos juntos
-        p_confrontante.add_run(f"CPF: {cpf_vizinho}")
 
         for row in tabela_assinaturas.rows:
             for cell in row.cells:
@@ -490,6 +502,8 @@ class GeradorAnuenciaIncraWord:
 
         p_info_rt = doc.add_paragraph()
         p_info_rt.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        
+        # AJUSTE 5: Nome do profissional limpo sem acento ("Regis")
         run_rt1 = p_info_rt.add_run(f"{tecnico_nome}\n")
         run_rt1.bold = True
         p_info_rt.add_run(f"CFTA: {tecnico_cfta}")
