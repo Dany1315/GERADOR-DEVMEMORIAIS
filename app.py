@@ -20,7 +20,7 @@ from utils import (
     gerar_relatorio_processamento, sanitizar_nome_arquivo, formatar_tempo_decorrido
 )
 from processador import ProcessadorMemorial
-from gerador_word import GeradorAnuenciaIncraWord
+from gerador_word import GeradorMemorialWord
 
 # Inicializa o logger
 logger = criar_logger(__name__)
