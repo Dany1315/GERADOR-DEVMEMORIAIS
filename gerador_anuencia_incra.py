@@ -1,5 +1,5 @@
 # ==========================================
-# ARQUIVO: gerador_anuencia_incra.py (VERSÃO FINAL PAISAGEM SEM TABELA 1)
+# ARQUIVO: gerador_anuencia_incra.py (VERSÃO FINAL PAISAGEM REVISADA)
 # ==========================================
 import io
 import re
@@ -39,12 +39,12 @@ class GeradorAnuenciaIncraWord:
 
     def _estrutura_padrao(self) -> Dict[str, Any]:
         """
-        Estrutura de fallback baseada fielmente nos modelos reais fornecidos (Elias/Evaldo).
+        Estrutura de fallback baseada fielmente nos modelos reais fornecidos.
         """
         return {
             "imovel_origem": {
                 "proprietario": "AGOSTINHO IZOTON",
-                "cpf": "123.456.789-10",
+                "cpf": "215.894.707-10",
                 "imovel": "GLEBA A",
                 "localidade": "Vila Val rio-ES"
             },
@@ -52,9 +52,9 @@ class GeradorAnuenciaIncraWord:
                 {
                     "confrontante_imovel": "Sitio Sete Quedas",
                     "confrontante_matricula": "8280",
-                    "confrontante_comarca": "São Gabriel da Palha",
+                    "confrontante_comarca": "o Gabriel da Palha",
                     "confrontante_proprietario": "Elias Moro, Luiz Valentin Moro",
-                    "confrontante_cpf": "123.456.789-10",
+                    "confrontante_cpf": "780.485.677-68",
                     "vertices": [
                         {
                             "codigo": "G1D-P-06815",
@@ -64,7 +64,7 @@ class GeradorAnuenciaIncraWord:
                             "vante": "G1D-P-06816",
                             "azimute": "02°15'",
                             "distancia": "41,66",
-                            "confrontacao_completa": "CNS: 02.170-9 | Mat. 8280 | Sitio Sete Quedas; Elias Moro, Luiz Valentin"
+                            "confrontacao_completa": "CNS: 02.170-9 | Mat. 8280 | Sitio Sete Quedas; Elias Moro, Luiz Valentin Moro"
                         }
                     ]
                 }
@@ -73,8 +73,7 @@ class GeradorAnuenciaIncraWord:
 
     def _obter_dados_estruturados_com_ia(self, texto_memorial: str) -> Dict[str, Any]:
         """
-        Usa o Gemini para analisar o memorial e extrair TANTO os dados do proprietário
-        de origem quanto os dados de TODOS os confrontantes com seus vértices.
+        Usa o Gemini para analisar o memorial e extrair os dados estruturados.
         """
         estrutura_padrao = self._estrutura_padrao()
 
@@ -84,20 +83,14 @@ class GeradorAnuenciaIncraWord:
 
         prompt = f"""
         Você é um engenheiro cartógrafo especialista em georreferenciamento do INCRA.
-        Sua tarefa é analisar o texto de um memorial descritivo ou relatório de cálculo/vértices e estruturar de forma impecável as informações do IMÓVEL DE ORIGEM (objeto do memorial) e de TODOS os confrontantes (vizinhos) identificados.
+        Sua tarefa é analisar o texto de um memorial descritivo ou relatório de cálculo/vértices e estruturar as informações do IMÓVEL DE ORIGEM e de TODOS os confrontantes identificados.
 
-        TEXTO DO MEMORIAL DESCRITIVO / RELATÓRIO EXTRAÍDO:
+        TEXTO DO MEMORIAL DESCRITIVO:
         \"\"\"
         {texto_memorial}
         \"\"\"
 
-        REGRAS DE EXTRAÇÃO:
-        1. Identifique os dados do proprietário principal/origem do memorial (Nome completo, CPF, Nome do Imóvel/Gleba e Localização).
-        2. Identifique cada confrontante distinto ao longo da poligonal periférica.
-        3. Agrupe sob cada confrontante APENAS os vértices/segmentos cujo trecho de "vante" faz divisa com ele.
-        4. Caso o CPF do proprietário de origem ou dos confrontantes não esteja explícito no texto, tente extrair se houver, caso contrário, retorne no formato "___________" para preenchimento posterior.
-
-        Responda APENAS com o JSON estruturado abaixo, sem markdown, sem tags ```json ou textos explicativos:
+        Responda APENAS com o JSON estruturado abaixo, sem markdown ou textos explicativos:
         {{
             "imovel_origem": {{
                 "proprietario": "NOME COMPLETO DO PROPRIETÁRIO PRINCIPAL",
@@ -115,12 +108,12 @@ class GeradorAnuenciaIncraWord:
                     "vertices": [
                         {{
                             "codigo": "Código do Vértice",
-                            "longitude": "Longitude formatada (Graus Minutos Segundos)",
-                            "latitude": "Latitude formatada (Graus Minutos Segundos)",
-                            "altitude": "Altitude com duas casas",
-                            "vante": "Código do Vértice de Vante",
-                            "azimute": "Azimute formatado",
-                            "distancia": "Distância formatada com duas casas",
+                            "longitude": "Longitude formatada",
+                            "latitude": "Latitude formatada",
+                            "altitude": "Altitude",
+                            "vante": "Código de Vante",
+                            "azimute": "Azimute",
+                            "distancia": "Distância",
                             "confrontacao_completa": "Descrição completa da confrontação"
                         }}
                     ]
@@ -234,7 +227,7 @@ class GeradorAnuenciaIncraWord:
 
     def _limpar_sinal_coordenada(self, valor: Any) -> str:
         """
-        Remove o sinal negativo '-' das coordenadas.
+        Remove o sinal negativo '-' das coordenadas geográficas.
         """
         if not valor:
             return ""
@@ -244,8 +237,8 @@ class GeradorAnuenciaIncraWord:
         self, dados_ia: Dict[str, Any], dados_origem: Dict[str, str]
     ) -> io.BytesIO:
         """
-        Gera o documento Word da declaração de anuência do INCRA no formato paisagem (Landscape)
-        com replicação exata do layout original, REMOVENDO a primeira tabela desatualizada.
+        Gera o documento Word da declaração de anuência do INCRA no formato paisagem (Landscape).
+        Removida completamente a Tabela 1 de confrontantes, pulando da data direto para a Parcela.
         """
         doc = Document()
 
@@ -266,7 +259,7 @@ class GeradorAnuenciaIncraWord:
         font.name = 'Arial'
         font.size = Pt(11)
 
-        # 1. TÍTULO ORIGINAL (Sem acentuação clássica)
+        # 1. TÍTULO ORIGINAL (Com os espaçamentos clássicos de importação)
         p_titulo = doc.add_paragraph()
         p_titulo.alignment = WD_ALIGN_PARAGRAPH.CENTER
         p_titulo.paragraph_format.space_before = Pt(0)
@@ -281,7 +274,7 @@ class GeradorAnuenciaIncraWord:
         cpf_origem = str(dados_origem.get("cpf", "___.___.___-__"))
         localidade_origem = "Vila Val rio-ES"
 
-        # Variáveis do técnico fixadas de acordo com as regras exatas informadas
+        # Dados institucionais padronizados
         tecnico_nome = "R gis Campo da Silva"
         tecnico_cfta = "1119851971-1"
         codigo_incra = "G1D"
@@ -335,11 +328,12 @@ class GeradorAnuenciaIncraWord:
         texto_data = f"Vila Val rio-ES, {data_atual.day} de {meses[data_atual.month - 1]} de {data_atual.year}."
 
         p_data = doc.add_paragraph()
-        p_data.paragraph_format.space_after = Pt(12)
+        p_data.paragraph_format.space_after = Pt(14)
         p_data.alignment = WD_ALIGN_PARAGRAPH.LEFT
         p_data.add_run(texto_data).font.name = 'Arial'
 
-        # --- TABELA 1 (DE CONFRONTANTES) REMOVIDA DE ACORDO COM OS NOVOS MODELOS ---
+        # --- TABELA DE CONFRONTANTES COMPLETAMENTE REMOVIDA ---
+        # O fluxo do documento pula da data diretamente para a Tabela de Parcela.
 
         # 4. TABELA: PARCELA / VÉRTICES (Nativa, cabeçalho triplo mesclado)
         tabela_vert = doc.add_table(rows=3, cols=8)
@@ -374,9 +368,10 @@ class GeradorAnuenciaIncraWord:
                 run.font.name = 'Arial'
 
         # --- LINHA 3 DO CABEÇALHO (Subdivisões) ---
+        # AJUSTADO: Última coluna alterada de 'Confronta' para 'Confrontante'
         sub_headers = [
             "Código", "Longitude", "Latitude", "Altitude (m)",
-            "Código", "Azimute", "Dist. (m)", "Confronta"
+            "Código", "Azimute", "Dist. (m)", "Confrontante"
         ]
         row3 = tabela_vert.rows[2]
         for idx, text in enumerate(sub_headers):
@@ -408,7 +403,7 @@ class GeradorAnuenciaIncraWord:
             cells[6].text = str(v.get("distancia", ""))
             cells[7].text = str(v.get("confrontacao_completa", ""))
 
-        # Formatação estrutural de toda a tabela
+        # Formatação de larguras, alinhamento e fontes da tabela
         for r_idx, row in enumerate(tabela_vert.rows):
             for c_idx, cell in enumerate(row.cells):
                 cell.width = larguras_t2[c_idx]
@@ -423,7 +418,7 @@ class GeradorAnuenciaIncraWord:
         # Espaço proporcional antes das Assinaturas
         doc.add_paragraph().paragraph_format.space_before = Pt(32)
 
-        # 5. TABELA DE ASSINATURAS HORIZONTAIS PARALELAS (Invisível, sem pipes)
+        # 5. TABELA DE ASSINATURAS HORIZONTAIS PARALELAS (Invisível)
         tabela_assinaturas = doc.add_table(rows=2, cols=2)
         tabela_assinaturas.autofit = False
         tabela_assinaturas.columns[0].width = Inches(4.7)
@@ -476,7 +471,7 @@ class GeradorAnuenciaIncraWord:
             run.font.size = Pt(9.5)
             run.font.name = 'Arial'
 
-        # 7. ANEXOS (Espaçamento duplo limpo)
+        # 7. ANEXOS (Espaçamento duplo simples)
         doc.add_paragraph().paragraph_format.space_before = Pt(18)
         p_anexos = doc.add_paragraph()
         p_anexos.add_run("Anexos:  ").bold = True
