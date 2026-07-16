@@ -311,7 +311,7 @@ class GeradorAnuenciaIncraWord:
         tcMar = OxmlElement('w:tcMar')
         for m in ['top', 'bottom', 'left', 'right']:
             node = OxmlElement(f'w:{m}')
-            node.set(qn('w:w'), '40')  # Margem mínima de segurança interna (2 dxa)
+            node.set(qn('w:w'), '20')  # Margem mínima absoluta de segurança
             node.set(qn('w:type'), 'dxa')
             tcMar.append(node)
         tcPr.append(tcMar)
@@ -321,7 +321,7 @@ class GeradorAnuenciaIncraWord:
     ) -> io.BytesIO:
         """
         Gera o documento Word otimizado, compacto, em modo PAISAGEM com tabelas em tamanho de fonte 7,
-        sem a tabela superior de dados cadastrais e com larguras de coluna perfeitamente otimizadas.
+        sem a tabela superior de dados cadastrais e com as colunas ajustadas com precisão milimétrica.
         """
         doc = Document()
 
@@ -333,7 +333,7 @@ class GeradorAnuenciaIncraWord:
             section.page_width = new_width
             section.page_height = new_height
             
-            # Margens estreitas para melhor aproveitamento horizontal (Total horizontal de 10 polegadas)
+            # Margens estreitas para melhor aproveitamento horizontal (Total horizontal de 10 polegadas livres)
             section.top_margin = Inches(0.5)
             section.bottom_margin = Inches(0.5)
             section.left_margin = Inches(0.5)
@@ -412,7 +412,7 @@ class GeradorAnuenciaIncraWord:
         run_data.font.name = 'Arial'
 
         # =====================================================================
-        # 4. TABELA DE VÉRTICES / SEGMENTOS (Larguras Extremamente Otimizadas)
+        # 4. TABELA DE VÉRTICES / SEGMENTOS (Larguras Ajustadas Cirurgicamente)
         # =====================================================================
         tabela_vert = doc.add_table(rows=1, cols=8)
         tabela_vert.style = 'Table Grid'
@@ -436,17 +436,17 @@ class GeradorAnuenciaIncraWord:
             run.font.size = Pt(7)  # Rigorosamente 7pt
             run.font.name = 'Arial'
 
-        # Redução agressiva dos dados normais para dar o máximo de largura para Confrontante
-        # A área horizontal total útil da página Paisagem (A4) com margem de 0.5" é de 10 polegadas.
+        # DEFINIÇÃO DE LARGURAS AJUSTADAS AO LIMITE MÍNIMO (Polegadas):
+        # A soma total é de exatos 10.0 polegadas, que se encaixam perfeitamente na página Paisagem.
         larguras_t2 = [
-            Inches(0.7),  # Código Vértice (ex: G1D-M-03279 cabe perfeitamente em 0.7")
-            Inches(0.9),  # Longitude (ex: 40°21'56.603" cabe perfeitamente em 0.9" no tamanho 7)
-            Inches(0.9),  # Latitude (ex: 19°00'25.571" cabe perfeitamente em 0.9" no tamanho 7)
-            Inches(0.5),  # Altitude (m) (ex: 227.02 cabe perfeitamente em 0.5")
-            Inches(0.7),  # Código Vante
-            Inches(0.5),  # Azimute (ex: 271°14' cabe em 0.5")
-            Inches(0.5),  # Dist. (m) (ex: 110.29 cabe em 0.5")
-            Inches(5.3)   # Confrontante (Aumentado de 3.3" para 5.3" -> O dobro de espaço!)
+            Inches(0.65),  # Código Vértice (ex: G1D-M-03279 cabe confortavelmente em 0.65" na fonte 7)
+            Inches(0.85),  # Longitude (ex: 40°21'56.603" cabe perfeitamente em 0.85")
+            Inches(0.85),  # Latitude (ex: 19°00'25.571" cabe perfeitamente em 0.85")
+            Inches(0.45),  # Altitude (m) (ex: 227.02 cabe confortavelmente em 0.45")
+            Inches(0.65),  # Código Vante (ex: G1D-M-03280 cabe perfeitamente em 0.65")
+            Inches(0.45),  # Azimute (ex: 271°14' cabe perfeitamente em 0.45")
+            Inches(0.45),  # Dist. (m) (ex: 110.29 cabe perfeitamente em 0.45")
+            Inches(5.65)   # Confrontante (Aumentado para 5.65 polegadas! Todo o espaço horizontal livre é destinado aqui)
         ]
 
         vertices_dados = dados_ia.get("vertices", [])
@@ -471,13 +471,13 @@ class GeradorAnuenciaIncraWord:
             cells[6].text = self._formatar_numero(v.get("distancia", ""), casas=2)
             cells[7].text = str(v.get("confrontacao_completa", "")).strip()
 
-        # Formatação das linhas da tabela para fonte 7pt e alinhamento correto
+        # Formatação rigorosa das células, larguras e do tamanho de fonte 7pt
         for r_idx, row in enumerate(tabela_vert.rows):
             for c_idx, cell in enumerate(row.cells):
                 cell.width = larguras_t2[c_idx]
                 self._definir_margens_celulas_zero(cell)
                 
-                # Ignora a primeira linha se for o cabeçalho já formatado
+                # Pula formatação de parágrafos adicionais do cabeçalho
                 if r_idx == 0:
                     continue
                     
@@ -491,7 +491,7 @@ class GeradorAnuenciaIncraWord:
                 p.paragraph_format.space_after = Pt(2)
                 
                 if len(p.runs) > 0:
-                    p.runs[0].font.size = Pt(7)  # Rigorosamente 7pt para todo o conteúdo
+                    p.runs[0].font.size = Pt(7)  # Rigorosamente 7pt
                     p.runs[0].font.name = 'Arial'
 
         # Espaço antes das Assinaturas
