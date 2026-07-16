@@ -442,7 +442,7 @@ class GeradorAnuenciaIncraWord:
                 p.paragraph_format.space_before = Pt(3)
                 p.paragraph_format.space_after = Pt(3)
                 if len(p.runs) > 0:
-                    p.runs[0].font.size = Pt(8.5)
+                    p.runs[0].font.size = Pt(8.0)
                     p.runs[0].font.name = 'Arial'
 
         # Espaço proporcional antes das Assinaturas
