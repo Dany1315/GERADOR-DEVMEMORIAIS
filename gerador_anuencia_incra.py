@@ -289,7 +289,7 @@ class GeradorAnuenciaIncraWord:
     ) -> io.BytesIO:
         """
         Gera o documento Word da declaração de anuência do INCRA no formato paisagem (Landscape).
-        Tabela com cabeçalho de 1 linha e alinhamento à esquerda conforme modelo do usuário.
+        Tabela gerada exatamente de acordo com o modelo real: todos os textos e cabeçalhos alinhados à esquerda.
         """
         doc = Document()
 
@@ -383,12 +383,12 @@ class GeradorAnuenciaIncraWord:
         p_data.alignment = WD_ALIGN_PARAGRAPH.LEFT
         p_data.add_run(texto_data).font.name = 'Arial'
 
-        # 4. TABELA: ESTRUTURA REQUISITADA (1 ÚNICA LINHA DE CABEÇALHO)
+        # 4. TABELA: CONFIGURADA PARA SER EXATAMENTE IGUAL AO SEU MODELO
         tabela_vert = doc.add_table(rows=1, cols=8)
         tabela_vert.style = 'Table Grid'
         tabela_vert.autofit = False
 
-        # Cabeçalhos das Colunas baseados exatamente no seu modelo
+        # Nome dos cabeçalhos exatamente iguais ao modelo real
         sub_headers = [
             "Código", "Longitude", "Latitude", "Altitude (m)",
             "Código", "Azimute", "Dist. (m)", "Confrontante"
@@ -401,7 +401,7 @@ class GeradorAnuenciaIncraWord:
             run_h.font.size = Pt(9)
             run_h.font.name = 'Arial'
 
-        # Larguras de colunas equilibradas para o alinhamento à esquerda
+        # Distribuição ideal das larguras das colunas
         larguras_t2 = [
             Inches(1.1), Inches(1.3), Inches(1.3), Inches(0.9),
             Inches(1.1), Inches(0.8), Inches(0.8), Inches(2.3)
@@ -428,17 +428,17 @@ class GeradorAnuenciaIncraWord:
             cells[6].text = dist_limpa
             cells[7].text = str(v.get("confrontacao_completa", ""))
 
-        # Formatação estética rigorosa de larguras e Alinhamento à Esquerda
+        # Formatação estética idêntica ao modelo real enviado (tudo alinhado puramente à esquerda)
         for r_idx, row in enumerate(tabela_vert.rows):
             for c_idx, cell in enumerate(row.cells):
                 cell.width = larguras_t2[c_idx]
                 p = cell.paragraphs[0]
                 
-                # Todo o conteúdo e cabeçalhos agora são alinhados à esquerda (esquerda)
+                # Alinhamento à esquerda padrão, exatamente como o modelo enviado
                 p.alignment = WD_ALIGN_PARAGRAPH.LEFT
                 
-                # Pequeno espaçamento interno e recuo para o texto não encostar nas bordas das células
-                p.paragraph_format.left_indent = Inches(0.06) 
+                # Espaçamentos limpos e naturais
+                p.paragraph_format.left_indent = None  # Sem recuos artificiais
                 p.paragraph_format.space_before = Pt(3)
                 p.paragraph_format.space_after = Pt(3)
                 if len(p.runs) > 0:
