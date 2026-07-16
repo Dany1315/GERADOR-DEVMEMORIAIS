@@ -44,7 +44,7 @@ class GeradorAnuenciaIncraWord:
         return {
             "imovel_origem": {
                 "proprietario": "AGOSTINHO IZOTON",
-                "cpf": "215.894.707-10",
+                "cpf": "123.456.789-10",
                 "imovel": "GLEBA A",
                 "localidade": "Vila Val rio-ES"
             },
@@ -54,7 +54,7 @@ class GeradorAnuenciaIncraWord:
                     "confrontante_matricula": "8280",
                     "confrontante_comarca": "o Gabriel da Palha",
                     "confrontante_proprietario": "Elias Moro, Luiz Valentin Moro",
-                    "confrontante_cpf": "780.485.677-68",
+                    "confrontante_cpf": "123.456.789-10",
                     "vertices": [
                         {
                             "codigo": "G1D-P-06815",
@@ -64,7 +64,7 @@ class GeradorAnuenciaIncraWord:
                             "vante": "G1D-P-06816",
                             "azimute": "02°15'",
                             "distancia": "41,66",
-                            "confrontacao_completa": "CNS: 02.170-9 | Mat. 8280 | Sitio Sete Quedas; Elias Moro, Luiz Valentin Moro"
+                            "confrontacao_completa": "CNS: 02.170-9 | Mat. 8280 | Sitio Sete Quedas; Elias Moro, Luiz Valentin"
                         }
                     ]
                 }
@@ -95,7 +95,7 @@ class GeradorAnuenciaIncraWord:
         1. Identifique os dados do proprietário principal/origem do memorial (Nome completo, CPF, Nome do Imóvel/Gleba e Localização).
         2. Identifique cada confrontante distinto ao longo da poligonal periférica.
         3. Agrupe sob cada confrontante APENAS os vértices/segmentos cujo trecho de "vante" faz divisa com ele.
-        4. Caso o CPF do proprietário de origem ou dos confrontantes não esteja explícito no texto, tente extrair se houver, caso contrário, retorne no formato "___.___.___-__" para preenchimento posterior.
+        4. Caso o CPF do proprietário de origem ou dos confrontantes não esteja explícito no texto, tente extrair se houver, caso contrário, retorne no formato "___________" para preenchimento posterior.
 
         Responda APENAS com o JSON estruturado abaixo, sem markdown, sem tags ```json ou textos explicativos:
         {{
