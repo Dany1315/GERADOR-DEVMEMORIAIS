@@ -52,7 +52,7 @@ class GeradorAnuenciaIncraWord:
                 {
                     "confrontante_imovel": "Sitio Sete Quedas",
                     "confrontante_matricula": "8280",
-                    "confrontante_comarca": "o Gabriel da Palha",
+                    "confrontante_comarca": "São Gabriel da Palha",
                     "confrontante_proprietario": "Elias Moro, Luiz Valentin Moro",
                     "confrontante_cpf": "123.456.789-10",
                     "vertices": [
