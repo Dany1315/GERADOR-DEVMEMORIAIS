@@ -1,5 +1,5 @@
 # ==========================================
-# ARQUIVO: gerador_anuencia_incra.py (VERSÃO ULTRA-LIMPA)
+# ARQUIVO: gerador_anuencia_incra.py (TABELA ESTETICAMENTE ALINHADA À ESQUERDA)
 # ==========================================
 import io
 import re
@@ -240,11 +240,10 @@ class GeradorAnuenciaIncraWord:
             return ""
         
         texto = str(valor).replace('-', '').strip()
-        texto = text = texto.replace(',', '.')
+        texto = texto.replace(',', '.')
 
         # Se a coordenada perdeu o símbolo de grau original, tenta reinserir baseando-se no padrão
         if "°" not in texto and len(texto) >= 4:
-            # Encontra os primeiros dígitos numéricos para aplicar o grau °
             match = re.match(r'^(\d{2})\s*([\d\']{2,})\s*([\d\.\"]+)', texto)
             if match:
                 graus = match.group(1)
@@ -276,7 +275,6 @@ class GeradorAnuenciaIncraWord:
         if not valor:
             return "0.00"
         
-        # Remove eventuais caracteres não numéricos, mantendo ponto e vírgula
         texto_limpo = re.sub(r'[^\d\.,]', '', str(valor).strip())
         texto_limpo = texto_limpo.replace(",", ".")
         
@@ -291,7 +289,7 @@ class GeradorAnuenciaIncraWord:
     ) -> io.BytesIO:
         """
         Gera o documento Word da declaração de anuência do INCRA no formato paisagem (Landscape).
-        Contém apenas as colunas principais na tabela, totalmente limpa de informações redundantes.
+        Tabela ajustada esteticamente: cabeçalhos e dados alinhados inteiramente à esquerda.
         """
         doc = Document()
 
@@ -322,12 +320,11 @@ class GeradorAnuenciaIncraWord:
         run_titulo.font.size = Pt(12)
         run_titulo.font.name = 'Arial'
 
-        # 2. DADOS DO PROPRIETÁRIO - SIMPLIFICADOS E SEM ACENTOS
+        # 2. DADOS DO PROPRIETÁRIO
         proprietario_origem = str(dados_origem.get("proprietario", "AGOSTINHO IZOTON")).upper()
         cpf_origem = str(dados_origem.get("cpf", "___.___.___-__"))
         localidade_origem = "Vila Valerio-ES"
 
-        # Dados institucionais do novo modelo original
         tecnico_nome = "Regis Campo da Silva"
         tecnico_cfta = "1119851971-1"
         codigo_incra = "G1D"
@@ -386,13 +383,11 @@ class GeradorAnuenciaIncraWord:
         p_data.alignment = WD_ALIGN_PARAGRAPH.LEFT
         p_data.add_run(texto_data).font.name = 'Arial'
 
-        # 4. TABELA: APENAS AS INFORMAÇÕES PRINCIPAIS (1 única linha de cabeçalho)
-        # Removido "DESCRIÇÃO DA PARCELA", "VÉRTICE", "SEGMENTO VANTE" e "Confronta".
+        # 4. TABELA: 1 ÚNICA LINHA DE CABEÇALHO ALINHADA À ESQUERDA
         tabela_vert = doc.add_table(rows=1, cols=8)
         tabela_vert.style = 'Table Grid'
         tabela_vert.autofit = False
 
-        # --- LINHA 1: Cabeçalhos das Colunas de Dados ---
         sub_headers = [
             "Código", "Longitude", "Latitude", "Altitude (m)",
             "Código", "Azimute", "Dist. (m)", "Confrontante"
@@ -405,9 +400,10 @@ class GeradorAnuenciaIncraWord:
             run_h.font.size = Pt(9)
             run_h.font.name = 'Arial'
 
+        # Larguras de colunas equilibradas para o alinhamento à esquerda
         larguras_t2 = [
-            Inches(1.2), Inches(1.3), Inches(1.3), Inches(0.9),
-            Inches(1.2), Inches(0.8), Inches(0.8), Inches(2.1)
+            Inches(1.1), Inches(1.3), Inches(1.3), Inches(0.9),
+            Inches(1.1), Inches(0.8), Inches(0.8), Inches(2.3)
         ]
 
         # --- ADICIONAR DADOS DOS VÉRTICES ---
@@ -431,12 +427,17 @@ class GeradorAnuenciaIncraWord:
             cells[6].text = dist_limpa
             cells[7].text = str(v.get("confrontacao_completa", ""))
 
-        # Formatação de larguras, alinhamento e fontes da tabela
+        # Formatação estética rigorosa de larguras e Alinhamento à Esquerda
         for r_idx, row in enumerate(tabela_vert.rows):
             for c_idx, cell in enumerate(row.cells):
                 cell.width = larguras_t2[c_idx]
                 p = cell.paragraphs[0]
-                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                
+                # ALTERAÇÃO SOLICITADA: Todo o conteúdo agora é alinhado à ESQUERDA
+                p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                
+                # Pequeno espaçamento interno e recuo (indentation) para o texto não encostar nas bordas
+                p.paragraph_format.left_indent = Inches(0.06) 
                 p.paragraph_format.space_before = Pt(3)
                 p.paragraph_format.space_after = Pt(3)
                 if len(p.runs) > 0:
@@ -482,7 +483,7 @@ class GeradorAnuenciaIncraWord:
                     run.font.size = Pt(9.5)
                     run.font.name = 'Arial'
 
-        # 6. BLOCO DO RESPONSÁVEL TÉCNICO (Linhas independentes)
+        # 6. BLOCO DO RESPONSÁVEL TÉCNICO
         doc.add_paragraph().paragraph_format.space_before = Pt(22)
         p_linha_rt = doc.add_paragraph()
         p_linha_rt.alignment = WD_ALIGN_PARAGRAPH.CENTER
