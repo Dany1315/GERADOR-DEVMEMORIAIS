@@ -35,6 +35,11 @@ class GeradorAnuenciaIncraWord:
         self.api_key = st.secrets.get("GEMINI_API_KEY")
         if self.api_key:
             genai.configure(api_key=self.api_key)
+        else:
+            st.warning(
+                "GEMINI_API_KEY não encontrada em st.secrets — o gerador vai usar "
+                "os dados padrão (fallback) em vez de analisar o memorial com IA."
+            )
 
     def _estrutura_padrao(self) -> Dict[str, Any]:
         """
@@ -205,6 +210,10 @@ class GeradorAnuenciaIncraWord:
             return dados
         except Exception as e:
             logger.error(f"Erro ao obter dados estruturados do Gemini: {str(e)}")
+            st.error(
+                f"Falha ao consultar o Gemini — usando dados padrão (fallback). "
+                f"Detalhe do erro: {str(e)}"
+            )
             return estrutura_padrao
 
     def _extrair_texto_memorial(self, conteudo_arquivo: bytes, nome_arquivo: str) -> str:
