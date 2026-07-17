@@ -14,7 +14,7 @@ except ImportError:
     pypdf = None
 
 from docx import Document
-from docx.shared import Pt, Inches
+from docx.shared import Pt, Inches, Cm
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.section import WD_ORIENTATION
 from docx.oxml import parse_xml, OxmlElement
@@ -371,7 +371,7 @@ class GeradorAnuenciaIncraWord:
             cell.paragraphs[0].runs[0].bold = True
             cell.paragraphs[0].runs[0].font.size = Pt(7)
 
-        larguras = [Inches(0.65), Inches(0.85), Inches(0.85), Inches(0.45), Inches(0.65), Inches(0.45), Inches(0.45), Inches(5.65)]
+        larguras = [Cm(1.65), Cm(2.16), Cm(1.98), Cm(1.75), Cm(1.75), Cm(1.5), Cm(1.5), Cm(13.11)]
         for i, width in enumerate(larguras):
             tabela.columns[i].width = width
 
