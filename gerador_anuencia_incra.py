@@ -379,25 +379,64 @@ class GeradorAnuenciaIncraWord:
                     tcW.set(qn('w:w'), str(self._cm_para_dxa(larguras_cm[idx])))
                     tcW.set(qn('w:type'), 'dxa')
 
-    def _montar_documento_confrontante(
-        self, dados_ia: Dict[str, Any], dados_projeto: Dict[str, Any]
-    ) -> io.BytesIO:
-        """
-        Gera o documento idêntico ao modelo fornecido.
-        """
-        doc = Document()
+    def _montar_documento_confrontante(self, dados_ia):
+        # Criação da tabela com 8 colunas conforme definido
+        tabela = self.doc.add_table(rows=1, cols=8)
+        tabela.style = 'Table Grid'
+        tabela.autofit = False
 
-        # Configurações de página (Paisagem com margens otimizadas)
-        for section in doc.sections:
-            section.orientation = WD_ORIENTATION.LANDSCAPE
-            new_width, new_height = section.page_height, section.page_width
-            section.page_width = new_width
-            section.page_height = new_height
-            section.top_margin = Cm(1.0)
-            section.bottom_margin = Cm(1.0)
-            section.left_margin = Cm(1.0)
-            section.right_margin = Cm(1.0)
+        headers = ["Código", "Longitude", "Latitude", "Altitude", "Código/Vante", "Azimute", "Distância", "Confrontante"]
+        # Larguras exatas em cm
+        larguras_cm = [2.18, 2.25, 2.25, 2.00, 2.25, 1.50, 1.62, 8.38]
+        larguras = [Cm(v) for v in larguras_cm]
 
+        # Configuração do cabeçalho
+        for idx, text in enumerate(headers):
+            cell = tabela.rows[0].cells[idx]
+            cell.width = larguras[idx]
+            cell.text = text
+            cell.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+            
+            p = cell.paragraphs[0]
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            run = p.runs[0]
+            run.bold = True
+            run.font.size = Pt(9)
+            run.font.name = 'Arial'
+            self._definir_margens_celulas_zero(cell)
+
+        # Preenchimento das linhas de dados
+        for v in dados_ia.get("vertices", []):
+            row = tabela.add_row()
+            vals = [
+                str(v.get("codigo", "")),
+                str(self._formatar_coordenada(v.get("longitude"))),
+                str(self._formatar_coordenada(v.get("latitude"))),
+                str(v.get("altitude", "")),
+                str(v.get("vante", "")),
+                str(self._formatar_azimute(v.get("azimute"))),
+                str(v.get("distancia", "")),
+                str(v.get("confrontacao_completa", ""))
+            ]
+            
+            for i in range(8):
+                cell = row.cells[i]
+                cell.width = larguras[i]
+                cell.text = vals[i]
+                cell.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+                self._definir_margens_celulas_zero(cell)
+                
+                p = cell.paragraphs[0]
+                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                # Garante tamanho de fonte 9 para todos os dados
+                if not p.runs:
+                    p.add_run()
+                run = p.runs[0]
+                run.font.size = Pt(9)
+                run.font.name = 'Arial'
+
+        # Aplica a trava de largura fixa
+        self._forcar_largura_fixa_tabela(tabela, larguras_cm)
         # 1. TÍTULO
         p_titulo = doc.add_paragraph()
         p_titulo.alignment = WD_ALIGN_PARAGRAPH.CENTER
