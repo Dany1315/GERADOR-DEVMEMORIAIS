@@ -476,8 +476,10 @@ class GeradorAnuenciaIncraWord:
         # Trava as larguras definitivamente e centraliza a tabela
         self._forcar_largura_fixa_tabela(tabela, larguras_cm)
 
-        # 5. ASSINATURAS
+        # 5. ASSINATURAS (Proprietário, Confrontante e Técnico)
         doc.add_paragraph().paragraph_format.space_before = Pt(36)
+        
+        # Tabela para assinaturas do Proprietário e Confrontante
         tab_ass = doc.add_table(rows=2, cols=2)
         tab_ass.autofit = False
         tab_ass.columns[0].width = Cm(13.5)
@@ -486,16 +488,22 @@ class GeradorAnuenciaIncraWord:
         # Linhas de assinatura
         p0 = tab_ass.rows[0].cells[0].paragraphs[0]
         p0.add_run("__________________________________________________")
-        
         p1 = tab_ass.rows[0].cells[1].paragraphs[0]
         p1.add_run("__________________________________________________")
         
         # Nomes e CPFs
         p_nome0 = tab_ass.rows[1].cells[0].paragraphs[0]
         p_nome0.add_run(f"{prop}\n{cpf}")
-        
         p_nome1 = tab_ass.rows[1].cells[1].paragraphs[0]
         p_nome1.add_run(f"{str(dados_ia.get('confrontante_proprietario', '')).upper()}")
+
+        # Espaço e Assinatura do Técnico (Centralizada abaixo)
+        doc.add_paragraph().paragraph_format.space_before = Pt(24)
+        p_ass_tec = doc.add_paragraph()
+        p_ass_tec.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_ass_tec.add_run("__________________________________________________\n")
+        run_tec = p_ass_tec.add_run(f"{tec_nome}\nTecnico em Agropecuaria - CFTA: {tec_cfta}")
+        run_tec.bold = True
 
         # 6. ANEXOS
         doc.add_paragraph().paragraph_format.space_before = Pt(24)
