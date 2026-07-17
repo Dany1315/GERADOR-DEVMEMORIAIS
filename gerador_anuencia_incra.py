@@ -145,7 +145,7 @@ class GeradorAnuenciaIncraWord:
         prompt = f"""
         Você é um engenheiro cartógrafo especialista em georreferenciamento do INCRA.
         Sua tarefa é analisar o texto de um memorial descritivo ou relatório de vértices e estruturar as
-        informações de TODOS os confrontantes (vizinhos) identificados ao longo da poligonal.
+        informações de TODOS os confrontantes (vizinhos) identificados au longo da poligonal.
 
         Além disso, você deve identificar no texto quem é o PROPRIETÁRIO DO IMÓVEL DE ORIGEM (o dono da terra que está sendo medida/georreferenciada) e seu CPF se houver.
 
@@ -275,6 +275,7 @@ class GeradorAnuenciaIncraWord:
             nome_confrontante = str(
                 dados_confrontante.get("confrontante_proprietario", "Confrontante")
             ).strip()
+            # CHAMADA CORRIGIDA: passando apenas os dados do confrontante e os dados do projeto atualizados
             buffer = self._montar_documento_confrontante(dados_confrontante, dados_projeto_atualizados)
             documentos.append((nome_confrontante, buffer))
 
@@ -379,7 +380,7 @@ class GeradorAnuenciaIncraWord:
                     tcW.set(qn('w:type'), 'dxa')
 
     def _montar_documento_confrontante(
-        self, dados_ia: Dict[str, Any], dados_projeto: Dict[str, Any]
+        self, dados_confrontante: Dict[str, Any], dados_projeto: Dict[str, Any]
     ) -> io.BytesIO:
         """
         Gera o documento idêntico ao modelo fornecido.
@@ -446,7 +447,7 @@ class GeradorAnuenciaIncraWord:
             run.font.name = 'Arial'
             self._definir_margens_celulas_zero(cell)
 
-        for v in dados_ia.get("vertices", []):
+        for v in dados_confrontante.get("vertices", []):
             row = tabela.add_row()
             vals = [
                 v.get("codigo"), 
@@ -495,7 +496,7 @@ class GeradorAnuenciaIncraWord:
         p_nome0 = tab_ass.rows[1].cells[0].paragraphs[0]
         p_nome0.add_run(f"{prop}\n{cpf}")
         p_nome1 = tab_ass.rows[1].cells[1].paragraphs[0]
-        p_nome1.add_run(f"{str(dados_ia.get('confrontante_proprietario', '')).upper()}")
+        p_nome1.add_run(f"{str(dados_confrontante.get('confrontante_proprietario', '')).upper()}")
 
         # 6. ANEXOS
         doc.add_paragraph().paragraph_format.space_before = Pt(24)
