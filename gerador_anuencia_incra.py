@@ -14,7 +14,7 @@ except ImportError:
     pypdf = None
 
 from docx import Document
-from docx.shared import Pt, Inches, Cm
+from docx.shared import Pt, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.section import WD_ORIENTATION
 from docx.oxml import OxmlElement
@@ -66,19 +66,12 @@ class GeradorAnuenciaIncraWord:
     def _obter_dados_estruturados_com_ia(self, texto_memorial: str, dados_projeto: Dict[str, Any]) -> Dict[str, Any]:
         estrutura_padrao = self._estrutura_padrao()
         if not self.api_key: return estrutura_padrao
-
-        prompt = f"""
-        Você é engenheiro cartógrafo. Analise o memorial e extraia confrontantes e proprietário.
-        Texto: {texto_memorial}
-        Responda APENAS com JSON estruturado com: proprietario_origem, cpf_origem e confrontantes (lista com vertices).
-        """
+        prompt = f"Analise o memorial: {texto_memorial}. Responda APENAS com JSON contendo: proprietario_origem, cpf_origem e confrontantes (lista)."
         try:
             model = genai.GenerativeModel("gemini-2.5-flash")
             response = model.generate_content(prompt, generation_config={"response_mime_type": "application/json"})
-            dados = json.loads(response.text.strip())
-            return dados if "confrontantes" in dados else {"confrontantes": [dados]}
-        except Exception:
-            return estrutura_padrao
+            return json.loads(response.text.strip())
+        except Exception: return estrutura_padrao
 
     def _extrair_texto_memorial(self, conteudo_arquivo: bytes, nome_arquivo: str) -> str:
         texto_memorial = ""
@@ -95,25 +88,13 @@ class GeradorAnuenciaIncraWord:
     def gerar_documentos_pelo_memorial(self, conteudo_arquivo: bytes, nome_arquivo: str, dados_projeto: Dict[str, Any]) -> List[Tuple[str, io.BytesIO]]:
         texto_memorial = self._extrair_texto_memorial(conteudo_arquivo, nome_arquivo)
         dados_ia = self._obter_dados_estruturados_com_ia(texto_memorial, dados_projeto)
-        
         dados_projeto_atualizados = dados_projeto.copy()
         dados_projeto_atualizados["proprietario"] = dados_ia.get("proprietario_origem", dados_projeto.get("proprietario", "")).upper()
-        dados_projeto_atualizados["cpf_proprietario"] = dados_ia.get("cpf_origem", dados_projeto.get("cpf_proprietario", ""))
-
         documentos = []
         for dados_confrontante in dados_ia.get("confrontantes", []):
             nome = str(dados_confrontante.get("confrontante_proprietario", "Confrontante")).strip()
             documentos.append((nome, self._montar_documento_confrontante(dados_confrontante, dados_projeto_atualizados)))
         return documentos
-
-    def gerar_zip_anuencias(self, lista_documentos: List[Tuple[str, io.BytesIO]]) -> io.BytesIO:
-        zip_buffer = io.BytesIO()
-        with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
-            for nome, doc_buffer in lista_documentos:
-                nome_seguro = re.sub(r'[\\/*?:"<>|]', "", nome)
-                zip_file.writestr(f"{nome_seguro}.docx", doc_buffer.getvalue())
-        zip_buffer.seek(0)
-        return zip_buffer
 
     def _definir_margens_celulas_zero(self, cell):
         tcPr = cell._tc.get_or_add_tcPr()
@@ -132,34 +113,27 @@ class GeradorAnuenciaIncraWord:
             section.page_width, section.page_height = section.page_height, section.page_width
             section.top_margin = section.bottom_margin = section.left_margin = section.right_margin = Inches(0.5)
 
-        tabela_vert = doc.add_table(rows=1, cols=8)
-        tabela_vert.style = 'Table Grid'
-        tabela_vert.autofit = False
+        doc.add_paragraph("DECLARAÇÃO DE RESPEITO DE LIMITES").alignment = WD_ALIGN_PARAGRAPH.CENTER
+        doc.add_paragraph(f"Eu, {dados_projeto.get('proprietario')}, declaro respeitar os limites com {dados_ia.get('confrontante_proprietario')}.")
 
-        headers = ["Código", "Longitude", "Latitude", "Altitude (m)", "Código", "Azimute", "Dist. (m)", "Confrontante"]
-        hdr_cells = tabela_vert.rows[0].cells
-        for i, h in enumerate(headers): hdr_cells[i].text = h
-
-        larguras_t2 = [Cm(1.65), Cm(2.16), Cm(1.98), Cm(1.75), Cm(1.75), Cm(1.5), Cm(1.5), Cm(13.11)]
+        tabela = doc.add_table(rows=1, cols=8)
+        tabela.style = 'Table Grid'
+        tabela.autofit = False
+        headers = ["Código", "Longitude", "Latitude", "Alt(m)", "Vante", "Azimute", "Dist(m)", "Confrontante"]
+        for i, h in enumerate(headers): tabela.rows[0].cells[i].text = h
+        
+        # Ajuste de Largura das Colunas
+        larguras = [Inches(0.7), Inches(1.2), Inches(1.2), Inches(0.6), Inches(0.7), Inches(0.8), Inches(0.8), Inches(4.0)]
+        for i, width in enumerate(larguras): tabela.columns[i].width = width
 
         for v in dados_ia.get("vertices", []):
-            row = tabela_vert.add_row()
-            cells = row.cells
-            cells[0].text = str(v.get("codigo", ""))
-            cells[1].text = self._formatar_coordenada(str(v.get("longitude", "")))
-            cells[2].text = self._formatar_coordenada(str(v.get("latitude", "")))
-            cells[3].text = self._formatar_numero(v.get("altitude", ""))
-            cells[4].text = str(v.get("vante", ""))
-            cells[5].text = self._formatar_azimute(str(v.get("azimute", "")))
-            cells[6].text = self._formatar_numero(v.get("distancia", ""))
-            cells[7].text = str(v.get("confrontacao_completa", ""))
-
-        for row in tabela_vert.rows:
-            for c_idx, cell in enumerate(row.cells):
-                cell.width = larguras_t2[c_idx]
-                self._definir_margens_celulas_zero(cell)
-                for p in cell.paragraphs:
-                    for run in p.runs: run.font.size = Pt(7)
+            row = tabela.add_row()
+            vals = [v.get("codigo"), self._formatar_coordenada(v.get("longitude")), self._formatar_coordenada(v.get("latitude")), 
+                    v.get("altitude"), v.get("vante"), self._formatar_azimute(v.get("azimute")), v.get("distancia"), v.get("confrontacao_completa")]
+            for i in range(8):
+                row.cells[i].text = str(vals[i])
+                self._definir_margens_celulas_zero(row.cells[i])
+                row.cells[i].paragraphs[0].runs[0].font.size = Pt(7)
 
         buffer = io.BytesIO()
         doc.save(buffer)
