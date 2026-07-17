@@ -153,7 +153,7 @@ class GeradorAnuenciaIncraWord:
         for i, h in enumerate(headers): hdr_cells[i].text = h
 
         # LARGURAS SOLICITADAS
-        larguras_t2 = [Cm(1.65), Cm(2.16), Cm(1.98), Cm(1.75), Cm(1.75), Cm(1.5), Cm(1.5), Cm(13.11)]
+        larguras_t2 = [Cm(1.85), Cm(2.16), Cm(2.16), Cm(1.75), Cm(1.75), Cm(1.5), Cm(1.5), Cm(13.11)]
 
         for v in dados_ia.get("vertices", []):
             row = tabela_vert.add_row()
