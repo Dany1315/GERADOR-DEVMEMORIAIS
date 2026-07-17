@@ -271,12 +271,23 @@ class GeradorAnuenciaIncraWord:
         confrontantes = dados_ia.get("confrontantes") or self._estrutura_padrao()["confrontantes"]
 
         documentos: List[Tuple[str, io.BytesIO]] = []
+        nomes_usados = {} # Para garantir unicidade de nomes no loop do Streamlit
+        
         for dados_confrontante in confrontantes:
             nome_confrontante = str(
                 dados_confrontante.get("confrontante_proprietario", "Confrontante")
             ).strip()
+            
+            # Garante que o nome retornado seja único para evitar erro de Duplicate Key no Streamlit
+            if nome_confrontante in nomes_usados:
+                nomes_usados[nome_confrontante] += 1
+                nome_unico = f"{nome_confrontante} ({nomes_usados[nome_confrontante]})"
+            else:
+                nomes_usados[nome_confrontante] = 1
+                nome_unico = nome_confrontante
+
             buffer = self._montar_documento_confrontante(dados_confrontante, dados_projeto_atualizados)
-            documentos.append((nome_confrontante, buffer))
+            documentos.append((nome_unico, buffer))
 
         return documentos
 
