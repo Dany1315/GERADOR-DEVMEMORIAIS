@@ -595,7 +595,6 @@ class GeradorAnuenciaIncraWord:
 
         tcPr.append(tcMar)
 
-
  def _montar_documento_confrontante(
 
         self, dados_ia: Dict[str, Any], dados_projeto: Dict[str, Any]
