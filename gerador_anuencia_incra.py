@@ -317,7 +317,7 @@ class GeradorAnuenciaIncraWord:
         tcPr.append(tcMar)
 
  def _montar_documento_confrontante(
-        self, dados_ia: Dict[str, Any], dados_projeto: Dict[str, Any]
+    self, dados_ia: Dict[str, Any], dados_projeto: Dict[str, Any]
     ) -> io.BytesIO:
         """
         Gera o documento com a ordem: Título -> Texto -> Confrontantes -> Tabela -> Assinaturas -> Anexos -> Data.
