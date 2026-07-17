@@ -145,7 +145,7 @@ class GeradorAnuenciaIncraWord:
         prompt = f"""
         Você é um engenheiro cartógrafo especialista em georreferenciamento do INCRA.
         Sua tarefa é analisar o texto de um memorial descritivo ou relatório de vértices e estruturar as
-        informações de TODOS os confrontantes (vizinhos) identificados au longo da poligonal.
+        informações de TODOS os confrontantes (vizinhos) identificados ao longo da poligonal.
 
         Além disso, você deve identificar no texto quem é o PROPRIETÁRIO DO IMÓVEL DE ORIGEM (o dono da terra que está sendo medida/georreferenciada) e seu CPF se houver.
 
@@ -275,7 +275,6 @@ class GeradorAnuenciaIncraWord:
             nome_confrontante = str(
                 dados_confrontante.get("confrontante_proprietario", "Confrontante")
             ).strip()
-            # CHAMADA CORRIGIDA: passando apenas os dados do confrontante e os dados do projeto atualizados
             buffer = self._montar_documento_confrontante(dados_confrontante, dados_projeto_atualizados)
             documentos.append((nome_confrontante, buffer))
 
@@ -477,26 +476,21 @@ class GeradorAnuenciaIncraWord:
         # Trava as larguras definitivamente e centraliza a tabela
         self._forcar_largura_fixa_tabela(tabela, larguras_cm)
 
-        # 5. ASSINATURAS (Proprietário e Confrontante)
+        # 5. ASSINATURAS (Uma acima da outra, centralizadas)
         doc.add_paragraph().paragraph_format.space_before = Pt(36)
         
-        # Tabela para assinaturas do Proprietário e Confrontante
-        tab_ass = doc.add_table(rows=2, cols=2)
-        tab_ass.autofit = False
-        tab_ass.columns[0].width = Cm(13.5)
-        tab_ass.columns[1].width = Cm(13.5)
+        # Assinatura Proprietário
+        p_ass_prop = doc.add_paragraph()
+        p_ass_prop.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_ass_prop.add_run("__________________________________________________\n")
+        p_ass_prop.add_run(f"{prop}\n{cpf}")
         
-        # Linhas de assinatura
-        p0 = tab_ass.rows[0].cells[0].paragraphs[0]
-        p0.add_run("__________________________________________________")
-        p1 = tab_ass.rows[0].cells[1].paragraphs[0]
-        p1.add_run("__________________________________________________")
-        
-        # Nomes e CPFs
-        p_nome0 = tab_ass.rows[1].cells[0].paragraphs[0]
-        p_nome0.add_run(f"{prop}\n{cpf}")
-        p_nome1 = tab_ass.rows[1].cells[1].paragraphs[0]
-        p_nome1.add_run(f"{str(dados_confrontante.get('confrontante_proprietario', '')).upper()}")
+        # Assinatura Confrontante
+        doc.add_paragraph().paragraph_format.space_before = Pt(24)
+        p_ass_conf = doc.add_paragraph()
+        p_ass_conf.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_ass_conf.add_run("__________________________________________________\n")
+        p_ass_conf.add_run(f"{str(dados_confrontante.get('confrontante_proprietario', '')).upper()}")
 
         # 6. ANEXOS
         doc.add_paragraph().paragraph_format.space_before = Pt(24)
@@ -513,7 +507,7 @@ class GeradorAnuenciaIncraWord:
         p_data.add_run(f"Vila Valério, {hoje.day} de {meses[hoje.month-1]} de {hoje.year}.")
 
         # 8. ASSINATURA DO TÉCNICO (Régis) - FINAL DO DOCUMENTO
-        doc.add_paragraph().paragraph_format.space_before = Pt(48)
+        doc.add_paragraph().paragraph_format.space_before = Pt(36)
         p_ass_tec = doc.add_paragraph()
         p_ass_tec.alignment = WD_ALIGN_PARAGRAPH.CENTER
         p_ass_tec.add_run("__________________________________________________\n")
