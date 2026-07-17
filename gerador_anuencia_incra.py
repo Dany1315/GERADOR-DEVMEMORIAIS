@@ -16,7 +16,6 @@ except ImportError:
 from docx import Document
 from docx.shared import Pt, Inches, Cm, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.enum.table import WD_ALIGN_VERTICAL
 from docx.enum.section import WD_ORIENTATION
 from docx.oxml import parse_xml, OxmlElement
 from docx.oxml.ns import nsdecls, qn
@@ -430,16 +429,15 @@ class GeradorAnuenciaIncraWord:
         tabela.autofit = False
 
         headers = ["Código", "Longitude", "Latitude", "Altitude (m)", "Código", "Azimute", "Dist. (m)", "Confrontante"]
-        # Larguras exatas conforme o modelo oficial (em cm), na ordem das colunas:
-        # 1 Código | 2 Longitude | 3 Latitude | 4 Altitude | 5 Código (Vante) | 6 Azimute | 7 Dist. | 8 Confrontante
-        larguras_cm = [2.39, 2.50, 2.38, 2.26, 2.50, 1.75, 1.75, 9.41]
+        # Novas larguras exigidas (em cm), na ordem das colunas:
+        # 1 Código | 2 Longitude | 3 Latitude | 4 Altitude | 5 Código | 6 Azimute | 7 Dist. | 8 Confrontante
+        larguras_cm = [2.39, 2.5, 2.38, 2.25, 2.00, 1.75, 1.75, 8.75]
         larguras = [Cm(v) for v in larguras_cm]
 
         for idx, text in enumerate(headers):
             cell = tabela.rows[0].cells[idx]
             cell.width = larguras[idx]
             cell.text = text
-            cell.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
             p = cell.paragraphs[0]
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER
             run = p.runs[0]
@@ -464,31 +462,28 @@ class GeradorAnuenciaIncraWord:
                 cell = row.cells[i]
                 cell.width = larguras[i]
                 cell.text = str(vals[i])
-                cell.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
                 self._definir_margens_celulas_zero(cell)
                 p = cell.paragraphs[0]
-                p.alignment = WD_ALIGN_PARAGRAPH.CENTER  # Centraliza o texto na célula (horizontal)
+                p.alignment = WD_ALIGN_PARAGRAPH.CENTER # Centraliza o texto na célula
                 p.paragraph_format.space_before = Pt(0)
                 p.paragraph_format.space_after = Pt(0)
                 p.paragraph_format.line_spacing = 1.0
                 if p.runs:
                     run = p.runs[0]
-                    run.font.size = Pt(9)  # Fonte da tabela tamanho 9, igual ao cabeçalho
-                    run.font.name = 'Arial'
+                    run.font.size = Pt(9) # Fonte da tabela tamanho 9
+                    run.font.name = 'Arial Narrow'
 
         # Trava as larguras definitivamente e centraliza a tabela
         self._forcar_largura_fixa_tabela(tabela, larguras_cm)
 
-        # 5. ASSINATURAS (Proprietário, Confrontante e Técnico)
+        # 5. ASSINATURAS (Proprietário e Confrontante)
         doc.add_paragraph().paragraph_format.space_before = Pt(36)
         
         # Tabela para assinaturas do Proprietário e Confrontante
-        # Larguras conforme o modelo oficial: 12,7 cm cada (total 25,4 cm, dentro da área útil da página)
         tab_ass = doc.add_table(rows=2, cols=2)
         tab_ass.autofit = False
-        tab_ass.columns[0].width = Cm(12.7)
-        tab_ass.columns[1].width = Cm(12.7)
-        self._forcar_largura_fixa_tabela(tab_ass, [12.7, 12.7])
+        tab_ass.columns[0].width = Cm(13.5)
+        tab_ass.columns[1].width = Cm(13.5)
         
         # Linhas de assinatura
         p0 = tab_ass.rows[0].cells[0].paragraphs[0]
@@ -501,17 +496,6 @@ class GeradorAnuenciaIncraWord:
         p_nome0.add_run(f"{prop}\n{cpf}")
         p_nome1 = tab_ass.rows[1].cells[1].paragraphs[0]
         p_nome1.add_run(f"{str(dados_ia.get('confrontante_proprietario', '')).upper()}")
-
-        # Espaço e Assinatura do Técnico (Centralizada abaixo) — exatamente como no modelo:
-        # nome em negrito na primeira linha, "CFTA <numero>" sem negrito na linha seguinte
-        doc.add_paragraph().paragraph_format.space_before = Pt(24)
-        p_ass_tec = doc.add_paragraph()
-        p_ass_tec.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p_ass_tec.add_run("__________________________________________________\n")
-        run_tec_nome = p_ass_tec.add_run(f"{tec_nome}\n")
-        run_tec_nome.bold = True
-        run_tec_cfta = p_ass_tec.add_run(f"CFTA {tec_cfta}")
-        run_tec_cfta.bold = False
 
         # 6. ANEXOS
         doc.add_paragraph().paragraph_format.space_before = Pt(24)
@@ -526,6 +510,15 @@ class GeradorAnuenciaIncraWord:
         meses = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"]
         hoje = datetime.now()
         p_data.add_run(f"Vila Valério, {hoje.day} de {meses[hoje.month-1]} de {hoje.year}.")
+
+        # 8. ASSINATURA DO TÉCNICO (Régis) - FINAL DO DOCUMENTO
+        doc.add_paragraph().paragraph_format.space_before = Pt(48)
+        p_ass_tec = doc.add_paragraph()
+        p_ass_tec.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_ass_tec.add_run("__________________________________________________\n")
+        run_tec = p_ass_tec.add_run(f"{tec_nome}\nTecnico em Agropecuaria - CFTA: {tec_cfta}")
+        run_tec.bold = True
+        run_tec.font.size = Pt(10)
 
         buffer = io.BytesIO()
         doc.save(buffer)
