@@ -1,5 +1,5 @@
-import re
 import io
+import re
 import json
 import logging
 import zipfile
@@ -34,27 +34,7 @@ class GeradorAnuenciaIncraWord:
         return {
             "proprietario_origem": "RODRIGO COLOMBI FROTA",
             "cpf_origem": "092.653.737-76",
-            "confrontantes": [
-                {
-                    "confrontante_imovel": "Sitio Bravin",
-                    "confrontante_matricula": "6093",
-                    "confrontante_comarca": "São Gabriel da Palha",
-                    "confrontante_proprietario": "ANTONIO BRAVIN",
-                    "confrontante_cpf": "___.___.___-__",
-                    "vertices": [
-                        {
-                            "codigo": "G1D-M-03281",
-                            "longitude": "40°22'10.639\"",
-                            "latitude": "19°00'24.525\"",
-                            "altitude": "162.10",
-                            "vante": "G1D-M-03282",
-                            "azimute": "06°49'",
-                            "distancia": "640.71",
-                            "confrontacao_completa": "CNS: 02.170-9 | Mat. 6093 | Sitio Bravin; Antonio Bravin"
-                        }
-                    ]
-                }
-            ]
+            "confrontantes": []
         }
 
     def _formatar_coordenada(self, coord_str: str) -> str:
@@ -63,9 +43,6 @@ class GeradorAnuenciaIncraWord:
         match = re.search(r"(\d+)[°ºd\s]+(\d+)['\'\s]+([\d\.]+)", limpo)
         if match:
             return f"{match.group(1)}°{match.group(2)}'{float(match.group(3)):.3f}\""
-        limpo = limpo.replace("d", "°").replace("'", "'").replace('"', '"')
-        if "°" not in limpo and len(limpo) > 4:
-            return f"{limpo[:2]}°{limpo[2:4]}'{limpo[4:]}\""
         return limpo
 
     def _formatar_azimute(self, az_str: str) -> str:
@@ -81,53 +58,60 @@ class GeradorAnuenciaIncraWord:
         try:
             val = str(num_str).replace(",", ".").strip()
             match = re.search(r"[\d\.]+", val)
-            return f"{float(match.group(0)):.{casas}f}" if match else str(num_str)
+            if match:
+                return f"{float(match.group(0)):.{casas}f}"
+            return str(num_str)
         except Exception: return str(num_str)
 
     def _obter_dados_estruturados_com_ia(self, texto_memorial: str, dados_projeto: Dict[str, Any]) -> Dict[str, Any]:
         estrutura_padrao = self._estrutura_padrao()
         if not self.api_key: return estrutura_padrao
-        prompt = f"Analise o memorial: {texto_memorial}. Responda em JSON."
+
+        prompt = f"""
+        Você é engenheiro cartógrafo. Analise o memorial e extraia confrontantes e proprietário.
+        Texto: {texto_memorial}
+        Responda APENAS com JSON estruturado com: proprietario_origem, cpf_origem e confrontantes (lista com vertices).
+        """
         try:
-            model = genai.GenerativeModel("gemini-2.0-flash")
+            model = genai.GenerativeModel("gemini-2.5-flash")
             response = model.generate_content(prompt, generation_config={"response_mime_type": "application/json"})
-            return json.loads(response.text)
-        except Exception as e:
-            logger.error(f"Erro IA: {e}")
+            dados = json.loads(response.text.strip())
+            return dados if "confrontantes" in dados else {"confrontantes": [dados]}
+        except Exception:
             return estrutura_padrao
 
     def _extrair_texto_memorial(self, conteudo_arquivo: bytes, nome_arquivo: str) -> str:
-        texto = ""
+        texto_memorial = ""
         if nome_arquivo.lower().endswith(".pdf") and pypdf:
             reader = pypdf.PdfReader(io.BytesIO(conteudo_arquivo))
-            texto = "\n".join([p.extract_text() or "" for p in reader.pages])
+            texto_memorial = "\n".join([p.extract_text() for p in reader.pages if p.extract_text()])
         elif nome_arquivo.lower().endswith(".docx"):
-            texto = "\n".join([p.text for p in Document(io.BytesIO(conteudo_arquivo)).paragraphs])
+            doc_temp = Document(io.BytesIO(conteudo_arquivo))
+            texto_memorial = "\n".join([p.text for p in doc_temp.paragraphs])
         else:
-            texto = conteudo_arquivo.decode("utf-8", errors="ignore")
-        return re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\xFF]', '', texto)
+            texto_memorial = conteudo_arquivo.decode("utf-8", errors="ignore")
+        return re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\xFF]', '', texto_memorial)
 
     def gerar_documentos_pelo_memorial(self, conteudo_arquivo: bytes, nome_arquivo: str, dados_projeto: Dict[str, Any]) -> List[Tuple[str, io.BytesIO]]:
         texto_memorial = self._extrair_texto_memorial(conteudo_arquivo, nome_arquivo)
         dados_ia = self._obter_dados_estruturados_com_ia(texto_memorial, dados_projeto)
-        confrontantes = dados_ia.get("confrontantes", [])
+        
+        dados_projeto_atualizados = dados_projeto.copy()
+        dados_projeto_atualizados["proprietario"] = dados_ia.get("proprietario_origem", dados_projeto.get("proprietario", "")).upper()
+        dados_projeto_atualizados["cpf_proprietario"] = dados_ia.get("cpf_origem", dados_projeto.get("cpf_proprietario", ""))
+
         documentos = []
-        for d in confrontantes:
-            buf = self._montar_documento_confrontante(d, dados_projeto)
-            documentos.append((str(d.get("confrontante_proprietario", "CONFRONTANTE")), buf))
+        for dados_confrontante in dados_ia.get("confrontantes", []):
+            nome = str(dados_confrontante.get("confrontante_proprietario", "Confrontante")).strip()
+            documentos.append((nome, self._montar_documento_confrontante(dados_confrontante, dados_projeto_atualizados)))
         return documentos
 
-    def gerar_documento_pelo_memorial(self, conteudo_arquivo: bytes, nome_arquivo: str, dados_projeto: Dict[str, Any]) -> io.BytesIO:
-        docs = self.gerar_documentos_pelo_memorial(conteudo_arquivo, nome_arquivo, dados_projeto)
-        return docs[0][1] if docs else io.BytesIO()
-
-    @staticmethod
-    def gerar_zip_anuencias(documentos: List[Tuple[str, io.BytesIO]], prefixo_arquivo: str = "ANUENCIA_INCRA") -> io.BytesIO:
+    def gerar_zip_anuencias(self, lista_documentos: List[Tuple[str, io.BytesIO]]) -> io.BytesIO:
         zip_buffer = io.BytesIO()
-        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-            for nome, buffer in documentos:
-                nome_base = re.sub(r'[^A-Za-z0-9_\-]+', '_', nome.upper())
-                zip_file.writestr(f"{prefixo_arquivo}_{nome_base}.docx", buffer.getvalue())
+        with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
+            for nome, doc_buffer in lista_documentos:
+                nome_seguro = re.sub(r'[\\/*?:"<>|]', "", nome)
+                zip_file.writestr(f"{nome_seguro}.docx", doc_buffer.getvalue())
         zip_buffer.seek(0)
         return zip_buffer
 
@@ -148,39 +132,34 @@ class GeradorAnuenciaIncraWord:
             section.page_width, section.page_height = section.page_height, section.page_width
             section.top_margin = section.bottom_margin = section.left_margin = section.right_margin = Inches(0.5)
 
-        p_titulo = doc.add_paragraph("DECLARAÇÃO DE RESPEITO DE LIMITES")
-        p_titulo.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p_titulo.runs[0].bold = True
-        
-        prop = dados_projeto.get("proprietario", "RODRIGO COLOMBI FROTA").upper()
-        cpf = dados_projeto.get("cpf_proprietario", "092.653.733-10")
-        tec_nome = self.dados_tecnico.get("nome", "Régis Campo da Silva")
-        tec_cfta = self.dados_tecnico.get("cfta", "11198519711")
-        
-        doc.add_paragraph(f"Eu, {prop}, CPF {cpf}, e eu, {tec_nome}, CFTA {tec_cfta}, declaramos respeitados os limites de divisa com os confrontantes.")
+        tabela_vert = doc.add_table(rows=1, cols=8)
+        tabela_vert.style = 'Table Grid'
+        tabela_vert.autofit = False
 
-        tabela = doc.add_table(rows=1, cols=8)
-        tabela.style = 'Table Grid'
-        tabela.autofit = False
-        headers = ["Código", "Longitude", "Latitude", "Altitude", "Vante", "Azimute", "Dist.", "Confrontante"]
-        for idx, h in enumerate(headers):
-            cell = tabela.rows[0].cells[idx]
-            cell.text = h
-            cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+        headers = ["Código", "Longitude", "Latitude", "Altitude (m)", "Código", "Azimute", "Dist. (m)", "Confrontante"]
+        hdr_cells = tabela_vert.rows[0].cells
+        for i, h in enumerate(headers): hdr_cells[i].text = h
 
-        # Definição das larguras conforme solicitado
-        larguras = [Cm(1.65), Cm(2.16), Cm(1.98), Cm(1.75), Cm(1.75), Cm(1.5), Cm(1.5), Cm(13.11)]
-        for i, width in enumerate(larguras):
-            tabela.columns[i].width = width
+        larguras_t2 = [Cm(1.65), Cm(2.16), Cm(1.98), Cm(1.75), Cm(1.75), Cm(1.5), Cm(1.5), Cm(13.11)]
 
         for v in dados_ia.get("vertices", []):
-            row = tabela.add_row()
-            vals = [v.get("codigo"), self._formatar_coordenada(v.get("longitude")), self._formatar_coordenada(v.get("latitude")), 
-                    v.get("altitude"), v.get("vante"), self._formatar_azimute(v.get("azimute")), v.get("distancia"), v.get("confrontacao_completa")]
-            for i in range(8):
-                row.cells[i].text = str(vals[i])
-                self._definir_margens_celulas_zero(row.cells[i])
-                row.cells[i].paragraphs[0].runs[0].font.size = Pt(7)
+            row = tabela_vert.add_row()
+            cells = row.cells
+            cells[0].text = str(v.get("codigo", ""))
+            cells[1].text = self._formatar_coordenada(str(v.get("longitude", "")))
+            cells[2].text = self._formatar_coordenada(str(v.get("latitude", "")))
+            cells[3].text = self._formatar_numero(v.get("altitude", ""))
+            cells[4].text = str(v.get("vante", ""))
+            cells[5].text = self._formatar_azimute(str(v.get("azimute", "")))
+            cells[6].text = self._formatar_numero(v.get("distancia", ""))
+            cells[7].text = str(v.get("confrontacao_completa", ""))
+
+        for row in tabela_vert.rows:
+            for c_idx, cell in enumerate(row.cells):
+                cell.width = larguras_t2[c_idx]
+                self._definir_margens_celulas_zero(cell)
+                for p in cell.paragraphs:
+                    for run in p.runs: run.font.size = Pt(7)
 
         buffer = io.BytesIO()
         doc.save(buffer)
