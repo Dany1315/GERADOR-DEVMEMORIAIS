@@ -326,7 +326,7 @@ class GeradorAnuenciaIncraWord:
 
     def _cm_para_dxa(self, valor_cm: float) -> int:
         """
-        Converte centímetros para "twentieths of a point" (dxa), a unidade usada
+        Converte centímetros para Twips (dxa), que é a unidade usada
         internamente pelo Word para larguras de tabela/coluna.
         1 cm = 566.9291339 dxa (1 polegada = 1440 dxa, 1 polegada = 2.54 cm).
         """
@@ -335,17 +335,16 @@ class GeradorAnuenciaIncraWord:
     def _forcar_largura_fixa_tabela(self, tabela, larguras_cm: List[float]):
         """
         Garante que o Word respeite as larguras de coluna definidas.
-
-        Definir apenas `cell.width` NÃO é suficiente: o Word recalcula as
-        colunas com base no conteúdo a menos que a tabela tenha o layout
-        travado em "fixed" e possua um `tblGrid` explícito com a largura de
-        cada coluna. Esta função:
-          1. Define `<w:tblLayout w:type="fixed"/>` na tabela.
-          2. Reconstrói o `<w:tblGrid>` com as larguras exatas em dxa.
-          3. Reaplica a largura em cada célula de cada linha (cabeçalho e dados).
         """
         tbl = tabela._tbl
         tblPr = tbl.tblPr
+
+        # Centraliza a tabela na página
+        jc = tblPr.find(qn('w:jc'))
+        if jc is None:
+            jc = OxmlElement('w:jc')
+            tblPr.append(jc)
+        jc.set(qn('w:val'), 'center')
 
         # 1. Trava o layout da tabela em "fixed"
         tblLayout = tblPr.find(qn('w:tblLayout'))
@@ -430,9 +429,9 @@ class GeradorAnuenciaIncraWord:
         tabela.autofit = False
 
         headers = ["Código", "Longitude", "Latitude", "Altitude (m)", "Código", "Azimute", "Dist. (m)", "Confrontante"]
-        # Larguras exigidas (em cm), na ordem das colunas:
+        # Novas larguras exigidas (em cm), na ordem das colunas:
         # 1 Código | 2 Longitude | 3 Latitude | 4 Altitude | 5 Código | 6 Azimute | 7 Dist. | 8 Confrontante
-        larguras_cm = [1.65, 2.16, 1.98, 1.75, 1.75, 1.50, 1.50, 13.11]
+        larguras_cm = [2.39, 2.5, 2.38, 2.25, 2.00, 1.75, 1.75, 8.75]
         larguras = [Cm(v) for v in larguras_cm]
 
         for idx, text in enumerate(headers):
@@ -443,7 +442,7 @@ class GeradorAnuenciaIncraWord:
             p.alignment = WD_ALIGN_PARAGRAPH.CENTER
             run = p.runs[0]
             run.bold = True
-            run.font.size = Pt(7)
+            run.font.size = Pt(9)
             run.font.name = 'Arial'
             self._definir_margens_celulas_zero(cell)
 
@@ -465,16 +464,16 @@ class GeradorAnuenciaIncraWord:
                 cell.text = str(vals[i])
                 self._definir_margens_celulas_zero(cell)
                 p = cell.paragraphs[0]
+                p.alignment = WD_ALIGN_PARAGRAPH.CENTER # Centraliza o texto na célula
                 p.paragraph_format.space_before = Pt(0)
                 p.paragraph_format.space_after = Pt(0)
                 p.paragraph_format.line_spacing = 1.0
                 if p.runs:
                     run = p.runs[0]
-                    run.font.size = Pt(7)
+                    run.font.size = Pt(9) # Fonte da tabela tamanho 9
                     run.font.name = 'Arial Narrow'
 
-        # Trava as larguras definitivamente (tblGrid + tblLayout fixed),
-        # garantindo que o Word não recalcule as colunas pelo conteúdo.
+        # Trava as larguras definitivamente e centraliza a tabela
         self._forcar_largura_fixa_tabela(tabela, larguras_cm)
 
         # 5. ASSINATURAS
