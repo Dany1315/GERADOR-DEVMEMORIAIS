@@ -345,7 +345,7 @@ class GeradorAnuenciaIncraWord:
 
         # 2. TEXTO DA DECLARAÇÃO
         prop = dados_projeto.get("proprietario", "RODRIGO COLOMBI FROTA").upper()
-        cpf = dados_projeto.get("cpf_proprietario", "092.653.737-76")
+        cpf = dados_projeto.get("cpf_proprietario", "092.653.733-10")
         tec_nome = self.dados_tecnico.get("nome", "Régis Campo da Silva")
         tec_cfta = self.dados_tecnico.get("cfta", "11198519711")
 
