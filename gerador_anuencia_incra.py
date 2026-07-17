@@ -332,8 +332,8 @@ class GeradorAnuenciaIncraWord:
             section.page_height = new_height
             section.top_margin = Inches(0.5)
             section.bottom_margin = Inches(0.5)
-            section.left_margin = Inches(0.5)
-            section.right_margin = Inches(0.5)
+            section.left_margin = Cm(1.0)
+            section.right_margin = Cm(1.0)
 
         # 1. TÍTULO
         p_titulo = doc.add_paragraph()
@@ -381,9 +381,17 @@ class GeradorAnuenciaIncraWord:
             vals = [v.get("codigo"), self._formatar_coordenada(v.get("longitude")), self._formatar_coordenada(v.get("latitude")), 
                     v.get("altitude"), v.get("vante"), self._formatar_azimute(v.get("azimute")), v.get("distancia"), v.get("confrontacao_completa")]
             for i in range(8):
-                row.cells[i].text = str(vals[i])
-                self._definir_margens_celulas_zero(row.cells[i])
-                row.cells[i].paragraphs[0].runs[0].font.size = Pt(7)
+                cell = row.cells[i]
+                cell.text = str(vals[i])
+                self._definir_margens_celulas_zero(cell)
+                # Garante que o parágrafo tenha espaçamento zero para economizar espaço vertical
+                p = cell.paragraphs[0]
+                p.paragraph_format.space_before = Pt(0)
+                p.paragraph_format.space_after = Pt(0)
+                p.paragraph_format.line_spacing = 1.0
+                if p.runs:
+                    p.runs[0].font.size = Pt(7)
+                    p.runs[0].font.name = 'Arial Narrow' # Fonte mais condensada para caber melhor
 
         # 5. ASSINATURAS
         doc.add_paragraph().paragraph_format.space_before = Pt(24)
