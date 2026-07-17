@@ -1,5 +1,5 @@
-import io
 import re
+import io
 import json
 import logging
 import zipfile
@@ -85,14 +85,16 @@ class GeradorAnuenciaIncraWord:
         except Exception: return str(num_str)
 
     def _obter_dados_estruturados_com_ia(self, texto_memorial: str, dados_projeto: Dict[str, Any]) -> Dict[str, Any]:
-        if not self.api_key: return self._estrutura_padrao()
-        prompt = f"Analise o memorial e extraia confrontantes e proprietário.\nTexto:\n{texto_memorial}"
+        estrutura_padrao = self._estrutura_padrao()
+        if not self.api_key: return estrutura_padrao
+        prompt = f"Analise o memorial: {texto_memorial}. Responda em JSON."
         try:
             model = genai.GenerativeModel("gemini-2.0-flash")
             response = model.generate_content(prompt, generation_config={"response_mime_type": "application/json"})
-            texto_resposta = response.text.strip().replace("```json", "").replace("```", "")
-            return json.loads(texto_resposta)
-        except Exception: return self._estrutura_padrao()
+            return json.loads(response.text)
+        except Exception as e:
+            logger.error(f"Erro IA: {e}")
+            return estrutura_padrao
 
     def _extrair_texto_memorial(self, conteudo_arquivo: bytes, nome_arquivo: str) -> str:
         texto = ""
@@ -104,6 +106,30 @@ class GeradorAnuenciaIncraWord:
         else:
             texto = conteudo_arquivo.decode("utf-8", errors="ignore")
         return re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\xFF]', '', texto)
+
+    def gerar_documentos_pelo_memorial(self, conteudo_arquivo: bytes, nome_arquivo: str, dados_projeto: Dict[str, Any]) -> List[Tuple[str, io.BytesIO]]:
+        texto_memorial = self._extrair_texto_memorial(conteudo_arquivo, nome_arquivo)
+        dados_ia = self._obter_dados_estruturados_com_ia(texto_memorial, dados_projeto)
+        confrontantes = dados_ia.get("confrontantes", [])
+        documentos = []
+        for d in confrontantes:
+            buf = self._montar_documento_confrontante(d, dados_projeto)
+            documentos.append((str(d.get("confrontante_proprietario", "CONFRONTANTE")), buf))
+        return documentos
+
+    def gerar_documento_pelo_memorial(self, conteudo_arquivo: bytes, nome_arquivo: str, dados_projeto: Dict[str, Any]) -> io.BytesIO:
+        docs = self.gerar_documentos_pelo_memorial(conteudo_arquivo, nome_arquivo, dados_projeto)
+        return docs[0][1] if docs else io.BytesIO()
+
+    @staticmethod
+    def gerar_zip_anuencias(documentos: List[Tuple[str, io.BytesIO]], prefixo_arquivo: str = "ANUENCIA_INCRA") -> io.BytesIO:
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+            for nome, buffer in documentos:
+                nome_base = re.sub(r'[^A-Za-z0-9_\-]+', '_', nome.upper())
+                zip_file.writestr(f"{prefixo_arquivo}_{nome_base}.docx", buffer.getvalue())
+        zip_buffer.seek(0)
+        return zip_buffer
 
     def _definir_margens_celulas_zero(self, cell):
         tcPr = cell._tc.get_or_add_tcPr()
@@ -122,25 +148,27 @@ class GeradorAnuenciaIncraWord:
             section.page_width, section.page_height = section.page_height, section.page_width
             section.top_margin = section.bottom_margin = section.left_margin = section.right_margin = Inches(0.5)
 
-        # Cabeçalho da declaração
         p_titulo = doc.add_paragraph("DECLARAÇÃO DE RESPEITO DE LIMITES")
         p_titulo.alignment = WD_ALIGN_PARAGRAPH.CENTER
         p_titulo.runs[0].bold = True
         
-        # ... (Mantido o restante da montagem de texto e assinaturas conforme original) ...
+        prop = dados_projeto.get("proprietario", "RODRIGO COLOMBI FROTA").upper()
+        cpf = dados_projeto.get("cpf_proprietario", "092.653.733-10")
+        tec_nome = self.dados_tecnico.get("nome", "Régis Campo da Silva")
+        tec_cfta = self.dados_tecnico.get("cfta", "11198519711")
         
+        doc.add_paragraph(f"Eu, {prop}, CPF {cpf}, e eu, {tec_nome}, CFTA {tec_cfta}, declaramos respeitados os limites de divisa com os confrontantes.")
+
         tabela = doc.add_table(rows=1, cols=8)
         tabela.style = 'Table Grid'
         tabela.autofit = False
-        headers = ["Código", "Longitude", "Latitude", "Altitude (m)", "Código", "Azimute", "Dist. (m)", "Confrontante"]
+        headers = ["Código", "Longitude", "Latitude", "Altitude", "Vante", "Azimute", "Dist.", "Confrontante"]
         for idx, h in enumerate(headers):
             cell = tabela.rows[0].cells[idx]
             cell.text = h
             cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-            cell.paragraphs[0].runs[0].bold = True
-            cell.paragraphs[0].runs[0].font.size = Pt(7)
 
-        # DEFINIÇÃO DAS LARGURAS AJUSTADAS EM CM (Pode ajustar estes valores conforme necessidade)
+        # Definição das larguras conforme solicitado
         larguras = [Cm(1.65), Cm(2.16), Cm(1.98), Cm(1.75), Cm(1.75), Cm(1.5), Cm(1.5), Cm(13.11)]
         for i, width in enumerate(larguras):
             tabela.columns[i].width = width
@@ -158,7 +186,3 @@ class GeradorAnuenciaIncraWord:
         doc.save(buffer)
         buffer.seek(0)
         return buffer
-
-    def gerar_documentos_pelo_memorial(self, conteudo_arquivo: bytes, nome_arquivo: str, dados_projeto: Dict[str, Any]) -> List[Tuple[str, io.BytesIO]]:
-        # ... (Lógica original de extração e geração) ...
-        return [] # Placeholder para completar com sua lógica de fluxo original
