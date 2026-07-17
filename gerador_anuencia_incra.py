@@ -185,7 +185,7 @@ class GeradorAnuenciaIncraWord:
         """
 
         try:
-            model = genai.GenerativeModel("gemini-2.5-flash")
+            model = genai.GenerativeModel("gemini-2.0-flash")
             response = model.generate_content(
                 prompt,
                 generation_config={"response_mime_type": "application/json"}
@@ -304,14 +304,13 @@ class GeradorAnuenciaIncraWord:
 
     def _definir_margens_celulas_zero(self, cell):
         """
-        Remove o preenchimento interno padrão (padding) das células do Word
-        para permitir que o texto fique encostado e as colunas fiquem extremamente justas.
+        Remove o preenchimento interno padrão (padding) das células do Word.
         """
         tcPr = cell._tc.get_or_add_tcPr()
         tcMar = OxmlElement('w:tcMar')
         for m in ['top', 'bottom', 'left', 'right']:
             node = OxmlElement(f'w:{m}')
-            node.set(qn('w:w'), '20')  # Margem mínima absoluta de segurança
+            node.set(qn('w:w'), '20')
             node.set(qn('w:type'), 'dxa')
             tcMar.append(node)
         tcPr.append(tcMar)
@@ -320,18 +319,18 @@ class GeradorAnuenciaIncraWord:
         self, dados_ia: Dict[str, Any], dados_projeto: Dict[str, Any]
     ) -> io.BytesIO:
         """
-        Gera o documento com a ordem: Título -> Texto -> Confrontantes -> Tabela -> Assinaturas -> Anexos -> Data.
+        Gera o documento idêntico ao modelo fornecido.
         """
         doc = Document()
 
-        # Configurações de página (Paisagem)
+        # Configurações de página (Paisagem com margens otimizadas)
         for section in doc.sections:
             section.orientation = WD_ORIENTATION.LANDSCAPE
             new_width, new_height = section.page_height, section.page_width
             section.page_width = new_width
             section.page_height = new_height
-            section.top_margin = Inches(0.5)
-            section.bottom_margin = Inches(0.5)
+            section.top_margin = Cm(1.0)
+            section.bottom_margin = Cm(1.0)
             section.left_margin = Cm(1.0)
             section.right_margin = Cm(1.0)
 
@@ -342,78 +341,105 @@ class GeradorAnuenciaIncraWord:
         run_titulo.bold = True
         run_titulo.font.size = Pt(12)
         run_titulo.font.name = 'Arial'
-        run_titulo.font.color.rgb = RGBColor(0, 100, 0)  # Verde Escuro
+        run_titulo.font.color.rgb = RGBColor(0, 100, 0)
 
         # 2. TEXTO DA DECLARAÇÃO
         prop = dados_projeto.get("proprietario", "RODRIGO COLOMBI FROTA").upper()
-        cpf = dados_projeto.get("cpf_proprietario", "092.653.733-10")
+        cpf = dados_projeto.get("cpf_proprietario", "092.653.737-76")
         tec_nome = self.dados_tecnico.get("nome", "Régis Campo da Silva")
         tec_cfta = self.dados_tecnico.get("cfta", "11198519711")
 
         p_corpo = doc.add_paragraph()
         p_corpo.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        p_corpo.paragraph_format.space_before = Pt(12)
         p_corpo.add_run(f"Eu, {prop}, CPF {cpf}, residente em Vila Valério, e eu, {tec_nome}, Tecnico em Agropecuaria, CFTA {tec_cfta}, credenciado pelo INCRA sob o codigo G1D, declaramos sob as penas da Lei que quando dos trabalhos topograficos executados na citada propriedade foram respeitados os limites de \"divisas in loco\" com os confrontantes abaixo relacionados, não havendo qualquer litigio entre as partes.")
 
         # 3. LABEL CONFRONTANTES
         p_label = doc.add_paragraph()
-        run_label = p_label.add_run(" Confrontantes:")
+        p_label.paragraph_format.space_before = Pt(12)
+        run_label = p_label.add_run("Confrontantes:")
         run_label.bold = True
 
         # 4. TABELA DE VÉRTICES
         tabela = doc.add_table(rows=1, cols=8)
         tabela.style = 'Table Grid'
         tabela.autofit = False
-        headers = ["Código", "Longitude", "Latitude", "Altitude (m)", "Código", "Azimute", "Dist. (m)", "Confrontante"]
         
+        headers = ["Código", "Longitude", "Latitude", "Altitude (m)", "Código", "Azimute", "Dist. (m)", "Confrontante"]
+        larguras = [Cm(1.65), Cm(2.16), Cm(1.98), Cm(1.75), Cm(1.75), Cm(1.50), Cm(1.50), Cm(13.11)]
+
         for idx, text in enumerate(headers):
             cell = tabela.rows[0].cells[idx]
+            cell.width = larguras[idx]
             cell.text = text
-            cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
-            cell.paragraphs[0].runs[0].bold = True
-            cell.paragraphs[0].runs[0].font.size = Pt(7)
-
-        larguras = [Cm(1.65), Cm(2.16), Cm(1.98), Cm(1.75), Cm(1.75), Cm(1.5), Cm(1.5), Cm(13.11)]
-        for i, width in enumerate(larguras):
-            tabela.columns[i].width = width
+            p = cell.paragraphs[0]
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            run = p.runs[0]
+            run.bold = True
+            run.font.size = Pt(7)
+            run.font.name = 'Arial'
+            self._definir_margens_celulas_zero(cell)
 
         for v in dados_ia.get("vertices", []):
             row = tabela.add_row()
-            vals = [v.get("codigo"), self._formatar_coordenada(v.get("longitude")), self._formatar_coordenada(v.get("latitude")), 
-                    v.get("altitude"), v.get("vante"), self._formatar_azimute(v.get("azimute")), v.get("distancia"), v.get("confrontacao_completa")]
+            vals = [
+                v.get("codigo"), 
+                self._formatar_coordenada(v.get("longitude")), 
+                self._formatar_coordenada(v.get("latitude")), 
+                v.get("altitude"), 
+                v.get("vante"), 
+                self._formatar_azimute(v.get("azimute")), 
+                v.get("distancia"), 
+                v.get("confrontacao_completa")
+            ]
             for i in range(8):
                 cell = row.cells[i]
+                cell.width = larguras[i]
                 cell.text = str(vals[i])
                 self._definir_margens_celulas_zero(cell)
-                # Garante que o parágrafo tenha espaçamento zero para economizar espaço vertical
                 p = cell.paragraphs[0]
                 p.paragraph_format.space_before = Pt(0)
                 p.paragraph_format.space_after = Pt(0)
                 p.paragraph_format.line_spacing = 1.0
                 if p.runs:
-                    p.runs[0].font.size = Pt(7)
-                    p.runs[0].font.name = 'Arial Narrow' # Fonte mais condensada para caber melhor
+                    run = p.runs[0]
+                    run.font.size = Pt(7)
+                    run.font.name = 'Arial Narrow'
 
         # 5. ASSINATURAS
-        doc.add_paragraph().paragraph_format.space_before = Pt(24)
+        doc.add_paragraph().paragraph_format.space_before = Pt(36)
         tab_ass = doc.add_table(rows=2, cols=2)
         tab_ass.autofit = False
-        tab_ass.columns[0].width = Inches(5.0)
-        tab_ass.columns[1].width = Inches(5.0)
-        tab_ass.rows[0].cells[0].text = "__________________________________________________"
-        tab_ass.rows[0].cells[1].text = "__________________________________________________"
-        tab_ass.rows[1].cells[0].text = f"{prop}\n{cpf}"
-        tab_ass.rows[1].cells[1].text = f"{str(dados_ia.get('confrontante_proprietario', '')).upper()}"
+        tab_ass.columns[0].width = Cm(13.5)
+        tab_ass.columns[1].width = Cm(13.5)
+        
+        # Linhas de assinatura
+        p0 = tab_ass.rows[0].cells[0].paragraphs[0]
+        p0.add_run("__________________________________________________")
+        
+        p1 = tab_ass.rows[0].cells[1].paragraphs[0]
+        p1.add_run("__________________________________________________")
+        
+        # Nomes e CPFs
+        p_nome0 = tab_ass.rows[1].cells[0].paragraphs[0]
+        p_nome0.add_run(f"{prop}\n{cpf}")
+        
+        p_nome1 = tab_ass.rows[1].cells[1].paragraphs[0]
+        p_nome1.add_run(f"{str(dados_ia.get('confrontante_proprietario', '')).upper()}")
 
         # 6. ANEXOS
-        doc.add_paragraph().paragraph_format.space_before = Pt(16)
+        doc.add_paragraph().paragraph_format.space_before = Pt(24)
         p_anexos = doc.add_paragraph()
-        run_anexos = p_anexos.add_run("Anexos:  Planta do Imóvel  Memorial Descritivo do Imóvel")
+        run_anexos = p_anexos.add_run("Anexos: Planta do Imóvel Memorial Descritivo do Imóvel")
         run_anexos.font.size = Pt(9)
 
         # 7. DATA (Alinhada à direita)
         p_data = doc.add_paragraph()
         p_data.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-        p_data.add_run(f"Vila Valério, {datetime.now().day} de {datetime.now().strftime('%B').upper()} de {datetime.now().year}.")
+        p_data.paragraph_format.space_before = Pt(12)
+        meses = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"]
+        hoje = datetime.now()
+        p_data.add_run(f"Vila Valério, {hoje.day} de {meses[hoje.month-1]} de {hoje.year}.")
 
         buffer = io.BytesIO()
         doc.save(buffer)
