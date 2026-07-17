@@ -34,27 +34,7 @@ class GeradorAnuenciaIncraWord:
         return {
             "proprietario_origem": "RODRIGO COLOMBI FROTA",
             "cpf_origem": "092.653.737-76",
-            "confrontantes": [
-                {
-                    "confrontante_imovel": "Sitio Bravin",
-                    "confrontante_matricula": "6093",
-                    "confrontante_comarca": "São Gabriel da Palha",
-                    "confrontante_proprietario": "ANTONIO BRAVIN",
-                    "confrontante_cpf": "___.___.___-__",
-                    "vertices": [
-                        {
-                            "codigo": "G1D-M-03281",
-                            "longitude": "40°22'10.639\"",
-                            "latitude": "19°00'24.525\"",
-                            "altitude": "162.10",
-                            "vante": "G1D-M-03282",
-                            "azimute": "06°49'",
-                            "distancia": "640.71",
-                            "confrontacao_completa": "CNS: 02.170-9 | Mat. 6093 | Sitio Bravin; Antonio Bravin"
-                        }
-                    ]
-                }
-            ]
+            "confrontantes": []
         }
 
     def _formatar_coordenada(self, coord_str: str) -> str:
@@ -126,6 +106,15 @@ class GeradorAnuenciaIncraWord:
             documentos.append((nome, self._montar_documento_confrontante(dados_confrontante, dados_projeto_atualizados)))
         return documentos
 
+    def gerar_zip_anuencias(self, lista_documentos: List[Tuple[str, io.BytesIO]]) -> io.BytesIO:
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED, False) as zip_file:
+            for nome, doc_buffer in lista_documentos:
+                nome_seguro = re.sub(r'[\\/*?:"<>|]', "", nome)
+                zip_file.writestr(f"{nome_seguro}.docx", doc_buffer.getvalue())
+        zip_buffer.seek(0)
+        return zip_buffer
+
     def _definir_margens_celulas_zero(self, cell):
         tcPr = cell._tc.get_or_add_tcPr()
         tcMar = OxmlElement('w:tcMar')
@@ -143,7 +132,6 @@ class GeradorAnuenciaIncraWord:
             section.page_width, section.page_height = section.page_height, section.page_width
             section.top_margin = section.bottom_margin = section.left_margin = section.right_margin = Inches(0.5)
 
-        # Configurações de texto simplificadas para o exemplo
         tabela_vert = doc.add_table(rows=1, cols=8)
         tabela_vert.style = 'Table Grid'
         tabela_vert.autofit = False
@@ -152,8 +140,7 @@ class GeradorAnuenciaIncraWord:
         hdr_cells = tabela_vert.rows[0].cells
         for i, h in enumerate(headers): hdr_cells[i].text = h
 
-        # LARGURAS SOLICITADAS
-        larguras_t2 = [Cm(1.85), Cm(2.16), Cm(2.16), Cm(1.75), Cm(1.75), Cm(1.5), Cm(1.5), Cm(13.11)]
+        larguras_t2 = [Cm(1.65), Cm(2.16), Cm(1.98), Cm(1.75), Cm(1.75), Cm(1.5), Cm(1.5), Cm(13.11)]
 
         for v in dados_ia.get("vertices", []):
             row = tabela_vert.add_row()
