@@ -315,6 +315,61 @@ class GeradorAnuenciaIncraWord:
             tcMar.append(node)
         tcPr.append(tcMar)
 
+    def _cm_para_dxa(self, valor_cm: float) -> int:
+        """
+        Converte centímetros para "twentieths of a point" (dxa), a unidade usada
+        internamente pelo Word para larguras de tabela/coluna.
+        1 cm = 566.9291339 dxa (1 polegada = 1440 dxa, 1 polegada = 2.54 cm).
+        """
+        return int(round(valor_cm * 1440 / 2.54))
+
+    def _forcar_largura_fixa_tabela(self, tabela, larguras_cm: List[float]):
+        """
+        Garante que o Word respeite as larguras de coluna definidas.
+
+        Definir apenas `cell.width` NÃO é suficiente: o Word recalcula as
+        colunas com base no conteúdo a menos que a tabela tenha o layout
+        travado em "fixed" e possua um `tblGrid` explícito com a largura de
+        cada coluna. Esta função:
+          1. Define `<w:tblLayout w:type="fixed"/>` na tabela.
+          2. Reconstrói o `<w:tblGrid>` com as larguras exatas em dxa.
+          3. Reaplica a largura em cada célula de cada linha (cabeçalho e dados).
+        """
+        tbl = tabela._tbl
+        tblPr = tbl.tblPr
+
+        # 1. Trava o layout da tabela em "fixed"
+        tblLayout = tblPr.find(qn('w:tblLayout'))
+        if tblLayout is None:
+            tblLayout = OxmlElement('w:tblLayout')
+            tblPr.append(tblLayout)
+        tblLayout.set(qn('w:type'), 'fixed')
+
+        # 2. Reconstrói o tblGrid com as larguras exatas
+        tblGrid = tbl.find(qn('w:tblGrid'))
+        if tblGrid is not None:
+            tbl.remove(tblGrid)
+        tblGrid = OxmlElement('w:tblGrid')
+        for largura_cm in larguras_cm:
+            gridCol = OxmlElement('w:gridCol')
+            gridCol.set(qn('w:w'), str(self._cm_para_dxa(largura_cm)))
+            tblGrid.append(gridCol)
+        # tblGrid deve vir logo após tblPr
+        tblPr.addnext(tblGrid)
+
+        # 3. Reaplica a largura em todas as linhas/células já existentes
+        for row in tabela.rows:
+            for idx, cell in enumerate(row.cells):
+                if idx < len(larguras_cm):
+                    cell.width = Cm(larguras_cm[idx])
+                    tcPr = cell._tc.get_or_add_tcPr()
+                    tcW = tcPr.find(qn('w:tcW'))
+                    if tcW is None:
+                        tcW = OxmlElement('w:tcW')
+                        tcPr.append(tcW)
+                    tcW.set(qn('w:w'), str(self._cm_para_dxa(larguras_cm[idx])))
+                    tcW.set(qn('w:type'), 'dxa')
+
     def _montar_documento_confrontante(
         self, dados_ia: Dict[str, Any], dados_projeto: Dict[str, Any]
     ) -> io.BytesIO:
@@ -364,9 +419,12 @@ class GeradorAnuenciaIncraWord:
         tabela = doc.add_table(rows=1, cols=8)
         tabela.style = 'Table Grid'
         tabela.autofit = False
-        
+
         headers = ["Código", "Longitude", "Latitude", "Altitude (m)", "Código", "Azimute", "Dist. (m)", "Confrontante"]
-        larguras = [Cm(1.65), Cm(2.16), Cm(1.98), Cm(1.75), Cm(1.75), Cm(1.50), Cm(1.50), Cm(13.11)]
+        # Larguras exigidas (em cm), na ordem das colunas:
+        # 1 Código | 2 Longitude | 3 Latitude | 4 Altitude | 5 Código | 6 Azimute | 7 Dist. | 8 Confrontante
+        larguras_cm = [1.65, 2.16, 1.98, 1.75, 1.75, 1.50, 1.50, 13.11]
+        larguras = [Cm(v) for v in larguras_cm]
 
         for idx, text in enumerate(headers):
             cell = tabela.rows[0].cells[idx]
@@ -405,6 +463,10 @@ class GeradorAnuenciaIncraWord:
                     run = p.runs[0]
                     run.font.size = Pt(7)
                     run.font.name = 'Arial Narrow'
+
+        # Trava as larguras definitivamente (tblGrid + tblLayout fixed),
+        # garantindo que o Word não recalcule as colunas pelo conteúdo.
+        self._forcar_largura_fixa_tabela(tabela, larguras_cm)
 
         # 5. ASSINATURAS
         doc.add_paragraph().paragraph_format.space_before = Pt(36)
