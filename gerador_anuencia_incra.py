@@ -14,7 +14,7 @@ except ImportError:
     pypdf = None
 
 from docx import Document
-from docx.shared import Pt, Inches, Cm
+from docx.shared import Pt, Inches, Cm, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.section import WD_ORIENTATION
 from docx.oxml import parse_xml, OxmlElement
@@ -342,6 +342,7 @@ class GeradorAnuenciaIncraWord:
         run_titulo.bold = True
         run_titulo.font.size = Pt(12)
         run_titulo.font.name = 'Arial'
+        run_titulo.font.color.rgb = RGBColor(0, 100, 0)  # Verde Escuro
 
         # 2. TEXTO DA DECLARAÇÃO
         prop = dados_projeto.get("proprietario", "RODRIGO COLOMBI FROTA").upper()
@@ -393,7 +394,7 @@ class GeradorAnuenciaIncraWord:
         tab_ass.rows[0].cells[0].text = "__________________________________________________"
         tab_ass.rows[0].cells[1].text = "__________________________________________________"
         tab_ass.rows[1].cells[0].text = f"{prop}\n{cpf}"
-        tab_ass.rows[1].cells[1].text = f"{str(dados_ia.get('confrontante_proprietario', '')).upper()}\n{dados_ia.get('confrontante_cpf', '')}"
+        tab_ass.rows[1].cells[1].text = f"{str(dados_ia.get('confrontante_proprietario', '')).upper()}"
 
         # 6. ANEXOS
         doc.add_paragraph().paragraph_format.space_before = Pt(16)
