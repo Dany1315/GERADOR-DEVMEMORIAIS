@@ -476,7 +476,7 @@ class GeradorAnuenciaIncraWord:
         # Trava as larguras definitivamente e centraliza a tabela
         self._forcar_largura_fixa_tabela(tabela, larguras_cm)
 
-        # 5. ASSINATURAS (Uma acima da outra, centralizadas)
+        # 5. ASSINATURAS (Proprietário, Confrontante e Técnico)
         doc.add_paragraph().paragraph_format.space_before = Pt(36)
         
         # Assinatura Proprietário
@@ -492,28 +492,28 @@ class GeradorAnuenciaIncraWord:
         p_ass_conf.add_run("__________________________________________________\n")
         p_ass_conf.add_run(f"{str(dados_confrontante.get('confrontante_proprietario', '')).upper()}")
 
-        # 6. ANEXOS
+        # Assinatura do Técnico Régis (Logo abaixo do confrontante)
         doc.add_paragraph().paragraph_format.space_before = Pt(24)
-        p_anexos = doc.add_paragraph()
-        run_anexos = p_anexos.add_run("Anexos: Planta do Imóvel Memorial Descritivo do Imóvel")
-        run_anexos.font.size = Pt(9)
-
-        # 7. DATA (Alinhada à direita)
-        p_data = doc.add_paragraph()
-        p_data.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-        p_data.paragraph_format.space_before = Pt(12)
-        meses = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"]
-        hoje = datetime.now()
-        p_data.add_run(f"Vila Valério, {hoje.day} de {meses[hoje.month-1]} de {hoje.year}.")
-
-        # 8. ASSINATURA DO TÉCNICO (Régis) - FINAL DO DOCUMENTO
-        doc.add_paragraph().paragraph_format.space_before = Pt(36)
         p_ass_tec = doc.add_paragraph()
         p_ass_tec.alignment = WD_ALIGN_PARAGRAPH.CENTER
         p_ass_tec.add_run("__________________________________________________\n")
         run_tec = p_ass_tec.add_run(f"{tec_nome}\nTecnico em Agropecuaria - CFTA: {tec_cfta}")
         run_tec.bold = True
         run_tec.font.size = Pt(10)
+
+        # 6. ANEXOS
+        doc.add_paragraph().paragraph_format.space_before = Pt(24)
+        p_anexos = doc.add_paragraph()
+        run_anexos = p_anexos.add_run("Anexos: Planta do Imóvel Memorial Descritivo do Imóvel")
+        run_anexos.font.size = Pt(9)
+
+        # 7. LOCAL E DATA (Vila Valério, Inferior Direito)
+        doc.add_paragraph().paragraph_format.space_before = Pt(12)
+        p_data = doc.add_paragraph()
+        p_data.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        meses = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"]
+        hoje = datetime.now()
+        p_data.add_run(f"Vila Valério, {hoje.day} de {meses[hoje.month-1]} de {hoje.year}.")
 
         buffer = io.BytesIO()
         doc.save(buffer)
