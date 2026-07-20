@@ -7,3 +7,7 @@ PyMuPDF
 Pillow
 pydantic
 pandas
+streamlit
+python-docx
+pdf2image
+python-dotenv
