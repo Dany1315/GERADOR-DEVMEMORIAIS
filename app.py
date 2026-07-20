@@ -1,6 +1,7 @@
-# GERADOR DE MEMORIAL DESCRITIVO - Versão 7.0 (COMPLETO COM TODAS AS CORREÇÕES)
+# GERADOR DE MEMORIAL DESCRITIVO - Versão 8.0 (COM ÍCONE INTEGRADO)
 # ✅ Placeholders corrigidos
 # ✅ Barra de progresso em tempo real
+# ✅ Ícone integrado na tela de login e sidebar
 # ✅ Todas as funcionalidades integradas
 
 import io
@@ -138,11 +139,12 @@ def verificar_https():
 
 
 # ============================================================
-# SEGURANÇA: SISTEMA DE LOGIN
+# SEGURANÇA: SISTEMA DE LOGIN COM ÍCONE
 # ============================================================
 def tela_login():
     """Exibe a tela de login com verificação de usuário e senha.
     As credenciais são definidas via st.secrets para segurança.
+    AGORA COM ÍCONE INTEGRADO!
     """
     st.markdown("""
         <style>
@@ -161,6 +163,14 @@ def tela_login():
             .login-warning { color: #fbbf24; font-size: 0.85rem; margin-top: 1rem; }
         </style>
     """, unsafe_allow_html=True)
+
+    # ✨ ADICIONE ISTO: Exibir ícone na tela de login
+    try:
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col2:
+            st.image("icon_gerador_128x128.png", width=150, use_column_width=False)
+    except:
+        pass  # Se o ícone não existir, continuar sem erro
 
     st.markdown("""
         <div class="login-container">
@@ -241,8 +251,43 @@ def main():
     if not verificar_autenticacao():
         return
 
-    # Botão de logout na sidebar
+    # ============================================================
+    # SIDEBAR COM ÍCONE E LOGO
+    # ============================================================
     with st.sidebar:
+        # ✨ ADICIONE ISTO: Exibir ícone no topo da sidebar
+        st.markdown("""
+            <style>
+                .sidebar-icon-container {
+                    text-align: center;
+                    margin-bottom: 1.5rem;
+                    padding: 1rem;
+                    background: linear-gradient(135deg, #064e3b 0%, #022c22 100%);
+                    border-radius: 12px;
+                    border-left: 4px solid #10b981;
+                }
+                .sidebar-icon-container img {
+                    max-width: 100px;
+                    height: auto;
+                    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+                }
+                .sidebar-title {
+                    color: #10b981;
+                    font-weight: 700;
+                    margin-top: 0.5rem;
+                    font-size: 0.95rem;
+                }
+            </style>
+        """, unsafe_allow_html=True)
+        
+        try:
+            st.image("icon_gerador_64x64.png", width=100, use_column_width=False)
+            st.markdown('<p class="sidebar-title">Gerador de Memorial</p>', unsafe_allow_html=True)
+        except:
+            st.markdown("### 📐 Gerador de Memorial")
+        
+        st.markdown("---")
+
         if st.button("🚪 Sair (Logout)", type="secondary", use_container_width=True):
             st.session_state["autenticado"] = False
             st.session_state["usuario_logado"] = ""
@@ -362,7 +407,7 @@ def main():
         texto_planta_manual, texto_roteiro_manual = "", ""
 
         with tab_pdf:
-            st.info("💡 Aceita arquivos **PDF**, **PNG**, **JPG** ou **JPEG**. Imagens são enviadas diretamente à IA; PDFs são convertidos internamente em imagens antes da análise.")
+            st.info("💡 Aceitos: PDF ou imagens (PNG/JPG/JPEG)")
             col1, col2 = st.columns(2)
             with col1:
                 pdf_planta = st.file_uploader(
