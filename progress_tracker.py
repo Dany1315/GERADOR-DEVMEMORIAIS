@@ -1,9 +1,12 @@
 """
 Módulo de rastreamento de progresso com tempo estimado e decorrido.
 Integrado com Streamlit para exibir barras de progresso inteligentes.
+
+VERSÃO CORRIGIDA: Atualiza em tempo real com threading para contador de segundos.
 """
 
 import time
+import threading
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Callable
 import streamlit as st
@@ -18,6 +21,7 @@ class ProgressTracker:
     - Exibe tempo decorrido em tempo real
     - Suporta múltiplas etapas de processamento
     - Integrado com Streamlit
+    - ✅ NOVO: Atualização em tempo real com threading
     """
     
     def __init__(self, total_etapas: int = 1, nome_processo: str = "Processamento"):
@@ -35,11 +39,14 @@ class ProgressTracker:
         self.tempo_por_etapa = {}
         self.etapas_info = {}
         self.tempos_historicos = []  # Para calcular média
+        self.thread_atualizacao = None
+        self.parado = False
         
     def iniciar(self):
         """Inicia o rastreamento de tempo."""
         self.tempo_inicio = time.time()
         self.etapa_atual = 0
+        self.parado = False
         
     def atualizar_etapa(self, numero_etapa: int, descricao: str = "", tempo_estimado_seg: Optional[float] = None):
         """
@@ -136,6 +143,8 @@ class ProgressBarStreamlit:
     """
     Barra de progresso integrada com Streamlit.
     Exibe progresso, tempo decorrido e tempo estimado.
+    
+    ✅ NOVO: Atualiza em tempo real com placeholder que se renova.
     """
     
     def __init__(self, tracker: ProgressTracker, container=None):
@@ -148,8 +157,8 @@ class ProgressBarStreamlit:
         """
         self.tracker = tracker
         self.container = container or st.container()
-        self.progress_bar = None
-        self.status_text = None
+        self.progress_placeholder = None
+        self.metrics_placeholder = None
         
     def atualizar(self, etapa: int, descricao: str = ""):
         """Atualiza a barra de progresso."""
@@ -166,33 +175,142 @@ class ProgressBarStreamlit:
         info = self.tracker.obter_info_progresso()
         
         with self.container:
-            # Barra de progresso
-            percentual = info['percentual'] / 100
-            st.progress(percentual, text=f"Etapa {info['etapa_atual']}/{info['total_etapas']}")
+            # Usar placeholders para atualização em tempo real
+            if self.progress_placeholder is None:
+                self.progress_placeholder = st.empty()
             
-            # Informações de tempo
-            col1, col2, col3 = st.columns(3)
+            if self.metrics_placeholder is None:
+                self.metrics_placeholder = st.empty()
             
-            with col1:
-                st.metric(
-                    "⏱️ Tempo Decorrido",
-                    info['tempo_decorrido_formatado'],
-                    delta=None
-                )
+            # Atualizar barra de progresso
+            with self.progress_placeholder.container():
+                percentual = info['percentual'] / 100
+                st.progress(percentual, text=f"Etapa {info['etapa_atual']}/{info['total_etapas']}")
             
-            with col2:
-                st.metric(
-                    "⏳ Tempo Estimado",
-                    info['tempo_estimado_restante_formatado'],
-                    delta="Restante"
-                )
+            # Atualizar métricas
+            with self.metrics_placeholder.container():
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.metric(
+                        "⏱️ Tempo Decorrido",
+                        info['tempo_decorrido_formatado'],
+                        delta=None
+                    )
+                
+                with col2:
+                    st.metric(
+                        "⏳ Tempo Estimado",
+                        info['tempo_estimado_restante_formatado'],
+                        delta="Restante"
+                    )
+                
+                with col3:
+                    st.metric(
+                        "🎯 Total Estimado",
+                        info['tempo_total_estimado_formatado'],
+                        delta=None
+                    )
+
+
+class ProgressBarComAtualizacaoEmTempoReal:
+    """
+    Barra de progresso com atualização automática em tempo real.
+    
+    ✅ NOVO: Atualiza a cada segundo sem necessidade de callback.
+    """
+    
+    def __init__(self, tracker: ProgressTracker, container=None, intervalo_atualizacao: float = 0.5):
+        """
+        Inicializa a barra de progresso com atualização em tempo real.
+        
+        Args:
+            tracker: Instância de ProgressTracker
+            container: Container do Streamlit (opcional)
+            intervalo_atualizacao: Intervalo em segundos para atualizar (padrão: 0.5s)
+        """
+        self.tracker = tracker
+        self.container = container or st.container()
+        self.intervalo_atualizacao = intervalo_atualizacao
+        self.progress_placeholder = None
+        self.metrics_placeholder = None
+        self.thread_atualizacao = None
+        self.parado = False
+        
+    def iniciar_atualizacao_automatica(self):
+        """Inicia thread de atualização automática."""
+        if self.thread_atualizacao is None or not self.thread_atualizacao.is_alive():
+            self.parado = False
+            self.thread_atualizacao = threading.Thread(target=self._atualizar_continuamente, daemon=True)
+            self.thread_atualizacao.start()
+    
+    def parar_atualizacao_automatica(self):
+        """Para a thread de atualização automática."""
+        self.parado = True
+        if self.thread_atualizacao:
+            self.thread_atualizacao.join(timeout=1)
+    
+    def _atualizar_continuamente(self):
+        """Thread que atualiza a barra continuamente."""
+        while not self.parado:
+            try:
+                self._renderizar()
+                time.sleep(self.intervalo_atualizacao)
+            except Exception as e:
+                print(f"Erro ao atualizar progresso: {e}")
+                break
+    
+    def atualizar(self, etapa: int, descricao: str = ""):
+        """Atualiza a barra de progresso."""
+        self.tracker.atualizar_etapa(etapa, descricao)
+        self._renderizar()
+        
+    def finalizar_etapa(self, etapa: int):
+        """Finaliza uma etapa."""
+        self.tracker.finalizar_etapa(etapa)
+        self._renderizar()
+    
+    def _renderizar(self):
+        """Renderiza a barra de progresso no Streamlit."""
+        info = self.tracker.obter_info_progresso()
+        
+        with self.container:
+            # Usar placeholders para atualização em tempo real
+            if self.progress_placeholder is None:
+                self.progress_placeholder = st.empty()
             
-            with col3:
-                st.metric(
-                    "🎯 Total Estimado",
-                    info['tempo_total_estimado_formatado'],
-                    delta=None
-                )
+            if self.metrics_placeholder is None:
+                self.metrics_placeholder = st.empty()
+            
+            # Atualizar barra de progresso
+            with self.progress_placeholder.container():
+                percentual = info['percentual'] / 100
+                st.progress(percentual, text=f"Etapa {info['etapa_atual']}/{info['total_etapas']}")
+            
+            # Atualizar métricas
+            with self.metrics_placeholder.container():
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.metric(
+                        "⏱️ Tempo Decorrido",
+                        info['tempo_decorrido_formatado'],
+                        delta=None
+                    )
+                
+                with col2:
+                    st.metric(
+                        "⏳ Tempo Estimado",
+                        info['tempo_estimado_restante_formatado'],
+                        delta="Restante"
+                    )
+                
+                with col3:
+                    st.metric(
+                        "🎯 Total Estimado",
+                        info['tempo_total_estimado_formatado'],
+                        delta=None
+                    )
 
 
 class ProgressBarSimples:
