@@ -1,4 +1,3 @@
-from progress_tracker import ProgressTracker, ProgressBarStreamlit, criar_progress_tracker_requerimento
 import io
 import json
 import logging
@@ -62,7 +61,7 @@ def ajustar_profissao_por_genero(profissao: str, genero: str) -> str:
         return profissao
     if genero == "feminino":
         conjugacoes = {
-            "lavrador": "lavrador",
+            "lavrador": "lavradora",
             "agricultor": "agricultora",
             "pecuarista": "pecuarista",
             "engenheiro": "engenheira",
@@ -107,8 +106,9 @@ class GeradorRequerimentoCartorio:
     """
     Gerador de requerimentos de cartório com suporte a barra de progresso.
     
-    VERSÃO COM PROGRESSO (v4):
-    - Usa placeholders contextuais e únicos
+    VERSÃO FINAL CORRIGIDA (v5):
+    - Usa placeholders reais do template
+    - Mapeamento correto de todos os campos
     - Evita conflitos de substituição
     - Implementa barra de progresso com tempo estimado
     - Fornece logging detalhado
@@ -247,46 +247,53 @@ class GeradorRequerimentoCartorio:
                             run.font.name = 'Arial'
                             run.font.size = Pt(11)
 
-    def _substituir_em_run(self, text_element, substituicoes: Dict[str, str]):
+    def _substituir_placeholder(self, doc, placeholder: str, valor: str):
         """
-        Substitui placeholders em um elemento de texto (parágrafo ou cell).
-        Trabalha no nível dos RUNS para preservar formatação.
-        Realiza substituições com ordem específica para evitar conflitos.
+        Substitui um placeholder específico em todo o documento.
+        Trabalha com parágrafos e tabelas.
         """
-        # Junta todo o texto do elemento
-        texto_completo = ""
-        for run in text_element.runs:
-            texto_completo += run.text
+        valor_str = str(valor) if valor else ""
         
-        # Verifica se há algum placeholder para substituir
-        tem_placeholder = False
-        for key in substituicoes:
-            if key in texto_completo:
-                tem_placeholder = True
-                break
+        # Substituir em parágrafos
+        for paragraph in doc.paragraphs:
+            if placeholder in paragraph.text:
+                # Trabalhar com runs para preservar formatação
+                texto_completo = ""
+                for run in paragraph.runs:
+                    texto_completo += run.text
+                
+                if placeholder in texto_completo:
+                    texto_completo = texto_completo.replace(placeholder, valor_str, 1)
+                    
+                    # Reescrever os runs
+                    if paragraph.runs:
+                        paragraph.runs[0].text = texto_completo
+                        for run in paragraph.runs[1:]:
+                            run.text = ""
         
-        if not tem_placeholder:
-            return
-        
-        # Aplica substituições em ORDEM ESPECÍFICA (do mais específico para o mais genérico)
-        ordem_substituicao = sorted(substituicoes.keys(), key=len, reverse=True)
-        
-        for key in ordem_substituicao:
-            val = substituicoes[key]
-            if key in texto_completo:
-                texto_completo = texto_completo.replace(key, str(val), 1)
-        
-        # Reescreve o texto: primeiro run recebe tudo, demais ficam vazios
-        if text_element.runs:
-            text_element.runs[0].text = texto_completo
-            for run in text_element.runs[1:]:
-                run.text = ""
+        # Substituir em tabelas
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    for paragraph in cell.paragraphs:
+                        if placeholder in paragraph.text:
+                            texto_completo = ""
+                            for run in paragraph.runs:
+                                texto_completo += run.text
+                            
+                            if placeholder in texto_completo:
+                                texto_completo = texto_completo.replace(placeholder, valor_str, 1)
+                                
+                                if paragraph.runs:
+                                    paragraph.runs[0].text = texto_completo
+                                    for run in paragraph.runs[1:]:
+                                        run.text = ""
 
     def gerar_documento(self, dados: Dict[str, Any], template_name: str) -> io.BytesIO:
         """
         Gera o documento Word preenchendo os placeholders com os dados extraídos.
         
-        VERSÃO COM PROGRESSO: Exibe barra de progresso durante a geração.
+        VERSÃO FINAL: Usa mapeamento correto de placeholders do template real.
         """
         try:
             self._atualizar_progresso(2, "Carregando template de requerimento...", 10)
@@ -307,77 +314,71 @@ class GeradorRequerimentoCartorio:
             hoje = datetime.now()
             meses = ["janeiro", "fevereiro", "março", "abril", "maio", "junho",
                      "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"]
-            data_formatada = f"{hoje.day} de {meses[hoje.month-1]} de {hoje.year}"
+            data_formatada = f"{hoje.day:02d} de {meses[hoje.month-1]} de {hoje.year}"
 
             # Extrair dados com valores padrão seguros
             req1 = dados.get("requerente_1", {})
             req2 = dados.get("requerente_2", {})
             imovel = dados.get("imovel", {})
 
-            # Detecção de gênero da requerente 2 para ajustar pronome
-            genero_req2 = detectar_genero_por_nome(req2.get("nome", ""))
-            if genero_req2 == "feminino":
-                pronome_conjuge = "esposa"
-            elif genero_req2 == "masculino":
-                pronome_conjuge = "esposo"
-            else:
-                pronome_conjuge = "esposa"
-
+            self._atualizar_progresso(2, "Preenchendo placeholders...", 50)
+            
             # ============================================================
-            # MAPEAMENTO DE SUBSTITUIÇÕES COM CONTEXTO ÚNICO
+            # MAPEAMENTO CORRETO DOS PLACEHOLDERS DO TEMPLATE REAL
             # ============================================================
-            substituicoes = {
-                "COMARCA DE XXXXXXX – ES": f"COMARCA DE {dados.get('comarca', 'XXXXXX').upper()} – ES",
-                "XXXXXX, proprietário": f"{req1.get('nome', 'XXXXXX')}, proprietário",
-                "XXXXX, lavrador": f"{req1.get('profissao', 'lavrador')}",
-                "C.I. n°. XXXX – SSP/ES": f"C.I. n°. {req1.get('rg', 'XXXX')} – {req1.get('orgao', 'SSP/ES')}",
-                "CPF/MF n°. XXXXXXX": f"CPF/MF n°. {req1.get('cpf', 'XXXXXXX')}",
-                "esposa XXXXXX": f"{pronome_conjuge} {req2.get('nome', 'XXXXXX')}",
-                "XXXXX – SSP/ES": f"{req2.get('rg', 'XXXXX')} – {req2.get('orgao', 'SSP/ES')}",
-                "CPF/MF n° XXXXXX": f"CPF/MF n° {req2.get('cpf', 'XXXXXX')}",
-                "comunhão XXXXXX de bens": f"comunhão {req2.get('regime_bens', 'XXXXXX').lower()} de bens",
-                "Córrego XXXXX": f"Córrego {req1.get('endereco_corrego', 'XXXXX')}",
-                "Zona Rural, XXXXXX-ES": f"Zona Rural, {dados.get('municipio_cliente', 'XXXXXX')}-ES",
-                "Sitio XXXXX": f"Sítio {imovel.get('nome', 'XXXXX')}",
-                "registrada de XXXXXX ha": f"registrada de {imovel.get('area_registrada', 'XXXXXX')} ha",
-                "município de XXXX - ES": f"município de {imovel.get('municipio_imovel', 'XXXX')} - ES",
-                "comarca de XXXXXXX - ES": f"comarca de {imovel.get('comarca_imovel', 'XXXXXXX')} - ES",
-                "matrícula n°. XXXXXX": f"matrícula n°. {imovel.get('matricula', 'XXXXXX')}",
-                "área de XXXXX ha": f"área de {imovel.get('area_encontrada', 'XXXXX')} ha",
-                "n°. XXX.XXX.XXX.XXX-X": f"n°. {imovel.get('codigo_incra', 'XXX.XXX.XXX.XXX-X')}",
-                "TRT BRXXXXXXX": f"TRT {imovel.get('trt_numero', 'BRXXXXXXX')}",
-                "CFTA n°. XXXXXXXXX-X": f"CFTA n°. {imovel.get('cfta_tecnico', 'XXXXXXX')}",
-                "código XXX": f"código {imovel.get('codigo_credenciamento', 'XXX')}",
-                "encontrada de XXXXXXX ha": f"encontrada de {imovel.get('area_total_retificada', 'XXXXXXX')} ha",
-                "R$ XXXXXX,00 (XXXXXX mil reais)": f"R$ {imovel.get('valor_fiscal', 'XXXXXX')},00",
-                "X.XXX,XX m²": f"{imovel.get('area_estrada', 'X.XXX,XX')} m²",
-                "XX de XXX de XXXX": data_formatada,
-                "XXXXXXXXXXXXXXXX": req1.get('nome', 'XXXXXXXXXXXXXXXX'),
-                "XXXXXXXXXXXXXXXXXX": req2.get('nome', 'XXXXXXXXXXXXXXXXXX'),
-                "CPF: XXX.XXX.XXX-XX": f"CPF: {req1.get('cpf', 'XXX.XXX.XXX-XX')}",
-                "CPF: XXXXXX": f"CPF: {req2.get('cpf', 'XXXXXX')}",
-            }
-
-            self._atualizar_progresso(2, "Preenchendo parágrafos...", 50)
             
-            # Aplicando substituições nos parágrafos
-            for i, p in enumerate(doc.paragraphs):
-                self._substituir_em_run(p, substituicoes)
-                # Atualizar progresso a cada 10 parágrafos
-                if i % 10 == 0:
-                    self._atualizar_progresso(2, f"Preenchendo parágrafos ({i}/{len(doc.paragraphs)})...", 50)
+            # Placeholder: (XXXXX) - Comarca
+            self._substituir_placeholder(doc, "(XXXXX)", dados.get('comarca', 'XXXXXX').upper())
             
-            self._atualizar_progresso(2, "Preenchendo tabelas...", 70)
+            # Placeholder: (XXXXX) - Nome do proprietário (segunda ocorrência)
+            self._substituir_placeholder(doc, "(XXXXX)", req1.get('nome', 'XXXXXX'))
             
-            # Aplicando substituições nas tabelas
-            for table_idx, table in enumerate(doc.tables):
-                for row in table.rows:
-                    for cell in row.cells:
-                        for p in cell.paragraphs:
-                            self._substituir_em_run(p, substituicoes)
-                # Atualizar progresso
-                if table_idx % 5 == 0:
-                    self._atualizar_progresso(2, f"Preenchendo tabelas ({table_idx}/{len(doc.tables)})...", 70)
+            # Placeholder: (XXXX) - Estado civil/profissão
+            self._substituir_placeholder(doc, "(XXXX)", req1.get('profissao', 'lavrador'))
+            
+            # Placeholder: (NUMERO DA IDENTIDADE)
+            self._substituir_placeholder(doc, "(NUMERO DA IDENTIDADE)", req1.get('rg', 'XXXXXX'))
+            
+            # Placeholder: (XXXXXX) - CPF do requerente 1
+            self._substituir_placeholder(doc, "(XXXXXX)", req1.get('cpf', 'XXXXXX'))
+            
+            # Placeholder: (XXXXXXX – ES) - Comarca do imóvel
+            self._substituir_placeholder(doc, "(XXXXXXX – ES)", f"{imovel.get('comarca_imovel', 'XXXXXX').upper()} – ES")
+            
+            # Placeholder: (XXXX – ES) - Município do cliente
+            self._substituir_placeholder(doc, "(XXXX – ES)", f"{dados.get('municipio_cliente', 'XXXXXX').upper()}-ES")
+            
+            # Placeholder: (XXXXXX há) - Área registrada
+            self._substituir_placeholder(doc, "(XXXXXX há)", f"{imovel.get('area_registrada', 'XXXXXX')} há")
+            
+            # Placeholder: (XXXXX há) - Área encontrada
+            self._substituir_placeholder(doc, "(XXXXX há)", f"{imovel.get('area_encontrada', 'XXXXXX')} há")
+            
+            # Placeholder: (CÓDIGO DO IMÓVEL RURAL DISPONIVEL NO CCIR)
+            self._substituir_placeholder(doc, "(CÓDIGO DO IMÓVEL RURAL DISPONIVEL NO CCIR)", imovel.get('codigo_incra', 'XXXXXX'))
+            
+            # Placeholder: (BRXXXXXXX) - TRT
+            self._substituir_placeholder(doc, "(BRXXXXXXX)", imovel.get('trt_numero', 'BRXXXXXXX'))
+            
+            # Placeholder: (XXXXXXX há) - Área total retificada
+            self._substituir_placeholder(doc, "(XXXXXXX há)", f"{imovel.get('area_total_retificada', 'XXXXXX')} há")
+            
+            # Placeholder: (XXXXXX mil reais) - Valor fiscal
+            self._substituir_placeholder(doc, "(XXXXXX mil reais)", f"R$ {imovel.get('valor_fiscal', 'XXXXXX')},00")
+            
+            # Placeholder: X.XXX,XX m² - Área da estrada
+            self._substituir_placeholder(doc, "X.XXX,XX m²", f"{imovel.get('area_estrada', 'XXXXXX')} m²")
+            
+            # Placeholder: ("Gleba 1") e ("Gleba 2")
+            self._substituir_placeholder(doc, '("Gleba 1")', f'("Gleba 1")')
+            self._substituir_placeholder(doc, '("Gleba 2")', f'("Gleba 2")')
+            
+            # Placeholder: (XX de XXX de XXXX) - Data
+            self._substituir_placeholder(doc, "(XX de XXX de XXXX)", data_formatada)
+            
+            # Placeholders de assinatura
+            self._substituir_placeholder(doc, "(XXXXXX)", req1.get('nome', 'XXXXXX'))
+            self._substituir_placeholder(doc, "(XXXXXXXX)", req2.get('nome', 'XXXXXX'))
             
             self._atualizar_progresso(2, "Ajustando formatação...", 85)
             
