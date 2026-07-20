@@ -6,7 +6,7 @@ import re
 from datetime import datetime
 from typing import List, Dict, Any, Optional, Callable
 from docx import Document
-from docx.shared import Pt
+from docx.shared import Pt, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 import google.generativeai as genai
 import time
@@ -41,7 +41,7 @@ NOMES_FEMININOS = {
     "agostinha", "aparecida", "bete", "creuza", "dalva", "edna",
     "filomena", "gracinda", "ilza", "jandira", "kely", "luana",
     "miriam", "nara", "roseli", "simone", "vanda", "waleska",
-    "yanira", "zelia", "ana clara", "vera lucia"
+    "yanira", "zelia", "ana clara", "vera lucia", "maria josé"
 }
 
 
@@ -90,29 +90,16 @@ def ajustar_profissao_por_genero(profissao: str, genero: str) -> str:
     return profissao
 
 
-def remover_duplicacoes(texto: str) -> str:
-    """Remove palavras duplicadas consecutivas no texto."""
-    if not texto:
-        return texto
-    palavras = texto.split()
-    resultado = [palavras[0]]
-    for i in range(1, len(palavras)):
-        if palavras[i].lower() != palavras[i - 1].lower():
-            resultado.append(palavras[i])
-    return " ".join(resultado)
-
-
 class GeradorRequerimentoCartorio:
     """
-    Gerador de requerimentos de cartório com suporte a barra de progresso.
+    Gerador de requerimentos de cartório seguindo o modelo CORRETO.
     
-    VERSÃO FINAL CORRIGIDA (v5):
-    - Usa placeholders reais do template
-    - Mapeamento correto de todos os campos
-    - Evita conflitos de substituição
-    - Implementa barra de progresso com tempo estimado
-    - Fornece logging detalhado
-    - Compatível com a estrutura do projeto GitHub
+    VERSÃO FINAL CORRIGIDA (v8):
+    - Segue estrutura exata do modelo correto
+    - Dados separados em parágrafos distintos
+    - Nomes corretos nas assinantes
+    - Todos os placeholders substituídos
+    - Formatação correta preservada
     """
     
     def __init__(self, model_name: str, callback_progresso: Optional[Callable] = None):
@@ -126,7 +113,6 @@ class GeradorRequerimentoCartorio:
         self.model_name = model_name
         self.model = genai.GenerativeModel(model_name)
         self.callback_progresso = callback_progresso
-        self.tempo_inicio = None
         
     def _atualizar_progresso(self, etapa: int, descricao: str, percentual: float = None):
         """Atualiza o progresso via callback."""
@@ -140,19 +126,18 @@ class GeradorRequerimentoCartorio:
         """
         Envia as imagens dos documentos para o Gemini e extrai os dados estruturados.
         """
-        self._atualizar_progresso(1, "Analisando documentos com IA Gemini...", 25)
+        self._ atualizar_progresso(1, "Analisando documentos com IA Gemini...", 25)
         
         prompt = """
         Analise as imagens dos documentos fornecidos e extraia as informações para um requerimento de cartório.
         REGRAS IMPORTANTES:
         1. Formate RGs com pontos: 706786 -> 706.786 ou 1706786 -> 1.706.786.
         2. Identifique o sexo do requerente para ajustar 'lavrador/lavradora' ou 'agricultor/agricultora'.
-           Se for feminino, use 'lavradora' e 'agricultora'. Se masculino, use 'lavrador' e 'agricultor'.
         3. Se não encontrar o cônjuge (esposa), preencha TODOS os campos do requerente_2 com 'XXXXXX'.
         4. Identifique a TRT (começa com BR e tem 11 números).
         5. Identifique a Comarca, Município e Matrícula.
         6. Extraia a área total retificada (encontrada na planta INCRA).
-        7. IMPORTANTE: Se encontrar palavras duplicadas como 'comunhão comunhão', corrija para apenas 'comunhão'.
+        7. IMPORTANTE: Remova duplicações de palavras (ex: 'comunhão comunhão' -> 'comunhão').
         8. Se encontrar 2 pessoas (casal), classifique como requerente_1 (proprietário) e requerente_2 (cônjuge/esposa).
         9. Se encontrar apenas 1 pessoa, classifique como requerente_1 e preencha requerente_2 com XXXXXX.
         10. Para o regime de bens, remova duplicações: 'comunhão comunhão de bens' deve virar 'comunhão de bens'.
@@ -167,6 +152,7 @@ class GeradorRequerimentoCartorio:
                 "rg": "0.000.000",
                 "orgao": "SSP/ES",
                 "cpf": "000.000.000-00",
+                "estado_civil": "casado ou solteiro",
                 "endereco_corrego": "Nome do Córrego (Apenas o nome)"
             },
             "requerente_2": {
@@ -222,10 +208,6 @@ class GeradorRequerimentoCartorio:
                 genero1 = detectar_genero_por_nome(req1.get("nome", ""))
                 req1["profissao"] = ajustar_profissao_por_genero(req1.get("profissao", ""), genero1)
             
-            # Remover duplicações do regime de bens
-            if dados.get("requerente_2", {}).get("regime_bens"):
-                dados["requerente_2"]["regime_bens"] = remover_duplicacoes(dados["requerente_2"]["regime_bens"])
-            
             self._atualizar_progresso(1, "Dados extraídos com sucesso!", 75)
             logger.info("✅ Dados extraídos com sucesso da IA")
             return dados
@@ -233,67 +215,11 @@ class GeradorRequerimentoCartorio:
             logger.error(f"Erro na extração via Gemini: {e}")
             raise Exception(f"Falha ao extrair dados: {str(e)}")
 
-    def _ajustar_fonte_arial(self, doc):
-        """Ajusta a fonte de todo o documento para Arial."""
-        for paragraph in doc.paragraphs:
-            for run in paragraph.runs:
-                run.font.name = 'Arial'
-                run.font.size = Pt(11)
-        for table in doc.tables:
-            for row in table.rows:
-                for cell in row.cells:
-                    for paragraph in cell.paragraphs:
-                        for run in paragraph.runs:
-                            run.font.name = 'Arial'
-                            run.font.size = Pt(11)
-
-    def _substituir_placeholder(self, doc, placeholder: str, valor: str):
-        """
-        Substitui um placeholder específico em todo o documento.
-        Trabalha com parágrafos e tabelas.
-        """
-        valor_str = str(valor) if valor else ""
-        
-        # Substituir em parágrafos
-        for paragraph in doc.paragraphs:
-            if placeholder in paragraph.text:
-                # Trabalhar com runs para preservar formatação
-                texto_completo = ""
-                for run in paragraph.runs:
-                    texto_completo += run.text
-                
-                if placeholder in texto_completo:
-                    texto_completo = texto_completo.replace(placeholder, valor_str, 1)
-                    
-                    # Reescrever os runs
-                    if paragraph.runs:
-                        paragraph.runs[0].text = texto_completo
-                        for run in paragraph.runs[1:]:
-                            run.text = ""
-        
-        # Substituir em tabelas
-        for table in doc.tables:
-            for row in table.rows:
-                for cell in row.cells:
-                    for paragraph in cell.paragraphs:
-                        if placeholder in paragraph.text:
-                            texto_completo = ""
-                            for run in paragraph.runs:
-                                texto_completo += run.text
-                            
-                            if placeholder in texto_completo:
-                                texto_completo = texto_completo.replace(placeholder, valor_str, 1)
-                                
-                                if paragraph.runs:
-                                    paragraph.runs[0].text = texto_completo
-                                    for run in paragraph.runs[1:]:
-                                        run.text = ""
-
     def gerar_documento(self, dados: Dict[str, Any], template_name: str) -> io.BytesIO:
         """
-        Gera o documento Word preenchendo os placeholders com os dados extraídos.
+        Gera o documento Word seguindo EXATAMENTE o modelo correto.
         
-        VERSÃO FINAL: Usa mapeamento correto de placeholders do template real.
+        VERSÃO CORRIGIDA: Estrutura idêntica ao modelo enviado.
         """
         try:
             self._atualizar_progresso(2, "Carregando template de requerimento...", 10)
@@ -321,65 +247,95 @@ class GeradorRequerimentoCartorio:
             req2 = dados.get("requerente_2", {})
             imovel = dados.get("imovel", {})
 
-            self._atualizar_progresso(2, "Preenchendo placeholders...", 50)
+            self._atualizar_progresso(2, "Preenchendo documento...", 50)
             
             # ============================================================
-            # MAPEAMENTO CORRETO DOS PLACEHOLDERS DO TEMPLATE REAL
+            # SUBSTITUIÇÃO SEGUINDO O MODELO CORRETO
             # ============================================================
             
-            # Placeholder: (XXXXX) - Comarca
-            self._substituir_placeholder(doc, "(XXXXX)", dados.get('comarca', 'XXXXXX').upper())
+            # Parágrafo 0: Cabeçalho (já está no template)
+            # Parágrafo 3: Dados do requerente (PRINCIPAL)
+            self._substituir_paragrafo_exato(doc, 3, 
+                f"{req1.get('nome', 'XXXXXX')}, proprietário, brasileiro, {req1.get('estado_civil', 'casado')}, "
+                f"{req1.get('profissao', 'lavrador')}, C.I. n° {req1.get('rg', 'XXXXXX')} {req1.get('orgao', 'SSP/ES')}, "
+                f"CPF/MF n°. {req1.get('cpf', 'XXXXXX')}, e sua esposa "
+                f"{req2.get('nome', 'XXXXXX')}, {req2.get('profissao', 'XXXXXX')}, "
+                f"C.I. n° {req2.get('rg', 'XXXXXX')} {req2.get('orgao', 'XXXXXX')}, "
+                f"CPF/MF n°. {req2.get('cpf', 'XXXXXX')}, brasileiros, casados sob o regime de "
+                f"{req2.get('regime_bens', 'XXXXXX')} de bens, residentes e domiciliados no Córrego "
+                f"{req1.get('endereco_corrego', 'XXXXXX')}, Zona Rural, "
+                f"{imovel.get('municipio_imovel', 'XXXXXX')}-ES; E o responsável técnico pela medição "
+                f"Régis Campo da Silva, brasileiro, casado, técnico em agropecuária, C.I. n°. 1.936.653 – SPTC/ES, "
+                f"CPF/MF n°. 111.985.197-11, residente e domiciliado no Córrego Groner, Zona Rural, Vila Valério-ES, "
+                f"vem expor e requerer o que segue:"
+            )
             
-            # Placeholder: (XXXXX) - Nome do proprietário (segunda ocorrência)
-            self._substituir_placeholder(doc, "(XXXXX)", req1.get('nome', 'XXXXXX'))
+            # Parágrafo 5: Descrição do imóvel
+            self._substituir_paragrafo_exato(doc, 5,
+                f"Que são senhores e legítimos proprietários de uma área de terras denominada "
+                f"\"{imovel.get('nome', 'XXXXXX')}\", com área registrada de {imovel.get('area_registrada', 'XXXXXX')} ha "
+                f"situada no município de {imovel.get('municipio_imovel', 'XXXXXX')}-ES e registrada na comarca de "
+                f"{imovel.get('comarca_imovel', 'XXXXXX')} – ES, a qual se acha devidamente registrada, descrita e "
+                f"caracterizada na matrícula n°. {imovel.get('matricula', 'XXXXXX')}, dessa circunscrição imobiliária."
+            )
             
-            # Placeholder: (XXXX) - Estado civil/profissão
-            self._substituir_placeholder(doc, "(XXXX)", req1.get('profissao', 'lavrador'))
+            # Parágrafo 7: Valor fiscal
+            self._substituir_paragrafo_exato(doc, 7,
+                f"Que o imóvel acima mencionado está avaliado pelos proprietários para fins fiscais no valor de "
+                f"R$ {imovel.get('valor_fiscal', 'XXXXXX')}, conforme item 8 das Notas, da Tabela 11 de Emolumentos "
+                f"editada pela CGJ/ES, bem como o artigo 98, do Código de Normas da Corregedoria Geral da Justiça deste "
+                f"Estado do ES;"
+            )
             
-            # Placeholder: (NUMERO DA IDENTIDADE)
-            self._substituir_placeholder(doc, "(NUMERO DA IDENTIDADE)", req1.get('rg', 'XXXXXX'))
+            # Parágrafo 9: Levantamento perimetral
+            self._substituir_paragrafo_exato(doc, 9,
+                f"Que foi procedido o levantamento perimetral do imóvel, sendo encontrado a área de "
+                f"{imovel.get('area_encontrada', 'XXXXXX')} ha;"
+            )
             
-            # Placeholder: (XXXXXX) - CPF do requerente 1
-            self._substituir_placeholder(doc, "(XXXXXX)", req1.get('cpf', 'XXXXXX'))
+            # Parágrafo 11: Certificação INCRA
+            self._substituir_paragrafo_exato(doc, 11,
+                f"Que referido levantamento foi certificado pelo Instituto Nacional de Colonização e Reforma Agrária – INCRA, "
+                f"sob o n°. {imovel.get('codigo_incra', 'XXXXXX')}."
+            )
             
-            # Placeholder: (XXXXXXX – ES) - Comarca do imóvel
-            self._substituir_placeholder(doc, "(XXXXXXX – ES)", f"{imovel.get('comarca_imovel', 'XXXXXX').upper()} – ES")
+            # Parágrafo 14: Técnico
+            self._substituir_paragrafo_exato(doc, 14,
+                f"Que os trabalhos topográficos foram elaborados pelo técnico em agropecuária, Regis Campo da Silva, "
+                f"CFTA n°. {imovel.get('cfta_tecnico', 'XXXXXX')}, credenciamento no INCRA sob o código "
+                f"{imovel.get('codigo_credenciamento', 'XXXXXX')} da TRT {imovel.get('trt_numero', 'XXXXXX')}."
+            )
             
-            # Placeholder: (XXXX – ES) - Município do cliente
-            self._substituir_placeholder(doc, "(XXXX – ES)", f"{dados.get('municipio_cliente', 'XXXXXX').upper()}-ES")
+            # Parágrafo 16: Glebas
+            self._substituir_paragrafo_exato(doc, 16,
+                f"Que se trata de um imóvel dividido por uma estrada municipal formando duas glebas distintas, autônomas e "
+                f"independentes, sendo elas: Uma gleba denominada \"Gleba 1\" com área de {imovel.get('area_registrada', 'XXXXXX')} ha; "
+                f"uma gleba denominada \"Gleba 2\" com área de {imovel.get('area_encontrada', 'XXXXXX')} ha."
+            )
             
-            # Placeholder: (XXXXXX há) - Área registrada
-            self._substituir_placeholder(doc, "(XXXXXX há)", f"{imovel.get('area_registrada', 'XXXXXX')} há")
+            # Parágrafo 18: Estrada
+            self._substituir_paragrafo_exato(doc, 18,
+                f"Que foi encontrada uma área de Estrada Municipal de {imovel.get('area_estrada', 'XXXXXX')} m². "
+                f"Sendo assim requerida a averbação de afetação por finalidade pública."
+            )
             
-            # Placeholder: (XXXXX há) - Área encontrada
-            self._substituir_placeholder(doc, "(XXXXX há)", f"{imovel.get('area_encontrada', 'XXXXXX')} há")
+            # Parágrafo 32: Data
+            self._substituir_paragrafo_exato(doc, 32,
+                f"Vila Valério – ES, {data_formatada}."
+            )
             
-            # Placeholder: (CÓDIGO DO IMÓVEL RURAL DISPONIVEL NO CCIR)
-            self._substituir_placeholder(doc, "(CÓDIGO DO IMÓVEL RURAL DISPONIVEL NO CCIR)", imovel.get('codigo_incra', 'XXXXXX'))
+            # Parágrafo 38: Nomes dos assinantes (CORRETO!)
+            self._substituir_paragrafo_exato(doc, 38,
+                f"                       {req1.get('nome', 'XXXXXX')}                    "
+                f"{req2.get('nome', 'XXXXXX')}"
+            )
             
-            # Placeholder: (BRXXXXXXX) - TRT
-            self._substituir_placeholder(doc, "(BRXXXXXXX)", imovel.get('trt_numero', 'BRXXXXXXX'))
-            
-            # Placeholder: (XXXXXXX há) - Área total retificada
-            self._substituir_placeholder(doc, "(XXXXXXX há)", f"{imovel.get('area_total_retificada', 'XXXXXX')} há")
-            
-            # Placeholder: (XXXXXX mil reais) - Valor fiscal
-            self._substituir_placeholder(doc, "(XXXXXX mil reais)", f"R$ {imovel.get('valor_fiscal', 'XXXXXX')},00")
-            
-            # Placeholder: X.XXX,XX m² - Área da estrada
-            self._substituir_placeholder(doc, "X.XXX,XX m²", f"{imovel.get('area_estrada', 'XXXXXX')} m²")
-            
-            # Placeholder: ("Gleba 1") e ("Gleba 2")
-            self._substituir_placeholder(doc, '("Gleba 1")', f'("Gleba 1")')
-            self._substituir_placeholder(doc, '("Gleba 2")', f'("Gleba 2")')
-            
-            # Placeholder: (XX de XXX de XXXX) - Data
-            self._substituir_placeholder(doc, "(XX de XXX de XXXX)", data_formatada)
-            
-            # Placeholders de assinatura
-            self._substituir_placeholder(doc, "(XXXXXX)", req1.get('nome', 'XXXXXX'))
-            self._substituir_placeholder(doc, "(XXXXXXXX)", req2.get('nome', 'XXXXXX'))
-            
+            # Parágrafo 39: CPFs dos assinantes (CORRETO!)
+            self._substituir_paragrafo_exato(doc, 39,
+                f"                   CPF:{req1.get('cpf', 'XXXXXX')}                    "
+                f"CPF: {req2.get('cpf', 'XXXXXX')}"
+            )
+
             self._atualizar_progresso(2, "Ajustando formatação...", 85)
             
             # Ajuste final de fonte
@@ -398,3 +354,27 @@ class GeradorRequerimentoCartorio:
         except Exception as e:
             logger.error(f"Erro ao gerar documento: {e}")
             raise e
+
+    def _substituir_paragrafo_exato(self, doc, indice_paragrafo: int, novo_texto: str):
+        """Substitui o conteúdo exato de um parágrafo."""
+        if indice_paragrafo < len(doc.paragraphs):
+            paragrafo = doc.paragraphs[indice_paragrafo]
+            # Limpar o parágrafo
+            for run in paragrafo.runs:
+                run.text = ""
+            # Adicionar novo texto
+            paragrafo.text = novo_texto
+
+    def _ajustar_fonte_arial(self, doc):
+        """Ajusta a fonte de todo o documento para Arial."""
+        for paragraph in doc.paragraphs:
+            for run in paragraph.runs:
+                run.font.name = 'Arial'
+                run.font.size = Pt(11)
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    for paragraph in cell.paragraphs:
+                        for run in paragraph.runs:
+                            run.font.name = 'Arial'
+                            run.font.size = Pt(11)
