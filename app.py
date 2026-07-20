@@ -1,7 +1,12 @@
-# GERADOR DE MEMORIAL DESCRITIVO - Versão 6.4 (Com Barra de Progresso Inteligente)
+# GERADOR DE MEMORIAL DESCRITIVO - Versão 7.0 (COMPLETO COM TODAS AS CORREÇÕES)
+# ✅ Placeholders corrigidos
+# ✅ Barra de progresso em tempo real
+# ✅ Todas as funcionalidades integradas
+
 import io
 import logging
 import time
+import threading
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 import json
@@ -26,9 +31,13 @@ from processador import ProcessadorMemorial
 from gerador_word import GeradorAnuenciaIncraWord
 
 # ============================================================
-# IMPORTAR MÓDULO DE PROGRESSO
+# IMPORTAR MÓDULO DE PROGRESSO CORRIGIDO
 # ============================================================
-from progress_tracker import ProgressTracker, ProgressBarStreamlit, criar_progress_tracker_requerimento
+from progress_tracker import (
+    ProgressTracker, 
+    ProgressBarComAtualizacaoEmTempoReal,  # ✅ NOVO: Com atualização em tempo real
+    criar_progress_tracker_requerimento
+)
 from gerador_requerimento_cartorio import GeradorRequerimentoCartorio
 
 # Inicializa o logger
@@ -565,7 +574,7 @@ def main():
                     logger.error(f"Erro INCRA: {str(err)}", exc_info=True)
 
     # ------------------------------------------
-    # ABA 4: REQUERIMENTO DE CARTÓRIO (COM PROGRESSO)
+    # ABA 4: REQUERIMENTO DE CARTÓRIO (COM PROGRESSO EM TEMPO REAL)
     # ------------------------------------------
     with tab_requerimento:
         st.markdown("### 🏛️ Geração Automatizada de Requerimento de Cartório")
@@ -583,21 +592,29 @@ def main():
             
             if st.button("🚀 EXTRAIR DADOS E GERAR REQUERIMENTO", type="primary", use_container_width=True):
                 # ============================================================
-                # CRIAR RASTREADOR DE PROGRESSO
+                # CRIAR RASTREADOR DE PROGRESSO COM ATUALIZAÇÃO EM TEMPO REAL
                 # ============================================================
                 tracker = criar_progress_tracker_requerimento()
                 tracker.iniciar()
                 
                 # Container para a barra de progresso
                 progress_container = st.container()
-                progress_bar = ProgressBarStreamlit(tracker, progress_container)
+                
+                # ✅ USAR A VERSÃO COM ATUALIZAÇÃO EM TEMPO REAL
+                progress_bar = ProgressBarComAtualizacaoEmTempoReal(
+                    tracker, 
+                    progress_container,
+                    intervalo_atualizacao=0.5  # Atualiza a cada 0.5 segundos
+                )
+                
+                # Iniciar atualização automática
+                progress_bar.iniciar_atualizacao_automatica()
                 
                 try:
                     # ============================================================
                     # ETAPA 1: Preparar Documentos
                     # ============================================================
                     progress_bar.atualizar(1, "Preparando documentos para análise visual...")
-                    tracker.atualizar_etapa(1, "Preparando documentos")
                     
                     processador_base = ProcessadorMemorial(nome_modelo_api)
                     todas_imagens = []
@@ -610,14 +627,13 @@ def main():
                             imagens = processador_base.pdf_para_imagens(doc, dpi=200)
                             todas_imagens.extend(imagens)
                     
-                    tracker.finalizar_etapa(1)
                     progress_bar.finalizar_etapa(1)
+                    time.sleep(0.5)  # Pequena pausa para visualizar
                     
                     # ============================================================
                     # ETAPA 2: Analisar com IA
                     # ============================================================
                     progress_bar.atualizar(2, f"Analisando {len(todas_imagens)} páginas/imagens com {nome_modelo}...")
-                    tracker.atualizar_etapa(2, "Analisando com IA")
                     
                     if not configurar_gemini():
                         st.error("Erro crítico: Chave API ausente.")
@@ -630,26 +646,28 @@ def main():
                     )
                     dados_extraidos = gerador_req.extrair_dados_documentos(todas_imagens)
                     
-                    tracker.finalizar_etapa(2)
                     progress_bar.finalizar_etapa(2)
+                    time.sleep(0.5)
                     
                     # ============================================================
                     # ETAPA 3: Preencher Modelo
                     # ============================================================
                     progress_bar.atualizar(3, "Preenchendo modelo de requerimento Word...")
-                    tracker.atualizar_etapa(3, "Preenchendo modelo")
                     
                     template_name = "-REQUERIMENTODECARTORIO.docx"
                     arquivo_word = gerador_req.gerar_documento(dados_extraidos, template_name)
                     
-                    tracker.finalizar_etapa(3)
                     progress_bar.finalizar_etapa(3)
+                    time.sleep(0.5)
                     
                     # ============================================================
                     # ETAPA 4: Finalizar
                     # ============================================================
                     progress_bar.atualizar(4, "Finalizando...")
-                    tracker.finalizar_etapa(4)
+                    progress_bar.finalizar_etapa(4)
+                    
+                    # Parar atualização automática
+                    progress_bar.parar_atualizacao_automatica()
                     
                     # Exibir resumo final
                     info_final = tracker.obter_info_progresso()
@@ -687,6 +705,8 @@ def main():
                         st.rerun()
                         
                 except Exception as err:
+                    # Parar atualização em caso de erro
+                    progress_bar.parar_atualizacao_automatica()
                     st.error(f"Erro no processamento do requerimento: {err}")
                     logger.error(f"Erro Requerimento: {str(err)}", exc_info=True)
         else:
