@@ -126,7 +126,7 @@ class GeradorRequerimentoCartorio:
         """
         Envia as imagens dos documentos para o Gemini e extrai os dados estruturados.
         """
-        self._ atualizar_progresso(1, "Analisando documentos com IA Gemini...", 25)
+        self._atualizar_progresso(1, "Analisando documentos com IA Gemini...", 25)
         
         prompt = """
         Analise as imagens dos documentos fornecidos e extraia as informações para um requerimento de cartório.
