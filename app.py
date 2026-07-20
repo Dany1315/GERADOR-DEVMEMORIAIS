@@ -120,10 +120,13 @@ def main():
 
         st.markdown("---")
         
-        # DEFINIÇÃO EXCLUSIVA DOS MODELOS GEMINI 2.5 FLASH E GEMINI 2.5 PRO
+        # DEFINIÇÃO DOS MODELOS GEMINI (GERAÇÃO 3 E 2.5)
         modelos_filtrados = {
-            "Gemini 2.5 Flash": "gemini-2.5-flash",
-            "Gemini 2.5 Pro": "gemini-2.5-pro"
+            "Gemini 3.5 Flash (Fronteira/Padrão)": "gemini-3.5-flash",
+            "Gemini 3.1 Pro (Raciocínio Avançado)": "gemini-3.1-pro",
+            "Gemini 3.1 Flash-Lite (Alta Velocidade)": "gemini-3.1-flash-lite",
+            "Gemini 2.5 Pro (Estável e Preciso)": "gemini-2.5-pro",
+            "Gemini 2.5 Flash (Trabalho Diário)": "gemini-2.5-flash"
         }
         nome_modelo = st.selectbox("Modelo Gemini", options=list(modelos_filtrados.keys()), index=0)
         nome_modelo_api = modelos_filtrados[nome_modelo]
