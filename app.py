@@ -32,6 +32,33 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# ============================================================
+# TIPOS DE ARQUIVO ACEITOS (PDF + IMAGENS)
+# ============================================================
+TIPOS_ARQUIVO_SUPORTADOS = ["pdf", "png", "jpg", "jpeg"]
+
+# Extensões de imagem reconhecidas
+EXTENSOES_IMAGEM = ["png", "jpg", "jpeg"]
+EXTENSOES_PDF = ["pdf"]
+
+
+def is_imagem(arquivo) -> bool:
+    """Verifica se o arquivo carregado é uma imagem (PNG, JPG, JPEG)."""
+    extensao = arquivo.name.split(".")[-1].lower()
+    return extensao in EXTENSOES_IMAGEM
+
+
+def is_pdf(arquivo) -> bool:
+    """Verifica se o arquivo carregado é um PDF."""
+    extensao = arquivo.name.split(".")[-1].lower()
+    return extensao in EXTENSOES_PDF
+
+
+def carregar_imagem_direta(arquivo) -> bytes:
+    """Lê o conteúdo bruto de uma imagem (PNG/JPG/JPEG) já como bytes para envio ao Gemini."""
+    return arquivo.getvalue()
+
+
 def configurar_gemini() -> bool:
     """Configura conexão com API Gemini."""
     try:
@@ -131,10 +158,10 @@ def main():
         nome_modelo = st.selectbox("Modelo Gemini", options=list(modelos_filtrados.keys()), index=0)
         nome_modelo_api = modelos_filtrados[nome_modelo]
         
-        dpi_conversao = st.slider("Resolução (DPI)", 100, 400, int(PROCESSAMENTO_CONFIG.DPI_PADRAO), 50)
+        dpi_conversao = st.slider("Resolução (DPI) - usado apenas para PDFs", 100, 400, int(PROCESSAMENTO_CONFIG.DPI_PADRAO), 50)
         tamanho_max = st.slider("Upload Máximo (MB)", 10, 100, int(PROCESSAMENTO_CONFIG.TAMANHO_MAX_PDF_MB), 10)
 
-    # Abas Principais (ADIÇÃO DA ABA DE REQUERIMENTO DE CARTÓRIO)
+    # Abas Principais
     tab_memorial, tab_anuencias, tab_anuencias_incra, tab_requerimento = st.tabs([
         "📝 Memorial Descritivo", 
         "🤝 Anuências Co-proprietários", 
@@ -144,17 +171,39 @@ def main():
 
     with tab_memorial:
         st.markdown("### 📥 Entrada de Dados do Memorial")
-        tab_pdf, tab_manual = st.tabs(["📁 Processamento de Arquivos PDF", "📝 Colagem de Texto Manual"])
+        tab_pdf, tab_manual = st.tabs([
+            "📁 Processamento de Arquivos (PDF ou Imagem)",
+            "📝 Colagem de Texto Manual"
+        ])
 
         pdf_planta, pdf_roteiro = None, None
         texto_planta_manual, texto_roteiro_manual = "", ""
 
         with tab_pdf:
+            st.info("💡 Aceita arquivos **PDF**, **PNG**, **JPG** ou **JPEG**. Imagens são enviadas diretamente à IA; PDFs são convertidos internamente em imagens antes da análise.")
             col1, col2 = st.columns(2)
             with col1:
-                pdf_planta = st.file_uploader("PDF da Planta (Confrontantes):", type=["pdf"], key="planta")
+                pdf_planta = st.file_uploader(
+                    "Planta (Confrontantes) — PDF ou Imagem:",
+                    type=TIPOS_ARQUIVO_SUPORTADOS,
+                    key="planta"
+                )
+                if pdf_planta:
+                    if is_imagem(pdf_planta):
+                        st.caption(f"✅ Imagem carregada: `{pdf_planta.name}`")
+                    else:
+                        st.caption(f"✅ PDF carregado: `{pdf_planta.name}` (será convertido a {dpi_conversao} DPI)")
             with col2:
-                pdf_roteiro = st.file_uploader("PDF do Roteiro (Tabela):", type=["pdf"], key="roteiro")
+                pdf_roteiro = st.file_uploader(
+                    "Roteiro (Tabela) — PDF ou Imagem:",
+                    type=TIPOS_ARQUIVO_SUPORTADOS,
+                    key="roteiro"
+                )
+                if pdf_roteiro:
+                    if is_imagem(pdf_roteiro):
+                        st.caption(f"✅ Imagem carregada: `{pdf_roteiro.name}`")
+                    else:
+                        st.caption(f"✅ PDF carregado: `{pdf_roteiro.name}` (será convertido a {dpi_conversao} DPI)")
 
         with tab_manual:
             col1, col2 = st.columns(2)
@@ -163,10 +212,10 @@ def main():
             with col2:
                 texto_roteiro_manual = st.text_area("Texto do ROTEIRO:", height=150, placeholder="PONTO N E AZIMUTE...")
 
-        tem_pdfs = pdf_planta and pdf_roteiro
+        tem_arquivos = pdf_planta or pdf_roteiro
         tem_textos = texto_planta_manual and texto_roteiro_manual
         
-        if tem_pdfs or tem_textos:
+        if tem_arquivos or tem_textos:
             st.markdown("---")
             if st.button("🔄 ANALISAR DOCUMENTOS E GERAR MEMORIAL DESCRITIVO", type="primary", use_container_width=True):
                 tempo_inicio_geral = time.time()
@@ -179,14 +228,28 @@ def main():
                         
                         processador = ProcessadorMemorial(nome_modelo_api)
                         
-                        # Processamento de PDF
+                        # Processamento de arquivos (PDF ou Imagem)
                         imagens_planta, imagens_roteiro = [], []
+
+                        # ---- Planta ----
                         if pdf_planta:
-                            status.update(label="Convertendo páginas da planta em matrizes gráficas...")
-                            imagens_planta = processador.pdf_para_imagens(pdf_planta, dpi=dpi_conversao)
+                            if is_imagem(pdf_planta):
+                                status.update(label=f"Carregando imagem da planta: {pdf_planta.name}...")
+                                img_bytes = carregar_imagem_direta(pdf_planta)
+                                imagens_planta.append(img_bytes)
+                            else:
+                                status.update(label="Convertendo páginas da planta em matrizes gráficas...")
+                                imagens_planta = processador.pdf_para_imagens(pdf_planta, dpi=dpi_conversao)
+
+                        # ---- Roteiro ----
                         if pdf_roteiro:
-                            status.update(label="Vetorizando dados do roteiro perimétrico...")
-                            imagens_roteiro = processador.pdf_para_imagens(pdf_roteiro, dpi=dpi_conversao)
+                            if is_imagem(pdf_roteiro):
+                                status.update(label=f"Carregando imagem do roteiro: {pdf_roteiro.name}...")
+                                img_bytes = carregar_imagem_direta(pdf_roteiro)
+                                imagens_roteiro.append(img_bytes)
+                            else:
+                                status.update(label="Vetorizando dados do roteiro perimétrico...")
+                                imagens_roteiro = processador.pdf_para_imagens(pdf_roteiro, dpi=dpi_conversao)
 
                         status.update(label="Extraindo segmentos via Visão Computacional...")
                         if imagens_roteiro:
@@ -404,11 +467,11 @@ def main():
     # ------------------------------------------
     with tab_requerimento:
         st.markdown("### 🏛️ Geração Automatizada de Requerimento de Cartório")
-        st.info("💡 Nesta aba, você pode carregar múltiplos documentos (RG, CPF, Certidões, Matrículas) para que a IA extraia os dados e preencha o requerimento automaticamente.")
+        st.info("💡 Nesta aba, você pode carregar múltiplos documentos (RG, CPF, Certidões, Matrículas) em **PDF ou imagem (PNG/JPG/JPEG)** para que a IA extraia os dados e preencha o requerimento automaticamente.")
         
         documentos_pdf = st.file_uploader(
-            "Carregar documentos dos clientes (PDFs):", 
-            type=["pdf"], 
+            "Carregar documentos dos clientes (PDF, PNG, JPG, JPEG):", 
+            type=TIPOS_ARQUIVO_SUPORTADOS, 
             accept_multiple_files=True,
             key="docs_requerimento"
         )
@@ -426,14 +489,20 @@ def main():
                             st.error("Erro crítico: Chave API ausente.")
                             st.stop()
                         
-                        status.update(label="Convertendo PDFs em imagens para análise visual...")
+                        status.update(label="Preparando documentos para análise visual...")
                         processador_base = ProcessadorMemorial(nome_modelo_api)
                         todas_imagens = []
-                        for pdf in documentos_pdf:
-                            imagens = processador_base.pdf_para_imagens(pdf, dpi=200)
-                            todas_imagens.extend(imagens)
+                        for doc in documentos_pdf:
+                            if is_imagem(doc):
+                                # Imagem já está pronta para envio à IA
+                                img_bytes = carregar_imagem_direta(doc)
+                                todas_imagens.append(img_bytes)
+                            else:
+                                # PDF: converter em imagens
+                                imagens = processador_base.pdf_para_imagens(doc, dpi=200)
+                                todas_imagens.extend(imagens)
                         
-                        status.update(label=f"Analisando {len(todas_imagens)} páginas com {nome_modelo}...")
+                        status.update(label=f"Analisando {len(todas_imagens)} páginas/imagens com {nome_modelo}...")
                         gerador_req = GeradorRequerimentoCartorio(nome_modelo_api)
                         dados_extraidos = gerador_req.extrair_dados_documentos(todas_imagens)
                         
