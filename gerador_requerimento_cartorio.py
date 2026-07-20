@@ -1,11 +1,10 @@
-#ATENÇÃO NA GERAÇÃO DE REQUERIMENTOS E DESORDEM DE DOCUMENTOS
 import io
 import json
 import logging
+import os
 from typing import List, Dict, Any
 from docx import Document
 import google.generativeai as genai
-from PIL import Image
 
 logger = logging.getLogger(__name__)
 
@@ -69,11 +68,9 @@ class GeradorRequerimentoCartorio:
         """
         
         try:
-            # Prepara o conteúdo para o Gemini (Imagens + Prompt)
             conteudo = [prompt] + imagens
             response = self.model.generate_content(conteudo)
             
-            # Limpa a resposta para extrair apenas o JSON
             text_response = response.text
             if "```json" in text_response:
                 text_response = text_response.split("```json")[1].split("```")[0]
@@ -86,62 +83,82 @@ class GeradorRequerimentoCartorio:
             logger.error(f"Erro na extração via Gemini: {e}")
             raise Exception(f"Falha ao extrair dados dos documentos: {str(e)}")
 
-    def gerar_documento(self, dados: Dict[str, Any], template_path: str) -> io.BytesIO:
+    def _substituir_texto_no_paragrafo(self, p, substituicoes):
+        """
+        Substitui texto em um parágrafo mantendo a formatação o melhor possível.
+        """
+        for key, value in substituicoes.items():
+            if key in p.text:
+                # Substituição simples no texto completo do parágrafo
+                # Nota: Isso pode perder formatação específica de palavras, 
+                # mas é mais confiável para capturar chaves que o Word divide em múltiplos 'runs'
+                inline = p.runs
+                for i in range(len(inline)):
+                    if key in inline[i].text:
+                        text = inline[i].text.replace(key, str(value))
+                        inline[i].text = text
+                
+                # Se a chave ainda estiver lá (dividida entre runs), fazemos a troca bruta
+                if key in p.text:
+                    p.text = p.text.replace(key, str(value))
+
+    def gerar_documento(self, dados: Dict[str, Any], template_name: str) -> io.BytesIO:
         """
         Preenche o template Word com os dados extraídos.
         """
         try:
+            # Tenta encontrar o arquivo no diretório atual ou no diretório do script
+            base_path = os.path.dirname(os.path.abspath(__file__))
+            template_path = os.path.join(base_path, template_name)
+            
+            if not os.path.exists(template_path):
+                # Tenta diretório atual de trabalho se o acima falhar
+                template_path = template_name
+            
+            if not os.path.exists(template_path):
+                raise FileNotFoundError(f"Modelo não encontrado: {template_name}. Certifique-se de que ele está na mesma pasta do projeto.")
+
             doc = Document(template_path)
             
-            # Mapeamento de substituições
-            # Nota: Esta é uma implementação simplificada. Para produção, 
-            # o ideal é iterar sobre parágrafos e tabelas.
-            
             substituicoes = {
-                "XXXXXXX – ES": f"{dados['comarca']} – ES",
-                "XXXXXX, proprietário": f"{dados['requerente_1']['nome']}, proprietário",
-                "XXXXX, lavrador": f"{dados['requerente_1']['profissao']}, lavrador",
-                "C.I. n°. XXXX – SSP/ES": f"C.I. n°. {dados['requerente_1']['rg']} – {dados['requerente_1']['orgao_emissor']}",
-                "CPF/MF n°. XXXXXXX": f"CPF/MF n°. {dados['requerente_1']['cpf']}",
-                "esposa XXXXXX": f"esposa {dados['requerente_2']['nome']}",
-                "XXXXX – SSP/ES": f"{dados['requerente_2']['rg']} – {dados['requerente_2']['orgao_emissor']}",
-                "CPF/MF n° XXXXXX": f"CPF/MF n° {dados['requerente_2']['cpf']}",
-                "comunhão XXXXXX de bens": f"comunhão {dados['requerente_2']['regime_bens']} de bens",
-                "Córrego XXXXX": f"Córrego {dados['requerente_1']['endereco'].split(',')[0]}",
-                "XXXXXX-ES": f"{dados['requerente_1']['endereco'].split('-')[-1]}",
-                "Sitio XXXXX": f"Sitio {dados['imovel']['nome']}",
-                "registrada de XXXXXX ha": f"registrada de {dados['imovel']['area_registrada']} ha",
-                "município de XXXX": f"município de {dados['imovel']['municipio']}",
-                "comarca de XXXXXXX - ES": f"comarca de {dados['imovel']['comarca_imovel']} - ES",
-                "matrícula n°. XXXXXX": f"matrícula n°. {dados['imovel']['matricula']}",
-                "R$ XX0.000,00": f"R$ {dados['imovel']['valor_fiscal']}",
-                "(XXXXXX mil reais)": f"({dados['imovel']['valor_extenso']})",
-                "área de XXXXX ha": f"área de {dados['imovel']['area_encontrada']} ha",
-                "n°. XXX.XXX.XXX.XXX-X": f"n°. {dados['imovel']['codigo_incra']}",
-                "TRT BRXXXXXXX": f"TRT {dados['imovel']['trt_numero']}",
-                "Gleba 1” com área de XXXXXX ha": f"Gleba 1” com área de {dados['imovel']['area_gleba_1']} ha",
-                "Gleba 2” com área de XXXXX ha": f"Gleba 2” com área de {dados['imovel']['area_gleba_2']} ha",
-                "Municipal de X.XXX,XX m²": f"Municipal de {dados['imovel']['area_estrada']} m²",
-                "encontrada de XXXXXXX ha": f"encontrada de {dados['imovel']['area_total_retificada']} ha",
-                "XX de XXX de XXXX": f"{dados['data']['dia']} de {dados['data']['mes']} de {dados['data']['ano']}",
-                "XXXXXXXXXXXXXXXX": dados['requerente_1']['nome'],
-                "XXXXXXXXXXXXXXXXXX": dados['requerente_2']['nome'],
-                "CPF: XXX.XXX.XXX-XX": f"CPF: {dados['requerente_1']['cpf']}"
+                "XXXXXXX – ES": f"{dados.get('comarca', 'XXXXXX')} – ES",
+                "XXXXXX, proprietário": f"{dados['requerente_1'].get('nome', 'XXXXXX')}, proprietário",
+                "XXXXX, lavrador": f"{dados['requerente_1'].get('profissao', 'XXXXXX')}, lavrador",
+                "C.I. n°. XXXX – SSP/ES": f"C.I. n°. {dados['requerente_1'].get('rg', 'XXXX')} – {dados['requerente_1'].get('orgao_emissor', 'SSP/ES')}",
+                "CPF/MF n°. XXXXXXX": f"CPF/MF n°. {dados['requerente_1'].get('cpf', 'XXXXXXX')}",
+                "esposa XXXXXX": f"esposa {dados['requerente_2'].get('nome', 'XXXXXX')}",
+                "XXXXX – SSP/ES": f"{dados['requerente_2'].get('rg', 'XXXXX')} – {dados['requerente_2'].get('orgao_emissor', 'SSP/ES')}",
+                "CPF/MF n° XXXXXX": f"CPF/MF n° {dados['requerente_2'].get('cpf', 'XXXXXX')}",
+                "comunhão XXXXXX de bens": f"comunhão {dados['requerente_2'].get('regime_bens', 'XXXXXX')} de bens",
+                "Córrego XXXXX": f"Córrego {dados['requerente_1'].get('endereco', 'XXXXX').split(',')[0]}",
+                "Sitio XXXXX": f"Sitio {dados['imovel'].get('nome', 'XXXXX')}",
+                "registrada de XXXXXX ha": f"registrada de {dados['imovel'].get('area_registrada', 'XXXXXX')} ha",
+                "município de XXXX": f"município de {dados['imovel'].get('municipio', 'XXXX')}",
+                "comarca de XXXXXXX - ES": f"comarca de {dados['imovel'].get('comarca_imovel', 'XXXXXXX')} - ES",
+                "matrícula n°. XXXXXX": f"matrícula n°. {dados['imovel'].get('matricula', 'XXXXXX')}",
+                "R$ XX0.000,00": f"R$ {dados['imovel'].get('valor_fiscal', 'XX0.000,00')}",
+                "(XXXXXX mil reais)": f"({dados['imovel'].get('valor_extenso', 'XXXXXX mil reais')})",
+                "área de XXXXX ha": f"área de {dados['imovel'].get('area_encontrada', 'XXXXX')} ha",
+                "n°. XXX.XXX.XXX.XXX-X": f"n°. {dados['imovel'].get('codigo_incra', 'XXX.XXX.XXX.XXX-X')}",
+                "TRT BRXXXXXXX": f"TRT {dados['imovel'].get('trt_numero', 'BRXXXXXXX')}",
+                "Gleba 1” com área de XXXXXX ha": f"Gleba 1” com área de {dados['imovel'].get('area_gleba_1', 'XXXXXX')} ha",
+                "Gleba 2” com área de XXXXX ha": f"Gleba 2” com área de {dados['imovel'].get('area_gleba_2', 'XXXXX')} ha",
+                "Municipal de X.XXX,XX m²": f"Municipal de {dados['imovel'].get('area_estrada', 'X.XXX,XX')} m²",
+                "encontrada de XXXXXXX ha": f"encontrada de {dados['imovel'].get('area_total_retificada', 'XXXXXXX')} ha",
+                "XX de XXX de XXXX": f"{dados['data'].get('dia', 'XX')} de {dados['data'].get('mes', 'XXX')} de {dados['data'].get('ano', 'XXXX')}",
+                "XXXXXXXXXXXXXXXX": dados['requerente_1'].get('nome', 'XXXXXXXXXXXXXXXX'),
+                "XXXXXXXXXXXXXXXXXX": dados['requerente_2'].get('nome', 'XXXXXXXXXXXXXXXXXX'),
+                "CPF: XXX.XXX.XXX-XX": f"CPF: {dados['requerente_1'].get('cpf', 'XXX.XXX.XXX-XX')}"
             }
 
             for p in doc.paragraphs:
-                for key, value in substituicoes.items():
-                    if key in p.text:
-                        p.text = p.text.replace(key, str(value))
+                self._substituir_texto_no_paragrafo(p, substituicoes)
             
-            # Trata tabelas se houver
             for table in doc.tables:
                 for row in table.rows:
                     for cell in row.cells:
                         for p in cell.paragraphs:
-                            for key, value in substituicoes.items():
-                                if key in p.text:
-                                    p.text = p.text.replace(key, str(value))
+                            self._substituir_texto_no_paragrafo(p, substituicoes)
 
             buffer = io.BytesIO()
             doc.save(buffer)
