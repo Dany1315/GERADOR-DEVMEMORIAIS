@@ -627,77 +627,127 @@ def main():
     # ABA 4: REQUERIMENTO DE CARTÓRIO
     # ------------------------------------------
     with tab_requerimento:
-        st.markdown("### 🏛️ Geração Automatizada de Requerimento de Cartório")
-        st.info("💡 Nesta aba, você pode carregar múltiplos documentos (RG, CPF, Certidões, Matrículas) em **PDF ou imagem (PNG/JPG/JPEG)** para que a IA extraia os dados e preencha o requerimento automaticamente.")
+    st.markdown("### 🏛️ Geração Automatizada de Requerimento de Cartório")
+    st.info("💡 Nesta aba, você pode carregar múltiplos documentos (RG, CPF, Certidões, Matrículas) em **PDF ou imagem (PNG/JPG/JPEG)** para que a IA extraia os dados e preencha o requerimento automaticamente.")
+    
+    documentos_pdf = st.file_uploader(
+        "Carregar documentos dos clientes (PDF, PNG, JPG, JPEG):", 
+        type=TIPOS_ARQUIVO_SUPORTADOS, 
+        accept_multiple_files=True,
+        key="docs_requerimento"
+    )
+    
+    if documentos_pdf:
+        st.success(f"📄 {len(documentos_pdf)} documentos carregados.")
         
-        documentos_pdf = st.file_uploader(
-            "Carregar documentos dos clientes (PDF, PNG, JPG, JPEG):", 
-            type=TIPOS_ARQUIVO_SUPORTADOS, 
-            accept_multiple_files=True,
-            key="docs_requerimento"
-        )
-        
-        if documentos_pdf:
-            st.success(f"📄 {len(documentos_pdf)} documentos carregados.")
+        if st.button("🚀 EXTRAIR DADOS E GERAR REQUERIMENTO", type="primary", use_container_width=True):
+            # ============================================================
+            # CRIAR RASTREADOR DE PROGRESSO
+            # ============================================================
+            tracker = criar_progress_tracker_requerimento()
+            tracker.iniciar()
             
-            if st.button("🚀 EXTRAIR DADOS E GERAR REQUERIMENTO", type="primary", use_container_width=True):
-                with st.status("Processando documentos via Gemini...", expanded=True) as status:
-                    try:
-                        from gerador_requerimento_cartorio import GeradorRequerimentoCartorio
-                        from processador import ProcessadorMemorial
-                        
-                        if not configurar_gemini():
-                            st.error("Erro crítico: Chave API ausente.")
-                            st.stop()
-                        
-                        status.update(label="Preparando documentos para análise visual...")
-                        processador_base = ProcessadorMemorial(nome_modelo_api)
-                        todas_imagens = []
-                        for doc in documentos_pdf:
-                            if is_imagem(doc):
-                                # Converte bytes para PIL.Image.Image para envio ao Gemini
-                                img_pil = carregar_imagem_direta(doc)
-                                todas_imagens.append(img_pil)
-                            else:
-                                # PDF: converter em imagens (PIL.Image)
-                                imagens = processador_base.pdf_para_imagens(doc, dpi=200)
-                                todas_imagens.extend(imagens)
-                        
-                        status.update(label=f"Analisando {len(todas_imagens)} páginas/imagens com {nome_modelo}...")
-                        gerador_req = GeradorRequerimentoCartorio(nome_modelo_api)
-                        dados_extraidos = gerador_req.extrair_dados_documentos(todas_imagens)
-                        
-                        status.update(label="Preenchendo modelo de requerimento Word...")
-                        template_name = "-REQUERIMENTODECARTORIO.docx"
-                        arquivo_word = gerador_req.gerar_documento(dados_extraidos, template_name)
-                        
-                        status.update(label="Requerimento gerado com sucesso!", state="complete")
-                        
-                        st.balloons()
-                        st.success("✅ Dados extraídos e requerimento preenchido!")
-                        
-                        # Exibe os dados extraídos para conferência
-                        with st.expander("🔍 Conferir Dados Extraídos (IA)", expanded=False):
-                            st.json(dados_extraidos)
-                        
-                        st.download_button(
-                            label="📥 BAIXAR REQUERIMENTO PREENCHIDO (.DOCX)",
-                            data=arquivo_word,
-                            file_name=f"REQUERIMENTO_CARTORIO_{sanitizar_nome_arquivo(dados_extraidos['requerente_1']['nome'].upper())}.docx",
-                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                            use_container_width=True,
-                            on_click=limpar_sessao_requerimento,
-                            key="btn_download_requerimento"
-                        )
+            # Container para a barra de progresso
+            progress_container = st.container()
+            progress_bar = ProgressBarStreamlit(tracker, progress_container)
+            
+            try:
+                # ============================================================
+                # ETAPA 1: Preparar Documentos
+                # ============================================================
+                progress_bar.atualizar(1, "Preparando documentos para análise visual...")
+                tracker.atualizar_etapa(1, "Preparando documentos")
+                
+                processador_base = ProcessadorMemorial(nome_modelo_api)
+                todas_imagens = []
+                
+                for doc in documentos_pdf:
+                    if is_imagem(doc):
+                        img_pil = carregar_imagem_direta(doc)
+                        todas_imagens.append(img_pil)
+                    else:
+                        imagens = processador_base.pdf_para_imagens(doc, dpi=200)
+                        todas_imagens.extend(imagens)
+                
+                tracker.finalizar_etapa(1)
+                progress_bar.finalizar_etapa(1)
+                
+                # ============================================================
+                # ETAPA 2: Analisar com IA
+                # ============================================================
+                progress_bar.atualizar(2, f"Analisando {len(todas_imagens)} páginas/imagens com {nome_modelo}...")
+                tracker.atualizar_etapa(2, "Analisando com IA")
+                
+                if not configurar_gemini():
+                    st.error("Erro crítico: Chave API ausente.")
+                    st.stop()
+                
+                # Usar callback para atualizar progresso
+                gerador_req = GeradorRequerimentoCartorio(
+                    nome_modelo_api,
+                    callback_progresso=callback_atualizar_progresso_requerimento
+                )
+                dados_extraidos = gerador_req.extrair_dados_documentos(todas_imagens)
+                
+                tracker.finalizar_etapa(2)
+                progress_bar.finalizar_etapa(2)
+                
+                # ============================================================
+                # ETAPA 3: Preencher Modelo
+                # ============================================================
+                progress_bar.atualizar(3, "Preenchendo modelo de requerimento Word...")
+                tracker.atualizar_etapa(3, "Preenchendo modelo")
+                
+                template_name = "-REQUERIMENTODECARTORIO.docx"
+                arquivo_word = gerador_req.gerar_documento(dados_extraidos, template_name)
+                
+                tracker.finalizar_etapa(3)
+                progress_bar.finalizar_etapa(3)
+                
+                # ============================================================
+                # ETAPA 4: Finalizar
+                # ============================================================
+                progress_bar.atualizar(4, "Finalizando...")
+                tracker.finalizar_etapa(4)
+                
+                # Exibir resumo final
+                info_final = tracker.obter_info_progresso()
+                
+                st.balloons()
+                st.success("✅ Requerimento gerado com sucesso!")
+                
+                # Exibir estatísticas de tempo
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("⏱️ Tempo Total", info_final['tempo_decorrido_formatado'])
+                with col2:
+                    st.metric("📊 Etapas Concluídas", f"{info_final['etapa_atual']}/{info_final['total_etapas']}")
+                with col3:
+                    st.metric("✅ Status", "Concluído")
+                
+                # Exibir dados extraídos
+                with st.expander("🔍 Conferir Dados Extraídos (IA)", expanded=False):
+                    st.json(dados_extraidos)
+                
+                # Botão de download
+                st.download_button(
+                    label="📥 BAIXAR REQUERIMENTO PREENCHIDO (.DOCX)",
+                    data=arquivo_word,
+                    file_name=f"REQUERIMENTO_CARTORIO_{sanitizar_nome_arquivo(dados_extraidos['requerente_1']['nome'].upper())}.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    use_container_width=True,
+                    on_click=limpar_sessao_requerimento,
+                    key="btn_download_requerimento"
+                )
 
-                        # Botão extra para limpar sessão manualmente
-                        if st.button("🧹 Limpar dados da sessão (Após download)", key="btn_limpar_requerimento"):
-                            limpar_sessao_requerimento()
-                            st.rerun()
-                        
-                    except Exception as err:
-                        st.error(f"Erro no processamento do requerimento: {err}")
-                        logger.error(f"Erro Requerimento: {str(err)}", exc_info=True)
+                # Botão extra para limpar sessão manualmente
+                if st.button("🧹 Limpar dados da sessão (Após download)", key="btn_limpar_requerimento"):
+                    limpar_sessao_requerimento()
+                    st.rerun()
+                    
+            except Exception as err:
+                st.error(f"Erro no processamento do requerimento: {err}")
+                logger.error(f"Erro Requerimento: {str(err)}", exc_info=True)
         else:
             st.info("Aguardando upload de documentos para iniciar a análise.")
 
