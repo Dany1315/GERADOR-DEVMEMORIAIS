@@ -94,12 +94,13 @@ class GeradorRequerimentoCartorio:
     """
     Gerador de requerimentos de cartório seguindo o modelo CORRETO.
     
-    VERSÃO FINAL (v9):
-    - Índices de parágrafos CORRETOS (parágrafos PARES com conteúdo)
+    VERSÃO FINAL CORRIGIDA (v10):
+    - Índices de parágrafos CORRETOS (3, 5, 7, 9, 11, 14, 16, 18, 19, 21, 23, 25, 29, 30, 32, 37, 38, 39, 44, 45, 46)
+    - Formatação JUSTIFY para conteúdo
+    - Formatação CENTER para assinantes
     - Dados separados em parágrafos distintos
     - Nomes corretos nas assinantes
     - Todos os placeholders substituídos
-    - Formatação correta preservada
     """
     
     def __init__(self, model_name: str, callback_progresso: Optional[Callable] = None):
@@ -141,6 +142,7 @@ class GeradorRequerimentoCartorio:
         8. Se encontrar 2 pessoas (casal), classifique como requerente_1 (proprietário) e requerente_2 (cônjuge/esposa).
         9. Se encontrar apenas 1 pessoa, classifique como requerente_1 e preencha requerente_2 com XXXXXX.
         10. Para o regime de bens, remova duplicações: 'comunhão comunhão de bens' deve virar 'comunhão de bens'.
+        11. IMPORTANTE: Extraia a área da estrada em m² (ex: 2.062,34 m²).
         
         Retorne estritamente em JSON:
         {
@@ -219,7 +221,7 @@ class GeradorRequerimentoCartorio:
         """
         Gera o documento Word seguindo EXATAMENTE o modelo correto.
         
-        VERSÃO FINAL: Índices de parágrafos CORRETOS (PARES com conteúdo).
+        VERSÃO FINAL CORRIGIDA: Índices corretos, formatação correta, alinhamento correto.
         """
         try:
             self._atualizar_progresso(2, "Carregando template de requerimento...", 10)
@@ -250,93 +252,115 @@ class GeradorRequerimentoCartorio:
             self._atualizar_progresso(2, "Preenchendo documento...", 50)
             
             # ============================================================
-            # SUBSTITUIÇÃO COM ÍNDICES CORRETOS (PARÁGRAFOS PARES)
+            # SUBSTITUIÇÃO COM ÍNDICES CORRETOS E FORMATAÇÃO CORRETA
             # ============================================================
             
-            # Parágrafo 0: Cabeçalho
+            # Parágrafo 0: Cabeçalho (LEFT)
             self._substituir_paragrafo_exato(doc, 0,
-                f"ILMO. SR. OFICIAL DO CARTÓRIO DE REGISTRO DE IMÓVEIS COMARCA DE {imovel.get('comarca_imovel', 'XXXXXX')} – ES."
+                f"ILMO. SR. OFICIAL DO CARTÓRIO DE REGISTRO DE IMÓVEIS COMARCA DE {imovel.get('comarca_imovel', 'XXXXXX')}-ES.",
+                WD_ALIGN_PARAGRAPH.LEFT
             )
             
-            # Parágrafo 2: Dados do requerente (PRINCIPAL)
-            self._substituir_paragrafo_exato(doc, 2, 
+            # Parágrafo 3: Dados do requerente (JUSTIFY)
+            self._substituir_paragrafo_exato(doc, 3, 
                 f"{req1.get('nome', 'XXXXXX')}, proprietário, brasileiro, {req1.get('estado_civil', 'casado')}, "
-                f"{req1.get('profissao', 'lavrador')}, C.I. n°. {req1.get('rg', 'XXXXXX')} – {req1.get('orgao', 'SSP/ES')}, "
-                f"CPF/MF n°. {req1.get('cpf', 'XXXXXX')} e sua esposa "
+                f"{req1.get('profissao', 'lavrador')}, C.I. n° {req1.get('rg', 'XXXXXX')} {req1.get('orgao', 'SSP/ES')}, "
+                f"CPF/MF n°. {req1.get('cpf', 'XXXXXX')}, e sua esposa "
                 f"{req2.get('nome', 'XXXXXX')}, {req2.get('profissao', 'XXXXXX')}, "
-                f"C.I. n°. {req2.get('rg', 'XXXXXX')} – {req2.get('orgao', 'XXXXXX')}, "
+                f"C.I. n° {req2.get('rg', 'XXXXXX')} {req2.get('orgao', 'XXXXXX')}, "
                 f"CPF/MF n°. {req2.get('cpf', 'XXXXXX')}, brasileiros, casados sob o regime de "
                 f"{req2.get('regime_bens', 'XXXXXX')} de bens, residentes e domiciliados no Córrego "
                 f"{req1.get('endereco_corrego', 'XXXXXX')}, Zona Rural, "
                 f"{imovel.get('municipio_imovel', 'XXXXXX')}-ES; E o responsável técnico pela medição "
                 f"Régis Campo da Silva, brasileiro, casado, técnico em agropecuária, C.I. n°. 1.936.653 – SPTC/ES, "
                 f"CPF/MF n°. 111.985.197-11, residente e domiciliado no Córrego Groner, Zona Rural, Vila Valério-ES, "
-                f"vem expor e requerer o que segue:"
+                f"vem expor e requerer o que segue:",
+                WD_ALIGN_PARAGRAPH.JUSTIFY
             )
             
-            # Parágrafo 4: Descrição do imóvel
-            self._substituir_paragrafo_exato(doc, 4,
+            # Parágrafo 5: Descrição do imóvel (JUSTIFY)
+            self._substituir_paragrafo_exato(doc, 5,
                 f"Que são senhores e legítimos proprietários de uma área de terras denominada "
-                f"\"{imovel.get('nome', 'XXXXXX')}\", com área registrada de {imovel.get('area_registrada', 'XXXXXX')} ha "
+                f"\"Sitio {imovel.get('nome', 'XXXXXX')}\", com área registrada de {imovel.get('area_registrada', 'XXXXXX')} ha "
                 f"situada no município de {imovel.get('municipio_imovel', 'XXXXXX')}-ES e registrada na comarca de "
-                f"{imovel.get('comarca_imovel', 'XXXXXX')} – ES, a qual se acha devidamente registrada, descrita e "
-                f"caracterizada na matrícula n°. {imovel.get('matricula', 'XXXXXX')}, dessa circunscrição imobiliária."
+                f"{imovel.get('comarca_imovel', 'XXXXXX')}-ES, a qual se acha devidamente registrada, descrita e "
+                f"caracterizada na matrícula n°. {imovel.get('matricula', 'XXXXXX')}, dessa circunscrição imobiliária.",
+                WD_ALIGN_PARAGRAPH.JUSTIFY
             )
             
-            # Parágrafo 6: Valor fiscal
-            self._substituir_paragrafo_exato(doc, 6,
+            # Parágrafo 7: Valor fiscal (JUSTIFY)
+            self._substituir_paragrafo_exato(doc, 7,
                 f"Que o imóvel acima mencionado está avaliado pelos proprietários para fins fiscais no valor de "
                 f"R$ {imovel.get('valor_fiscal', 'XXXXXX')}, conforme item 8 das Notas, da Tabela 11 de Emolumentos "
                 f"editada pela CGJ/ES, bem como o artigo 98, do Código de Normas da Corregedoria Geral da Justiça deste "
-                f"Estado do ES;"
+                f"Estado do ES;",
+                WD_ALIGN_PARAGRAPH.JUSTIFY
             )
             
-            # Parágrafo 8: Levantamento perimetral
-            self._substituir_paragrafo_exato(doc, 8,
+            # Parágrafo 9: Levantamento perimetral (JUSTIFY)
+            self._substituir_paragrafo_exato(doc, 9,
                 f"Que foi procedido o levantamento perimetral do imóvel, sendo encontrado a área de "
-                f"{imovel.get('area_encontrada', 'XXXXXX')} ha;"
+                f"{imovel.get('area_encontrada', 'XXXXXX')} ha;",
+                WD_ALIGN_PARAGRAPH.JUSTIFY
             )
             
-            # Parágrafo 10: Certificação INCRA
-            self._substituir_paragrafo_exato(doc, 10,
+            # Parágrafo 11: Certificação INCRA (JUSTIFY)
+            self._substituir_paragrafo_exato(doc, 11,
                 f"Que referido levantamento foi certificado pelo Instituto Nacional de Colonização e Reforma Agrária – INCRA, "
-                f"sob o n°. {imovel.get('codigo_incra', 'XXXXXX')}."
+                f"sob o n°. {imovel.get('codigo_incra', 'XXXXXX')}.",
+                WD_ALIGN_PARAGRAPH.JUSTIFY
             )
             
-            # Parágrafo 12: Técnico
-            self._substituir_paragrafo_exato(doc, 12,
+            # Parágrafo 14: Técnico (JUSTIFY)
+            self._substituir_paragrafo_exato(doc, 14,
                 f"Que os trabalhos topográficos foram elaborados pelo técnico em agropecuária, Regis Campo da Silva, "
                 f"CFTA n°. {imovel.get('cfta_tecnico', 'XXXXXX')}, credenciamento no INCRA sob o código "
-                f"{imovel.get('codigo_credenciamento', 'XXXXXX')} da TRT {imovel.get('trt_numero', 'XXXXXX')}."
+                f"{imovel.get('codigo_credenciamento', 'XXXXXX')} da TRT {imovel.get('trt_numero', 'XXXXXX')}.",
+                WD_ALIGN_PARAGRAPH.JUSTIFY
             )
             
-            # Parágrafo 14: Glebas
-            self._substituir_paragrafo_exato(doc, 14,
-                f"Que se trata de um imóvel dividido por uma estrada municipal formando 2 glebas distintas, autônomas e "
-                f"independentes, sendo elas: Uma gleba denominada (\"Gleba 1\") com área de {imovel.get('area_registrada', 'XXXXXX')} ha; "
-                f"uma gleba denominada (\"Gleba 2\") com área de {imovel.get('area_encontrada', 'XXXXXX')} ha."
-            )
-            
-            # Parágrafo 16: Estrada
+            # Parágrafo 16: Glebas (JUSTIFY)
             self._substituir_paragrafo_exato(doc, 16,
-                f"Que foi encontrada uma área de Estrada Municipal de {imovel.get('area_estrada', 'XXXXXX')} m²."
+                f"Que se trata de um imóvel dividido por uma estrada municipal formando duas glebas distintas, autônomas e "
+                f"independentes, sendo elas: Uma gleba denominada (\"Gleba 1\") com área de {imovel.get('area_registrada', 'XXXXXX')} ha; "
+                f"uma gleba denominada (\"Gleba 2\") com área de {imovel.get('area_encontrada', 'XXXXXX')} ha.",
+                WD_ALIGN_PARAGRAPH.JUSTIFY
             )
             
-            # Parágrafo 29: Data
-            self._substituir_paragrafo_exato(doc, 29,
-                f"Vila Valério – ES, {data_formatada}."
+            # Parágrafo 18: Estrada (LEFT)
+            self._substituir_paragrafo_exato(doc, 18,
+                f"Que foi encontrada uma área de Estrada Municipal de {imovel.get('area_estrada', 'XXXXXX')} m². Sendo assim requerida a averbação de afetação por finalidade pública.",
+                WD_ALIGN_PARAGRAPH.LEFT
             )
             
-            # Parágrafo 35: Nomes dos assinantes (CORRETO!)
-            self._substituir_paragrafo_exato(doc, 35,
-                f"                       {req1.get('nome', 'XXXXXX')}                    "
-                f"{req2.get('nome', 'XXXXXX')}"
+            # Parágrafo 32: Data (JUSTIFY)
+            self._substituir_paragrafo_exato(doc, 32,
+                f"Vila Valério – ES, {data_formatada}.",
+                WD_ALIGN_PARAGRAPH.JUSTIFY
             )
             
-            # Parágrafo 36: CPFs dos assinantes (CORRETO!)
-            self._substituir_paragrafo_exato(doc, 36,
-                f"                   CPF: {req1.get('cpf', 'XXXXXX')}                    "
-                f"CPF: {req2.get('cpf', 'XXXXXX')}"
+            # Parágrafo 38: Nomes dos assinantes (CENTER)
+            self._substituir_paragrafo_exato(doc, 38,
+                f"{req1.get('nome', 'XXXXXX')}\t\t\t\t{req2.get('nome', 'XXXXXX')}",
+                WD_ALIGN_PARAGRAPH.CENTER
+            )
+            
+            # Parágrafo 39: CPFs dos assinantes (CENTER)
+            self._substituir_paragrafo_exato(doc, 39,
+                f"CPF:{req1.get('cpf', 'XXXXXX')}\t\t\t\tCPF: {req2.get('cpf', 'XXXXXX')}",
+                WD_ALIGN_PARAGRAPH.CENTER
+            )
+            
+            # Parágrafo 45: Técnico (CENTER)
+            self._substituir_paragrafo_exato(doc, 45,
+                f"Régis Campo da Silva",
+                WD_ALIGN_PARAGRAPH.CENTER
+            )
+            
+            # Parágrafo 46: CFTA (CENTER)
+            self._substituir_paragrafo_exato(doc, 46,
+                f"CFTA:{imovel.get('cfta_tecnico', 'XXXXXX')}",
+                WD_ALIGN_PARAGRAPH.CENTER
             )
 
             self._atualizar_progresso(2, "Ajustando formatação...", 85)
@@ -358,8 +382,8 @@ class GeradorRequerimentoCartorio:
             logger.error(f"Erro ao gerar documento: {e}")
             raise e
 
-    def _substituir_paragrafo_exato(self, doc, indice_paragrafo: int, novo_texto: str):
-        """Substitui o conteúdo exato de um parágrafo."""
+    def _substituir_paragrafo_exato(self, doc, indice_paragrafo: int, novo_texto: str, alinhamento=None):
+        """Substitui o conteúdo exato de um parágrafo com alinhamento opcional."""
         if indice_paragrafo < len(doc.paragraphs):
             paragrafo = doc.paragraphs[indice_paragrafo]
             # Limpar o parágrafo
@@ -367,6 +391,9 @@ class GeradorRequerimentoCartorio:
                 run.text = ""
             # Adicionar novo texto
             paragrafo.text = novo_texto
+            # Aplicar alinhamento se especificado
+            if alinhamento is not None:
+                paragrafo.alignment = alinhamento
 
     def _ajustar_fonte_arial(self, doc):
         """Ajusta a fonte de todo o documento para Arial."""
