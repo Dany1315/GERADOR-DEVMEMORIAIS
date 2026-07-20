@@ -4,12 +4,11 @@ import logging
 import os
 import re
 from datetime import datetime
-from typing import List, Dict, Any, Optional, Callable
+from typing import List, Dict, Any
 from docx import Document
-from docx.shared import Pt, Inches
+from docx.shared import Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 import google.generativeai as genai
-import time
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +40,7 @@ NOMES_FEMININOS = {
     "agostinha", "aparecida", "bete", "creuza", "dalva", "edna",
     "filomena", "gracinda", "ilza", "jandira", "kely", "luana",
     "miriam", "nara", "roseli", "simone", "vanda", "waleska",
-    "yanira", "zelia", "ana clara", "vera lucia", "maria josé"
+    "yanira", "zelia", "ana clara", "vera lucia"
 }
 
 
@@ -90,143 +89,154 @@ def ajustar_profissao_por_genero(profissao: str, genero: str) -> str:
     return profissao
 
 
-class GeradorRequerimentoCartorio:
-    """
-    Gerador de requerimentos de cartório seguindo o modelo CORRETO.
-    
-    VERSÃO FINAL CORRIGIDA (v10):
-    - Índices de parágrafos CORRETOS (3, 5, 7, 9, 11, 14, 16, 18, 19, 21, 23, 25, 29, 30, 32, 37, 38, 39, 44, 45, 46)
-    - Formatação JUSTIFY para conteúdo
-    - Formatação CENTER para assinantes
-    - Dados separados em parágrafos distintos
-    - Nomes corretos nas assinantes
-    - Todos os placeholders substituídos
-    """
-    
-    def __init__(self, model_name: str, callback_progresso: Optional[Callable] = None):
-        """
-        Inicializa o gerador.
-        
-        Args:
-            model_name: Nome do modelo Gemini
-            callback_progresso: Função callback para atualizar progresso (opcional)
-        """
-        self.model_name = model_name
-        self.model = genai.GenerativeModel(model_name)
-        self.callback_progresso = callback_progresso
-        
-    def _atualizar_progresso(self, etapa: int, descricao: str, percentual: float = None):
-        """Atualiza o progresso via callback."""
-        if self.callback_progresso:
-            try:
-                self.callback_progresso(etapa, descricao, percentual)
-            except Exception as e:
-                logger.warning(f"Erro ao atualizar progresso: {e}")
+def remover_duplicacoes(texto: str) -> str:
+    """Remove palavras duplicadas consecutivas no texto."""
+    if not texto:
+        return texto
+    palavras = texto.split()
+    resultado = [palavras[0]]
+    for i in range(1, len(palavras)):
+        if palavras[i] != palavras[i-1]:
+            resultado.append(palavras[i])
+    return " ".join(resultado)
 
-    def extrair_dados_documentos(self, imagens: List[Any]) -> Dict[str, Any]:
-        """
-        Envia as imagens dos documentos para o Gemini e extrai os dados estruturados.
-        """
-        self._atualizar_progresso(1, "Analisando documentos com IA Gemini...", 25)
-        
-        prompt = """
-        Analise as imagens dos documentos fornecidos e extraia as informações para um requerimento de cartório.
-        REGRAS IMPORTANTES:
-        1. Formate RGs com pontos: 706786 -> 706.786 ou 1706786 -> 1.706.786.
-        2. Identifique o sexo do requerente para ajustar 'lavrador/lavradora' ou 'agricultor/agricultora'.
-        3. Se não encontrar o cônjuge (esposa), preencha TODOS os campos do requerente_2 com 'XXXXXX'.
-        4. Identifique a TRT (começa com BR e tem 11 números).
-        5. Identifique a Comarca, Município e Matrícula.
-        6. Extraia a área total retificada (encontrada na planta INCRA).
-        7. IMPORTANTE: Remova duplicações de palavras (ex: 'comunhão comunhão' -> 'comunhão').
-        8. Se encontrar 2 pessoas (casal), classifique como requerente_1 (proprietário) e requerente_2 (cônjuge/esposa).
-        9. Se encontrar apenas 1 pessoa, classifique como requerente_1 e preencha requerente_2 com XXXXXX.
-        10. Para o regime de bens, remova duplicações: 'comunhão comunhão de bens' deve virar 'comunhão de bens'.
-        11. IMPORTANTE: Extraia a área da estrada em m² (ex: 2.062,34 m²).
-        
-        Retorne estritamente em JSON:
-        {
-            "comarca": "NOME DA COMARCA EM MAIUSCULO",
-            "municipio_cliente": "Cidade do Cliente",
-            "requerente_1": {
-                "nome": "Nome Completo",
-                "profissao": "Lavrador ou Lavradora (ajustado ao gênero)",
-                "rg": "0.000.000",
-                "orgao": "SSP/ES",
-                "cpf": "000.000.000-00",
-                "estado_civil": "casado ou solteiro",
-                "endereco_corrego": "Nome do Córrego (Apenas o nome)"
-            },
-            "requerente_2": {
-                "nome": "Nome Completo da Esposa ou XXXXXX",
-                "profissao": "Lavradora ou XXXXXX (ajustado ao gênero)",
-                "rg": "0.000.000 ou XXXXXX",
-                "orgao": "SSP/ES ou XXXXXX",
-                "cpf": "000.000.000-00 ou XXXXXX",
-                "regime_bens": "Comunhão Parcial de Bens ou XXXXXX (sem duplicações)"
-            },
-            "imovel": {
-                "nome": "Nome do Sítio (Apenas o nome)",
-                "area_registrada": "0,0000",
-                "municipio_imovel": "Vila Valério",
-                "comarca_imovel": "SÃO GABRIEL DA PALHA",
-                "matricula": "0.000",
-                "area_encontrada": "0,0000",
-                "codigo_incra": "000.000.000.000-0",
-                "trt_numero": "BR00000000000",
-                "area_total_retificada": "0,0000",
-                "cfta_tecnico": "1119851971-1 ou encontrado",
-                "codigo_credenciamento": "G1D ou encontrado",
-                "valor_fiscal": "0,00",
-                "area_estrada": "0,00"
-            }
-        }
-        """
-        
+
+class GeradorRequerimentoCartorio:
+    def __init__(self, model_name: str, callback_progresso=None):
+        self.model_name = model_name
+        self.callback_progresso = callback_progresso
+        self._atualizar_progresso(0, "Inicializando gerador...", 0)
+
+    def _atualizar_progresso(self, etapa: int, descricao: str, percentual: float = None):
+        """Callback para atualizar progresso durante o processamento."""
+        if self.callback_progresso:
+            self.callback_progresso(etapa, descricao, percentual)
+
+    def extrair_dados_documentos(self, imagens: List) -> Dict[str, Any]:
+        """Extrai dados dos documentos usando Gemini."""
         try:
-            conteudo = [prompt] + imagens
-            response = self.model.generate_content(conteudo)
+            self._atualizar_progresso(1, "Analisando documentos com IA Gemini...", 25)
             
-            self._atualizar_progresso(1, "Processando resposta da IA...", 50)
+            model = genai.GenerativeModel(self.model_name)
             
-            text_response = response.text
-            if "```json" in text_response:
-                text_response = text_response.split("```json")[1].split("```")[0]
-            elif "```" in text_response:
-                text_response = text_response.split("```")[1].split("```")[0]
+            prompt = """
+            Analise os documentos fornecidos (RG, CPF, Certidões, Matrículas, etc.) e extraia os seguintes dados:
             
-            dados = json.loads(text_response.strip())
+            REQUERENTE 1 (Proprietário):
+            - nome: Nome completo
+            - profissao: Profissão (ex: agricultor, lavrador)
+            - rg: Número do RG
+            - cpf: CPF (apenas números)
+            - endereco_corrego: Nome do córrego/localidade
             
-            # Pós-processamento: ajustar gênero e profissão
-            if dados.get("requerente_2"):
-                req2 = dados["requerente_2"]
-                nome_req2 = req2.get("nome", "")
-                if nome_req2.lower() not in ("", "xxxxx", "x", "n/a", "-"):
-                    genero = detectar_genero_por_nome(nome_req2)
-                    req2["profissao"] = ajustar_profissao_por_genero(req2.get("profissao", ""), genero)
+            REQUERENTE 2 (Esposa/Esposo):
+            - nome: Nome completo
+            - profissao: Profissão
+            - rg: Número do RG
+            - cpf: CPF (apenas números)
+            - regime_bens: Regime de bens (ex: comunhão parcial de bens)
             
-            if dados.get("requerente_1"):
-                req1 = dados["requerente_1"]
-                genero1 = detectar_genero_por_nome(req1.get("nome", ""))
-                req1["profissao"] = ajustar_profissao_por_genero(req1.get("profissao", ""), genero1)
+            IMÓVEL:
+            - nome: Nome do sítio/propriedade
+            - area_registrada: Área registrada em hectares (ex: 25,51 ha)
+            - area_encontrada: Área encontrada em hectares
+            - area_total_retificada: Área total retificada em hectares
+            - municipio_imovel: Município do imóvel
+            - comarca_imovel: Comarca do imóvel
+            - matricula: Número da matrícula
+            - codigo_incra: Código INCRA (formato: BR XXXXXXX)
+            - trt_numero: Número do TRT
+            - valor_fiscal: Valor fiscal (ex: 150000)
             
-            self._atualizar_progresso(1, "Dados extraídos com sucesso!", 75)
-            logger.info("✅ Dados extraídos com sucesso da IA")
-            return dados
+            OUTROS:
+            - comarca: Comarca (ex: SÃO GABRIEL DA PALHA)
+            - municipio_cliente: Município do cliente
+            - data: Data (formato: DD/MM/YYYY)
+            
+            Retorne APENAS um JSON válido com esses campos.
+            """
+            
+            response = model.generate_content([prompt] + imagens)
+            
+            self._atualizar_progresso(2, "Processando resposta da IA...", 50)
+            
+            # Extrair JSON da resposta
+            texto_resposta = response.text
+            json_match = re.search(r'\{.*\}', texto_resposta, re.DOTALL)
+            
+            if json_match:
+                dados = json.loads(json_match.group())
+            else:
+                dados = {}
+            
+            self._atualizar_progresso(3, "Validando dados extraídos...", 75)
+            
+            # Estruturar dados com valores padrão
+            dados_estruturados = {
+                "requerente_1": {
+                    "nome": dados.get("nome", "XXXXXX"),
+                    "profissao": dados.get("profissao", "XXXXX"),
+                    "rg": dados.get("rg", "XXXX"),
+                    "cpf": dados.get("cpf", "XXXXXXX"),
+                    "endereco_corrego": dados.get("endereco_corrego", "XXXXX"),
+                },
+                "requerente_2": {
+                    "nome": dados.get("nome_esposa", "XXXXXX"),
+                    "profissao": dados.get("profissao_esposa", "XXXXX"),
+                    "rg": dados.get("rg_esposa", "XXXXX"),
+                    "cpf": dados.get("cpf_esposa", "XXXXXX"),
+                    "regime_bens": dados.get("regime_bens", "XXXXXX"),
+                },
+                "imovel": {
+                    "nome": dados.get("nome_imovel", "XXXXX"),
+                    "area_registrada": dados.get("area_registrada", "XXXXXX"),
+                    "area_encontrada": dados.get("area_encontrada", "XXXXX"),
+                    "area_total_retificada": dados.get("area_total_retificada", "XXXXXXX"),
+                    "municipio_imovel": dados.get("municipio_imovel", "XXXX"),
+                    "comarca_imovel": dados.get("comarca_imovel", "XXXXXXX"),
+                    "matricula": dados.get("matricula", "XXXXXX"),
+                    "codigo_incra": dados.get("codigo_incra", "XXX.XXX.XXX.XXX-X"),
+                    "trt_numero": dados.get("trt_numero", "BRXXXXXXX"),
+                    "valor_fiscal": dados.get("valor_fiscal", "XX0.000,00"),
+                },
+                "comarca": dados.get("comarca", "XXXXXXX"),
+                "municipio_cliente": dados.get("municipio_cliente", "XXXXXX"),
+                "data": dados.get("data", "XX de XXX de XXXX"),
+            }
+            
+            self._atualizar_progresso(4, "Extração concluída!", 100)
+            return dados_estruturados
+            
         except Exception as e:
-            logger.error(f"Erro na extração via Gemini: {e}")
+            logger.error(f"Erro na extração: {e}")
             raise Exception(f"Falha ao extrair dados: {str(e)}")
 
-    def gerar_documento(self, dados: Dict[str, Any], template_name: str) -> io.BytesIO:
+    def _substituir_paragrafo_exato(self, doc, indice_paragrafo: int, novo_texto: str, alinhamento=None):
         """
-        Gera o documento Word seguindo EXATAMENTE o modelo correto.
-        
-        VERSÃO FINAL CORRIGIDA: Índices corretos, formatação correta, alinhamento correto.
+        Substitui o conteúdo EXATO de um parágrafo específico.
+        Preserva a formatação e o alinhamento.
         """
-        try:
-            self._atualizar_progresso(2, "Carregando template de requerimento...", 10)
+        if indice_paragrafo < len(doc.paragraphs):
+            para = doc.paragraphs[indice_paragrafo]
             
-            # Busca do template
+            # Limpar todos os runs existentes
+            for run in para.runs:
+                run.text = ""
+            
+            # Adicionar novo texto
+            if para.runs:
+                para.runs[0].text = novo_texto
+            else:
+                para.add_run(novo_texto)
+            
+            # Aplicar alinhamento se especificado
+            if alinhamento:
+                para.alignment = alinhamento
+
+    def gerar_documento(self, dados: Dict[str, Any], template_name: str) -> io.BytesIO:
+        """Gera o documento Word preenchido com os dados extraídos."""
+        try:
+            # Buscar template
             base_path = os.path.dirname(os.path.abspath(__file__))
             template_path = os.path.join(base_path, template_name)
             if not os.path.exists(template_path):
@@ -236,175 +246,82 @@ class GeradorRequerimentoCartorio:
 
             doc = Document(template_path)
             
-            self._atualizar_progresso(2, "Preparando dados para preenchimento...", 30)
-            
-            # Data de hoje formatada
+            # Data formatada
             hoje = datetime.now()
             meses = ["janeiro", "fevereiro", "março", "abril", "maio", "junho",
                      "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"]
-            data_formatada = f"{hoje.day:02d} de {meses[hoje.month-1]} de {hoje.year}"
+            data_formatada = f"{hoje.day} de {meses[hoje.month-1]} de {hoje.year}"
 
-            # Extrair dados com valores padrão seguros
+            # Extrair dados
             req1 = dados.get("requerente_1", {})
             req2 = dados.get("requerente_2", {})
             imovel = dados.get("imovel", {})
 
-            self._atualizar_progresso(2, "Preenchendo documento...", 50)
-            
             # ============================================================
-            # SUBSTITUIÇÃO COM ÍNDICES CORRETOS E FORMATAÇÃO CORRETA
+            # USAR PLACEHOLDERS ÚNICOS - CADA CAMPO TEM UM PLACEHOLDER DIFERENTE
             # ============================================================
-            
-            # Parágrafo 0: Cabeçalho (LEFT)
-            self._substituir_paragrafo_exato(doc, 0,
-                f"ILMO. SR. OFICIAL DO CARTÓRIO DE REGISTRO DE IMÓVEIS COMARCA DE {imovel.get('comarca_imovel', 'XXXXXX')}-ES.",
-                WD_ALIGN_PARAGRAPH.LEFT
-            )
-            
-            # Parágrafo 3: Dados do requerente (JUSTIFY)
-            self._substituir_paragrafo_exato(doc, 3, 
-                f"{req1.get('nome', 'XXXXXX')}, proprietário, brasileiro, {req1.get('estado_civil', 'casado')}, "
-                f"{req1.get('profissao', 'lavrador')}, C.I. n° {req1.get('rg', 'XXXXXX')} {req1.get('orgao', 'SSP/ES')}, "
-                f"CPF/MF n°. {req1.get('cpf', 'XXXXXX')}, e sua esposa "
-                f"{req2.get('nome', 'XXXXXX')}, {req2.get('profissao', 'XXXXXX')}, "
-                f"C.I. n° {req2.get('rg', 'XXXXXX')} {req2.get('orgao', 'XXXXXX')}, "
-                f"CPF/MF n°. {req2.get('cpf', 'XXXXXX')}, brasileiros, casados sob o regime de "
-                f"{req2.get('regime_bens', 'XXXXXX')} de bens, residentes e domiciliados no Córrego "
-                f"{req1.get('endereco_corrego', 'XXXXXX')}, Zona Rural, "
-                f"{imovel.get('municipio_imovel', 'XXXXXX')}-ES; E o responsável técnico pela medição "
-                f"Régis Campo da Silva, brasileiro, casado, técnico em agropecuária, C.I. n°. 1.936.653 – SPTC/ES, "
-                f"CPF/MF n°. 111.985.197-11, residente e domiciliado no Córrego Groner, Zona Rural, Vila Valério-ES, "
-                f"vem expor e requerer o que segue:",
-                WD_ALIGN_PARAGRAPH.JUSTIFY
-            )
-            
-            # Parágrafo 5: Descrição do imóvel (JUSTIFY)
-            self._substituir_paragrafo_exato(doc, 5,
-                f"Que são senhores e legítimos proprietários de uma área de terras denominada "
-                f"\"Sitio {imovel.get('nome', 'XXXXXX')}\", com área registrada de {imovel.get('area_registrada', 'XXXXXX')} ha "
-                f"situada no município de {imovel.get('municipio_imovel', 'XXXXXX')}-ES e registrada na comarca de "
-                f"{imovel.get('comarca_imovel', 'XXXXXX')}-ES, a qual se acha devidamente registrada, descrita e "
-                f"caracterizada na matrícula n°. {imovel.get('matricula', 'XXXXXX')}, dessa circunscrição imobiliária.",
-                WD_ALIGN_PARAGRAPH.JUSTIFY
-            )
-            
-            # Parágrafo 7: Valor fiscal (JUSTIFY)
-            self._substituir_paragrafo_exato(doc, 7,
-                f"Que o imóvel acima mencionado está avaliado pelos proprietários para fins fiscais no valor de "
-                f"R$ {imovel.get('valor_fiscal', 'XXXXXX')}, conforme item 8 das Notas, da Tabela 11 de Emolumentos "
-                f"editada pela CGJ/ES, bem como o artigo 98, do Código de Normas da Corregedoria Geral da Justiça deste "
-                f"Estado do ES;",
-                WD_ALIGN_PARAGRAPH.JUSTIFY
-            )
-            
-            # Parágrafo 9: Levantamento perimetral (JUSTIFY)
-            self._substituir_paragrafo_exato(doc, 9,
-                f"Que foi procedido o levantamento perimetral do imóvel, sendo encontrado a área de "
-                f"{imovel.get('area_encontrada', 'XXXXXX')} ha;",
-                WD_ALIGN_PARAGRAPH.JUSTIFY
-            )
-            
-            # Parágrafo 11: Certificação INCRA (JUSTIFY)
-            self._substituir_paragrafo_exato(doc, 11,
-                f"Que referido levantamento foi certificado pelo Instituto Nacional de Colonização e Reforma Agrária – INCRA, "
-                f"sob o n°. {imovel.get('codigo_incra', 'XXXXXX')}.",
-                WD_ALIGN_PARAGRAPH.JUSTIFY
-            )
-            
-            # Parágrafo 14: Técnico (JUSTIFY)
-            self._substituir_paragrafo_exato(doc, 14,
-                f"Que os trabalhos topográficos foram elaborados pelo técnico em agropecuária, Regis Campo da Silva, "
-                f"CFTA n°. {imovel.get('cfta_tecnico', 'XXXXXX')}, credenciamento no INCRA sob o código "
-                f"{imovel.get('codigo_credenciamento', 'XXXXXX')} da TRT {imovel.get('trt_numero', 'XXXXXX')}.",
-                WD_ALIGN_PARAGRAPH.JUSTIFY
-            )
-            
-            # Parágrafo 16: Glebas (JUSTIFY)
-            self._substituir_paragrafo_exato(doc, 16,
-                f"Que se trata de um imóvel dividido por uma estrada municipal formando duas glebas distintas, autônomas e "
-                f"independentes, sendo elas: Uma gleba denominada (\"Gleba 1\") com área de {imovel.get('area_registrada', 'XXXXXX')} ha; "
-                f"uma gleba denominada (\"Gleba 2\") com área de {imovel.get('area_encontrada', 'XXXXXX')} ha.",
-                WD_ALIGN_PARAGRAPH.JUSTIFY
-            )
-            
-            # Parágrafo 18: Estrada (LEFT)
-            self._substituir_paragrafo_exato(doc, 18,
-                f"Que foi encontrada uma área de Estrada Municipal de {imovel.get('area_estrada', 'XXXXXX')} m². Sendo assim requerida a averbação de afetação por finalidade pública.",
-                WD_ALIGN_PARAGRAPH.LEFT
-            )
-            
-            # Parágrafo 32: Data (JUSTIFY)
-            self._substituir_paragrafo_exato(doc, 32,
-                f"Vila Valério – ES, {data_formatada}.",
-                WD_ALIGN_PARAGRAPH.JUSTIFY
-            )
-            
-            # Parágrafo 38: Nomes dos assinantes (CENTER)
-            self._substituir_paragrafo_exato(doc, 38,
-                f"{req1.get('nome', 'XXXXXX')}\t\t\t\t{req2.get('nome', 'XXXXXX')}",
-                WD_ALIGN_PARAGRAPH.CENTER
-            )
-            
-            # Parágrafo 39: CPFs dos assinantes (CENTER)
-            self._substituir_paragrafo_exato(doc, 39,
-                f"CPF:{req1.get('cpf', 'XXXXXX')}\t\t\t\tCPF: {req2.get('cpf', 'XXXXXX')}",
-                WD_ALIGN_PARAGRAPH.CENTER
-            )
-            
-            # Parágrafo 45: Técnico (CENTER)
-            self._substituir_paragrafo_exato(doc, 45,
-                f"Régis Campo da Silva",
-                WD_ALIGN_PARAGRAPH.CENTER
-            )
-            
-            # Parágrafo 46: CFTA (CENTER)
-            self._substituir_paragrafo_exato(doc, 46,
-                f"CFTA:{imovel.get('cfta_tecnico', 'XXXXXX')}",
-                WD_ALIGN_PARAGRAPH.CENTER
-            )
+            substituicoes = {
+                # Cabeçalho
+                "COMARCA DE (XXXXXXX)": f"COMARCA DE {dados.get('comarca', 'XXXXXXX')}",
 
-            self._atualizar_progresso(2, "Ajustando formatação...", 85)
-            
-            # Ajuste final de fonte
-            self._ajustar_fonte_arial(doc)
+                # Requerente 1 - PLACEHOLDERS ÚNICOS
+                "XXXXXX, proprietário": f"{req1.get('nome', 'XXXXXX')}, proprietário",
+                "XXXXX lavrador": f"{req1.get('profissao', 'XXXXX')} lavrador" if 'lavrador' in req1.get('profissao', '').lower() else f"{req1.get('profissao', 'XXXXX')}",
+                "C.I. n°. (NUMERO DA IDENTIDADE)": f"C.I. n°. {req1.get('rg', 'NUMERO DA IDENTIDADE')}",
+                "CPF/MF n°. XXXXXXX": f"CPF/MF n°. {req1.get('cpf', 'XXXXXXX')}",
 
-            self._atualizar_progresso(2, "Salvando documento...", 95)
+                # Requerente 2 - PLACEHOLDERS ÚNICOS
+                "e sua esposa (XXXXXX)": f"e sua esposa {req2.get('nome', 'XXXXXX')}",
+                "C.I. n° (XXXXX)": f"C.I. n° {req2.get('rg', 'XXXXX')}",
+                "CPF/MF n°. (XXXXXX)": f"CPF/MF n°. {req2.get('cpf', 'XXXXXX')}",
+                "regime de (XXXXXX)": f"regime de {req2.get('regime_bens', 'XXXXXX')}",
+
+                # Endereço
+                "córrego (XXXXX)": f"córrego {req1.get('endereco_corrego', 'XXXXX')}",
+
+                # Imóvel - PLACEHOLDERS ÚNICOS
+                "Sitio (XXXXX)": f"Sítio {imovel.get('nome', 'XXXXX')}",
+                "área de (XXXXXX há)": f"área de {imovel.get('area_registrada', 'XXXXXX')} ha",
+                "(XXXXXX-ES)": f"{dados.get('municipio_cliente', 'XXXXXX')}-ES",
+                "(XXXXXXX – ES)": f"{imovel.get('comarca_imovel', 'XXXXXXX')} – ES",
+                "matrícula (XXXXXX)": f"matrícula {imovel.get('matricula', 'XXXXXX')}",
+                "área de (XXXXX há)": f"área de {imovel.get('area_encontrada', 'XXXXX')} ha",
+                "Código INCRA (XXX.XXX.XXX.XXX-X)": f"Código INCRA {imovel.get('codigo_incra', 'XXX.XXX.XXX.XXX-X')}",
+                "TRT (BRXXXXXXX)": f"TRT {imovel.get('trt_numero', 'BRXXXXXXX')}",
+                "área de Estrada Municipal de (XXXXXX) m²": f"área de Estrada Municipal de {imovel.get('area_estrada', '0,00')} m²",
+                "R$ XX0.000,00": f"R$ {imovel.get('valor_fiscal', '0,00')}",
+
+                # Data
+                "(XX de XXX de XXXX)": data_formatada,
+
+                # Assinantes - PLACEHOLDERS ÚNICOS
+                "(XXXXXX)": req1.get('nome', 'XXXXXX'),
+                "(XXXXXXXX)": req2.get('nome', 'XXXXXXXX'),
+                "CPF: (XXXXXX)": f"CPF: {req1.get('cpf', 'XXXXXX')}",
+                "CPF: (XXXXXXXX)": f"CPF: {req2.get('cpf', 'XXXXXXXX')}",
+            }
+
+            # Aplicar substituições
+            for p in doc.paragraphs:
+                for key, val in substituicoes.items():
+                    if key in p.text:
+                        p.text = p.text.replace(key, str(val))
             
-            buffer = io.BytesIO()
-            doc.save(buffer)
-            buffer.seek(0)
-            
-            self._atualizar_progresso(2, "Documento gerado com sucesso!", 100)
-            logger.info("✅ Documento gerado com sucesso")
-            return buffer
-            
+            # Aplicar em tabelas
+            for table in doc.tables:
+                for row in table.rows:
+                    for cell in row.cells:
+                        for p in cell.paragraphs:
+                            for key, val in substituicoes.items():
+                                if key in p.text:
+                                    p.text = p.text.replace(key, str(val))
+
+            # Salvar em BytesIO
+            output = io.BytesIO()
+            doc.save(output)
+            output.seek(0)
+            return output.getvalue()
+
         except Exception as e:
             logger.error(f"Erro ao gerar documento: {e}")
-            raise e
-
-    def _substituir_paragrafo_exato(self, doc, indice_paragrafo: int, novo_texto: str, alinhamento=None):
-        """Substitui o conteúdo exato de um parágrafo com alinhamento opcional."""
-        if indice_paragrafo < len(doc.paragraphs):
-            paragrafo = doc.paragraphs[indice_paragrafo]
-            # Limpar o parágrafo
-            for run in paragrafo.runs:
-                run.text = ""
-            # Adicionar novo texto
-            paragrafo.text = novo_texto
-            # Aplicar alinhamento se especificado
-            if alinhamento is not None:
-                paragrafo.alignment = alinhamento
-
-    def _ajustar_fonte_arial(self, doc):
-        """Ajusta a fonte de todo o documento para Arial."""
-        for paragraph in doc.paragraphs:
-            for run in paragraph.runs:
-                run.font.name = 'Arial'
-                run.font.size = Pt(11)
-        for table in doc.tables:
-            for row in table.rows:
-                for cell in row.cells:
-                    for paragraph in cell.paragraphs:
-                        for run in paragraph.runs:
-                            run.font.name = 'Arial'
-                            run.font.size = Pt(11)
+            raise Exception(f"Falha ao gerar documento: {str(e)}")
