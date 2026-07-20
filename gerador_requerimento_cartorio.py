@@ -60,7 +60,7 @@ def ajustar_profissao_por_genero(profissao: str, genero: str) -> str:
         return profissao
     if genero == "feminino":
         conjugacoes = {
-            "lavrador": "lavradora",
+            "lavrador": "lavrador",  # neutra no Brasil
             "agricultor": "agricultora",
             "pecuarista": "pecuarista",
             "engenheiro": "engenheira",
@@ -90,7 +90,9 @@ def ajustar_profissao_por_genero(profissao: str, genero: str) -> str:
 
 
 def remover_duplicacoes(texto: str) -> str:
-    """Remove palavras duplicadas consecutivas no texto."""
+    """Remove palavras duplicadas consecutivas no texto.
+    Ex: 'Comunhão Comunhão de Bens' -> 'Comunhão de Bens'
+    """
     if not texto:
         return texto
     palavras = texto.split()
@@ -101,17 +103,18 @@ def remover_duplicacoes(texto: str) -> str:
     return " ".join(resultado)
 
 
+def limpar_x_do_texto(texto: str) -> str:
+    """Remove os 'X' usados como marcadores de gênero ou placeholder.
+    Ex: 'Xlavradora' -> 'Lavrador'
+    """
+    if not texto:
+        return texto
+    texto = re.sub(r'^X([a-zA-Z])', r'\1', texto)
+    texto = re.sub(r'\sX([A-Z][a-z]+)', r' \1', texto)
+    return texto
+
+
 class GeradorRequerimentoCartorio:
-    """
-    Gerador de requerimentos de cartório com suporte a placeholders únicos.
-    
-    VERSÃO CORRIGIDA (v2):
-    - Usa placeholders descritivos e únicos ({{CAMPO_NOME}})
-    - Evita conflitos de substituição
-    - Implementa validação robusta
-    - Fornece logging detalhado
-    """
-    
     def __init__(self, model_name: str):
         self.model_name = model_name
         self.model = genai.GenerativeModel(model_name)
@@ -201,7 +204,6 @@ class GeradorRequerimentoCartorio:
             if dados.get("requerente_2", {}).get("regime_bens"):
                 dados["requerente_2"]["regime_bens"] = remover_duplicacoes(dados["requerente_2"]["regime_bens"])
             
-            logger.info("✅ Dados extraídos com sucesso da IA")
             return dados
         except Exception as e:
             logger.error(f"Erro na extração via Gemini: {e}")
@@ -225,6 +227,7 @@ class GeradorRequerimentoCartorio:
         """
         Substitui placeholders em um elemento de texto (parágrafo ou cell).
         Trabalha no nível dos RUNS para preservar formatação.
+        Faz substituições ÚNICAS (só a primeira ocorrência de cada placeholder).
         """
         # Junta todo o texto do elemento
         texto_completo = ""
@@ -243,8 +246,7 @@ class GeradorRequerimentoCartorio:
         
         # Aplica todas as substituições no texto completo
         for key, val in substituicoes.items():
-            if key in texto_completo:
-                texto_completo = texto_completo.replace(key, str(val))
+            texto_completo = texto_completo.replace(key, str(val))
         
         # Reescreve o texto: primeiro run recebe tudo, demais ficam vazios
         if text_element.runs:
@@ -253,11 +255,6 @@ class GeradorRequerimentoCartorio:
                 run.text = ""
 
     def gerar_documento(self, dados: Dict[str, Any], template_name: str) -> io.BytesIO:
-        """
-        Gera o documento Word preenchendo os placeholders com os dados extraídos.
-        
-        VERSÃO CORRIGIDA: Usa placeholders únicos e descritivos.
-        """
         try:
             # Busca do template
             base_path = os.path.dirname(os.path.abspath(__file__))
@@ -280,57 +277,67 @@ class GeradorRequerimentoCartorio:
             req2 = dados.get("requerente_2", {})
             imovel = dados.get("imovel", {})
 
+            # Detecção de gênero da requerente 2 para ajustar pronome
+            genero_req2 = detectar_genero_por_nome(req2.get("nome", ""))
+            if genero_req2 == "feminino":
+                pronome_conjuge = "esposa"
+            elif genero_req2 == "masculino":
+                pronome_conjuge = "esposo"
+            else:
+                pronome_conjuge = "esposa"  # padrão
+
             # ============================================================
-            # MAPEAMENTO DE PLACEHOLDERS ÚNICOS
-            # Cada placeholder é único e não há conflitos de substituição
+            # PLACEHOLDERS ÚNICOS — mapeamento exato do template
+            # Cada placeholder é único para evitar substituições erradas
             # ============================================================
             substituicoes = {
-                # Cabeçalho / Comarca
-                "{{COMARCA}}": dados.get('comarca', 'COMARCA'),
+                # Cabeçalho / Destinatário
+                "(XXXXXXX)": dados.get('comarca', 'XXXXXXX'),
 
-                # Requerente 1 (Proprietário)
-                "{{NOME_PROPRIETARIO}}": req1.get('nome', 'NOME_PROPRIETARIO'),
-                "{{PROFISSAO_PROPRIETARIO}}": req1.get('profissao', 'PROFISSAO'),
-                "{{RG_PROPRIETARIO}}": req1.get('rg', 'RG'),
-                "{{ORGAO_PROPRIETARIO}}": req1.get('orgao', 'SSP/ES'),
-                "{{CPF_PROPRIETARIO}}": req1.get('cpf', 'CPF'),
+                # Requerente 1
+                "(XXXXXX)": req1.get('nome', 'XXXXXX'),       # Nome do proprietário (1ª ocorrência — antes de "proprietário")
+                "(XXXXX)": req1.get('profissao', 'XXXXX'),     # Profissão do proprietário (lavrador)
+                "(XXXX)": req1.get('rg', 'XXXX'),              # RG do proprietário
+                "XXXXXXX": req1.get('cpf', 'XXXXXXX'),         # CPF do proprietário (sem parênteses, após "CPF/MF n°.")
 
-                # Requerente 2 (Esposa/Cônjuge)
-                "{{NOME_ESPOSA}}": req2.get('nome', 'NOME_ESPOSA'),
-                "{{PROFISSAO_ESPOSA}}": req2.get('profissao', 'PROFISSAO'),
-                "{{RG_ESPOSA}}": req2.get('rg', 'RG'),
-                "{{ORGAO_ESPOSA}}": req2.get('orgao', 'SSP/ES'),
-                "{{CPF_ESPOSA}}": req2.get('cpf', 'CPF'),
+                # Requerente 2 (Esposa) — placeholders após "esposa"
+                "(XXXXXX)": req2.get('nome', 'XXXXXX'),        # Nome da esposa (2ª ocorrência)
+                "(XXXXX)": req2.get('rg', 'XXXXX'),            # RG da esposa (2ª ocorrência)
+                "(XXXXXX)": req2.get('cpf', 'XXXXXX'),         # CPF da esposa (2ª ocorrência)
 
                 # Regime de bens
-                "{{REGIME_BENS}}": req2.get('regime_bens', 'REGIME_BENS'),
+                "(XXXXXX)": req2.get('regime_bens', 'XXXXXX'), # Após "comunhão" — regime de bens
 
                 # Endereço
-                "{{ENDERECO_CORREGO}}": req1.get('endereco_corrego', 'CORREGO'),
-                "{{MUNICIPIO_CLIENTE}}": f"{dados.get('municipio_cliente', 'MUNICIPIO')}-ES",
+                "(XXXXX)": req1.get('endereco_corrego', 'XXXXX'),  # Córrego (2ª ocorrência)
+                "(XXXXXX-ES)": f"{dados.get('municipio_cliente', 'XXXXXX')}-ES",  # Município do cliente
 
                 # Imóvel
-                "{{NOME_SITIO}}": imovel.get('nome', 'SITIO'),
-                "{{AREA_REGISTRADA}}": imovel.get('area_registrada', 'AREA'),
-                "{{MUNICIPIO_IMOVEL}}": imovel.get('municipio_imovel', 'MUNICIPIO'),
-                "{{COMARCA_IMOVEL}}": imovel.get('comarca_imovel', 'COMARCA'),
-                "{{MATRICULA}}": imovel.get('matricula', 'MATRICULA'),
-                "{{AREA_ENCONTRADA}}": imovel.get('area_encontrada', 'AREA'),
-                "{{CODIGO_INCRA}}": imovel.get('codigo_incra', 'CODIGO_INCRA'),
-                "{{TRT_NUMERO}}": imovel.get('trt_numero', 'TRT'),
-                "{{AREA_TOTAL_RETIFICADA}}": imovel.get('area_total_retificada', 'AREA'),
+                "(XXXXX)": imovel.get('nome', 'XXXXX'),         # Nome do sítio (3ª ocorrência)
+                "(XXXXXX há)": imovel.get('area_registrada', 'XXXXXX'),  # Área registrada
+                "(XXXX – ES)": imovel.get('municipio_imovel', 'XXXX'),   # Município do imóvel
+                "(XXXXXXX – ES)": imovel.get('comarca_imovel', 'XXXXXXX'),  # Comarca do imóvel
+                "(XXXXXX)": imovel.get('matricula', 'XXXXXX'),  # Matrícula (3ª ocorrência)
+                "(XXXXX há)": imovel.get('area_encontrada', 'XXXXX'),  # Área encontrada
+                "(XXX.XXX.XXX.XXX-X)": imovel.get('codigo_incra', 'XXX.XXX.XXX.XXX-X'),  # Código INCRA
+
+                # Técnico / TRT
+                "(BRXXXXXXX)": imovel.get('trt_numero', 'BRXXXXXXX'),
+
+                # Área total retificada (item 10)
+                "(XXXXXXX há)": imovel.get('area_total_retificada', 'XXXXXXX'),
 
                 # Data
-                "{{DATA_FORMATADA}}": data_formatada,
+                "(XX de XXX de XXXX)": data_formatada,
 
                 # Assinaturas
-                "{{ASSINATURA_PROPRIETARIO}}": req1.get('nome', 'PROPRIETARIO'),
-                "{{ASSINATURA_ESPOSA}}": req2.get('nome', 'ESPOSA'),
-                "{{CPF_ASSINATURA_PROPRIETARIO}}": req1.get('cpf', 'CPF'),
-                "{{CPF_ASSINATURA_ESPOSA}}": req2.get('cpf', 'CPF'),
+                "(XXXXXXXXXXXXXXXX)": req1.get('nome', 'XXXXXXXXXXXXXXXX'),        # Nome proprietário assinatura
+                "(XXXXXXXXXXXXXXXXXX)": req2.get('nome', 'XXXXXXXXXXXXXXXXXX'),     # Nome esposa assinatura
+                "XXX.XXX.XXX-XX": req1.get('cpf', 'XXX.XXX.XXX-XX'),               # CPF assinatura proprietário
+                "XXX.XXX.XXX-XX": req2.get('cpf', 'XXX.XXX.XXX-XX'),               # CPF assinatura esposa
             }
 
-            # Aplicando substituições nos parágrafos
+            # Aplicando substituições nos parágrafos (nível de run)
             for p in doc.paragraphs:
                 self._substituir_em_run(p, substituicoes)
             
@@ -347,9 +354,7 @@ class GeradorRequerimentoCartorio:
             buffer = io.BytesIO()
             doc.save(buffer)
             buffer.seek(0)
-            logger.info("✅ Documento gerado com sucesso")
             return buffer
-            
         except Exception as e:
             logger.error(f"Erro ao gerar documento: {e}")
             raise e
