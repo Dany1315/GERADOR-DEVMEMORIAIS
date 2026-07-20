@@ -438,9 +438,8 @@ def main():
                         dados_extraidos = gerador_req.extrair_dados_documentos(todas_imagens)
                         
                         status.update(label="Preenchendo modelo de requerimento Word...")
-                        template_path = "/home/ubuntu/upload/-REQUERIMENTODECARTORIO.docx"
-                        # Nota: Em produção, garanta que o caminho do template esteja correto
-                        arquivo_word = gerador_req.gerar_documento(dados_extraidos, template_path)
+                        template_name = "-REQUERIMENTODECARTORIO.docx"
+                        arquivo_word = gerador_req.gerar_documento(dados_extraidos, template_name)
                         
                         status.update(label="Requerimento gerado com sucesso!", state="complete")
                         
