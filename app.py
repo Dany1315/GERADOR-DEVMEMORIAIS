@@ -6,6 +6,7 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 import json
 
+from PIL import Image
 import streamlit as st
 import pandas as pd
 import google.generativeai as genai
@@ -54,9 +55,10 @@ def is_pdf(arquivo) -> bool:
     return extensao in EXTENSOES_PDF
 
 
-def carregar_imagem_direta(arquivo) -> bytes:
-    """Lê o conteúdo bruto de uma imagem (PNG/JPG/JPEG) já como bytes para envio ao Gemini."""
-    return arquivo.getvalue()
+def carregar_imagem_direta(arquivo) -> Image.Image:
+    """Lê o conteúdo de uma imagem (PNG/JPG/JPEG) e retorna um objeto PIL.Image.Image para envio ao Gemini."""
+    img_bytes = arquivo.getvalue()
+    return Image.open(io.BytesIO(img_bytes))
 
 
 def configurar_gemini() -> bool:
@@ -235,8 +237,8 @@ def main():
                         if pdf_planta:
                             if is_imagem(pdf_planta):
                                 status.update(label=f"Carregando imagem da planta: {pdf_planta.name}...")
-                                img_bytes = carregar_imagem_direta(pdf_planta)
-                                imagens_planta.append(img_bytes)
+                                img_pil = carregar_imagem_direta(pdf_planta)
+                                imagens_planta.append(img_pil)
                             else:
                                 status.update(label="Convertendo páginas da planta em matrizes gráficas...")
                                 imagens_planta = processador.pdf_para_imagens(pdf_planta, dpi=dpi_conversao)
@@ -245,8 +247,8 @@ def main():
                         if pdf_roteiro:
                             if is_imagem(pdf_roteiro):
                                 status.update(label=f"Carregando imagem do roteiro: {pdf_roteiro.name}...")
-                                img_bytes = carregar_imagem_direta(pdf_roteiro)
-                                imagens_roteiro.append(img_bytes)
+                                img_pil = carregar_imagem_direta(pdf_roteiro)
+                                imagens_roteiro.append(img_pil)
                             else:
                                 status.update(label="Vetorizando dados do roteiro perimétrico...")
                                 imagens_roteiro = processador.pdf_para_imagens(pdf_roteiro, dpi=dpi_conversao)
@@ -494,11 +496,11 @@ def main():
                         todas_imagens = []
                         for doc in documentos_pdf:
                             if is_imagem(doc):
-                                # Imagem já está pronta para envio à IA
-                                img_bytes = carregar_imagem_direta(doc)
-                                todas_imagens.append(img_bytes)
+                                # Converte bytes para PIL.Image.Image para envio ao Gemini
+                                img_pil = carregar_imagem_direta(doc)
+                                todas_imagens.append(img_pil)
                             else:
-                                # PDF: converter em imagens
+                                # PDF: converter em imagens (PIL.Image)
                                 imagens = processador_base.pdf_para_imagens(doc, dpi=200)
                                 todas_imagens.extend(imagens)
                         
