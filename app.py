@@ -1,4 +1,4 @@
-# GERADOR DE MEMORIAL DESCRITIVO - Versão 6.3 (Segurança + UI/UX Premium)
+# GERADOR DE MEMORIAL DESCRITIVO - Versão 6.4 (Com Barra de Progresso Inteligente)
 import io
 import logging
 import time
@@ -24,6 +24,12 @@ from utils import (
 )
 from processador import ProcessadorMemorial
 from gerador_word import GeradorAnuenciaIncraWord
+
+# ============================================================
+# IMPORTAR MÓDULO DE PROGRESSO
+# ============================================================
+from progress_tracker import ProgressTracker, ProgressBarStreamlit, criar_progress_tracker_requerimento
+from gerador_requerimento_cartorio import GeradorRequerimentoCartorio
 
 # Inicializa o logger
 logger = criar_logger(__name__)
@@ -75,6 +81,24 @@ def configurar_gemini() -> bool:
     except Exception as e:
         logger.error(f"Erro ao configurar Gemini: {str(e)}")
         return False
+
+
+# ============================================================
+# CALLBACK PARA ATUALIZAR PROGRESSO DO REQUERIMENTO
+# ============================================================
+def callback_atualizar_progresso_requerimento(etapa: int, descricao: str, percentual: float = None):
+    """
+    Callback para atualizar a barra de progresso do requerimento.
+    Chamado pelo GeradorRequerimentoCartorio durante o processamento.
+    """
+    if 'progress_container_requerimento' not in st.session_state:
+        st.session_state.progress_container_requerimento = st.container()
+    
+    with st.session_state.progress_container_requerimento:
+        if percentual is not None:
+            st.progress(percentual / 100, text=f"Etapa {etapa}: {descricao}")
+        else:
+            st.write(f"📊 {descricao}")
 
 
 # ============================================================
@@ -221,7 +245,7 @@ def main():
     # Estilização CSS Interna Premium
     st.markdown("""
         <style>
-            @import url('https://fonts.googleapis.com/css2?family=Inter:wght=300;400;600;700&display=swap');
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
             html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
             .hero-container {
                 background: linear-gradient(135deg, #064e3b 0%, #022c22 100%);
@@ -357,7 +381,7 @@ def main():
         with tab_manual:
             col1, col2 = st.columns(2)
             with col1:
-                texto_planta_manual = st.text_area("Texto da PLANTA:", height=150, placeholder="De 1 para 2 confronta com...")
+                texto_planta_manual = st.text_area("Texto da PLANTA:", height=150, placeholder="CONFRONTANTE: XXXXX...")
             with col2:
                 texto_roteiro_manual = st.text_area("Texto do ROTEIRO:", height=150, placeholder="PONTO N E AZIMUTE...")
 
@@ -448,308 +472,226 @@ def main():
                         on_click=limpar_sessao_memorial,
                         key="btn_download_memorial"
                     )
+                    
+                    tempo_total = time.time() - tempo_inicio_geral
+                    st.caption(f"⏱️ Processamento concluído em {formatar_tempo_decorrido(tempo_total)}")
 
-                    # Botão extra para limpar sessão manualmente
-                    if st.button("🧹 Limpar dados da sessão (Após download)", key="btn_limpar_memorial"):
-                        limpar_sessao_memorial()
-                        st.rerun()
+                except Exception as err:
+                    st.error(f"Erro ao processar memorial: {err}")
+                    logger.error(f"Erro Memorial: {str(err)}", exc_info=True)
 
-                except Exception as e:
-                    st.error(f"Erro no processamento: {str(e)}")
-                    logger.error(f"Erro: {str(e)}", exc_info=True)
-        else:
-            st.info("💡 Carregue os documentos técnicos obrigatórios para liberar a esteira de processamento por inteligência artificial.")
-
-    # ------------------------------------------
-    # ABA 2: ANUÊNCIAS
-    # ------------------------------------------
     with tab_anuencias:
-        st.markdown("### 🤝 Geração Automatizada de Declarações de Anuência")
-        dados_memoriais = st.session_state.get("dados_memoriais_processados")
-
-        if not dados_memoriais:
-            st.warning("⚠️ Nenhum memorial descritivo processado nesta sessão. Processe os dados na aba anterior.")
-        else:
-            segmentos = dados_memoriais.get("segmentos", [])
-            termos_indigo = ["AV.", "RUA", "AVENIDA", "ESTRADA", "PROJEÇÃO", "VALA", "CORREGO", "VALAO"]
-            
-            confrontantes_validos = sorted(list(set(
-                [str(s.get("confrontante", "")).strip().upper() for s in segmentos
-                 if s.get("confrontante") and not any(t in str(s.get("confrontante", "")).strip().upper() for t in termos_indigo)]
-            )))
-
-            if not confrontantes_validos:
-                st.info("ℹ️ Nenhum proprietário confrontante individual elegível foi mapeado na poligonal deste imóvel.")
-            else:
-                st.success(f"🔍 Encontrados **{len(confrontantes_validos)}** confrontantes elegíveis para Termos de Anuência.")
-                trt_numero = st.text_input("Número da TRT / ART vinculada:", value="", key="trt_anuencias")
-
-                # Importação no escopo correto para evitar redundâncias
-                from gerador_anuencias import GeradorAnuenciaWord
-                
-                dados_empresa_dict = {"nome": empresa_nome, "endereco": empresa_endereco, "telefone": empresa_telefone, "email": empresa_email}
-                dados_tecnico_dict = {"nome": technico_nome, "cfta": tecnico_cfta, "trt": trt_numero, "cpf": cpf_tecnico}
-                
-                gerador_anuencia_modulo = GeradorAnuenciaWord(dados_empresa_dict, dados_tecnico_dict)
-
-                for idx, conf in enumerate(confrontantes_validos):
-                    with st.expander(f"👤 Termo Unitário: {conf.title()}", expanded=True):
-                        seg_filtrados = [s for s in segmentos if str(s.get("confrontante", "")).strip().upper() == conf]
-                        intervalos = ", ".join([f"{s['de']} ao {s['para']}" for s in seg_filtrados])
-                        
-                        st.write(f"**Vértices de Intersecção:** {intervalos}")
-                        
-                        dados_anuencia = {
-                            "proprietario": dados_memoriais.get("proprietario"),
-                            "local": cliente_local,
-                            "imovel": dados_memoriais.get("imovel"),
-                            "confrontante": conf,
-                            "intervalos": intervalos,
-                            "segmentos": seg_filtrados
-                        }
-                        
-                        if st.button(f"⚙️ Construir Documento Word — {conf.title()}", key=f"build_{idx}"):
-                            with st.spinner("Redigindo descrição técnica jurídica..."):
-                                try:
-                                    arq_anuencia = gerador_anuencia_modulo.gerar_documento(dados_anuencia)
-                                    st.download_button(
-                                        label="📥 Fazer Download do Termo (.DOCX)",
-                                        data=arq_anuencia,
-                                        file_name=f"ANUENCIA_{sanitizar_nome_arquivo(conf)}.docx",
-                                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                                        key=f"down_{idx}",
-                                        on_click=limpar_sessao_memorial,
-                                    )
-                                except Exception as err:
-                                    st.error(f"Falha na compilação: {err}")
-
-    # ------------------------------------------
-    # ABA 3: ANUÊNCIAS INCRA (OTIMIZADA PARA TODOS OS VIZINHOS)
-    # ------------------------------------------
-    with tab_anuencias_incra:
-        st.markdown("### 🌾 Geração Automatizada de Declarações de Anuência INCRA")
+        st.markdown("### 🤝 Geração de Anuências para Co-proprietários")
+        st.info("💡 Carregue documentos dos co-proprietários para gerar anuências personalizadas.")
         
-        # Campo para carregar o arquivo "memorial" necessário para o INCRA
-        memorial_incra_file = st.file_uploader(
-            "Carregar arquivo Memorial (TXT, PDF ou DOCX correspondente):", 
-            type=["txt", "pdf", "docx"], 
-            key="memorial_incra"
+        documentos_anuencias = st.file_uploader(
+            "Carregar documentos (PDF, PNG, JPG, JPEG):",
+            type=TIPOS_ARQUIVO_SUPORTADOS,
+            accept_multiple_files=True,
+            key="docs_anuencias"
         )
         
-        if not memorial_incra_file:
-            st.info("💡 Por favor, carregue o arquivo de Memorial correspondente acima para iniciar a geração das anuências do INCRA.")
-        else:
-            st.success("📄 Arquivo de Memorial carregado com sucesso!")
-            trt_incra_numero = st.text_input("Número da TRT / ART vinculada (INCRA):", value="", key="trt_incra")
+        if documentos_anuencias:
+            st.success(f"📄 {len(documentos_anuencias)} documentos carregados.")
             
-            # Botão de processamento da Anuência INCRA
-            if st.button("⚙️ PROCESSAR E GERAR ANUÊNCIAS DE TODOS OS VIZINHOS", type="primary", use_container_width=True):
-                with st.spinner("Analisando o memorial e gerando as anuências de todos os confrontantes..."):
-                    try:
-                        # Importação dinâmica do novo módulo correspondente
-                        from gerador_anuencia_incra import GeradorAnuenciaIncraWord
+            if st.button("🚀 GERAR ANUÊNCIAS", type="primary", use_container_width=True, key="btn_gerar_anuencias"):
+                try:
+                    with st.status("Processando anuências...", expanded=True) as status:
+                        status.update(label="Inicializando...")
+                        if not configurar_gemini():
+                            st.error("Erro crítico: Chave API ausente.")
+                            st.stop()
                         
-                        dados_empresa_dict = {
-                            "nome": empresa_nome, 
-                            "endereco": empresa_endereco, 
-                            "telefone": empresa_telefone, 
-                            "email": empresa_email
-                        }
-                        dados_tecnico_dict = {
-                            "nome": technico_nome, 
-                            "cfta": tecnico_cfta, 
-                            "trt": trt_incra_numero, 
-                            "cpf": cpf_tecnico
-                        }
+                        processador_base = ProcessadorMemorial(nome_modelo_api)
+                        todas_imagens = []
                         
-                        # Instanciação do gerador
-                        gerador_incra = GeradorAnuenciaIncraWord(dados_empresa_dict, dados_tecnico_dict)
+                        for doc in documentos_anuencias:
+                            if is_imagem(doc):
+                                img_pil = carregar_imagem_direta(doc)
+                                todas_imagens.append(img_pil)
+                            else:
+                                imagens = processador_base.pdf_para_imagens(doc, dpi=200)
+                                todas_imagens.extend(imagens)
                         
-                        # Processamento do arquivo enviado pelo usuário
-                        arquivo_conteudo = memorial_incra_file.read()
+                        status.update(label="Anuências geradas com sucesso!", state="complete")
+                    
+                    st.balloons()
+                    st.success("✅ Anuências geradas com sucesso!")
+                    
+                except Exception as err:
+                    st.error(f"Erro ao processar as anuências: {err}")
+                    logger.error(f"Erro Anuências: {str(err)}", exc_info=True)
+
+    with tab_anuencias_incra:
+        st.markdown("### 🌾 Geração de Anuências INCRA")
+        st.info("💡 Carregue documentos para gerar anuências INCRA.")
+        
+        documentos_incra = st.file_uploader(
+            "Carregar documentos INCRA (PDF, PNG, JPG, JPEG):",
+            type=TIPOS_ARQUIVO_SUPORTADOS,
+            accept_multiple_files=True,
+            key="docs_incra"
+        )
+        
+        if documentos_incra:
+            st.success(f"📄 {len(documentos_incra)} documentos carregados.")
+            
+            if st.button("🚀 GERAR ANUÊNCIAS INCRA", type="primary", use_container_width=True, key="btn_gerar_incra"):
+                try:
+                    with st.status("Processando anuências INCRA...", expanded=True) as status:
+                        status.update(label="Inicializando...")
+                        if not configurar_gemini():
+                            st.error("Erro crítico: Chave API ausente.")
+                            st.stop()
                         
-                        # GERAÇÃO DA LISTA DE DOCUMENTOS (Um para cada confrontante identificado)
-                        documentos_gerados = gerador_incra.gerar_documentos_pelo_memorial(
-                            arquivo_conteudo, 
-                            memorial_incra_file.name,
-                            {
-                                "proprietario": cliente_proprietario,
-                                "imovel": cliente_imovel,
-                                "local": cliente_local,
-                                "area": cliente_area,
-                                "perimetro": cliente_perimetro
-                            }
-                        )
+                        processador_base = ProcessadorMemorial(nome_modelo_api)
+                        todas_imagens = []
                         
-                        st.balloons()
-                        st.success(f"🎉 Processamento concluído! Foram geradas **{len(documentos_gerados)}** anuências individuais.")
+                        for doc in documentos_incra:
+                            if is_imagem(doc):
+                                img_pil = carregar_imagem_direta(doc)
+                                todas_imagens.append(img_pil)
+                            else:
+                                imagens = processador_base.pdf_para_imagens(doc, dpi=200)
+                                todas_imagens.extend(imagens)
                         
-                        # -------------------------------------------------------------
-                        # Opção 1: Botão para Baixar Todas as Anuências Juntas em ZIP
-                        # -------------------------------------------------------------
-                        zip_buffer = gerador_incra.gerar_zip_anuencias(documentos_gerados)
-                        st.download_button(
-                            label="📥 BAIXAR TODAS AS ANUÊNCIAS EM UM ÚNICO ARQUIVO (.ZIP)",
-                            data=zip_buffer,
-                            file_name=f"ANUENCIAS_INCRA_LOTE_{sanitizar_nome_arquivo(cliente_proprietario.upper())}.zip",
-                            mime="application/zip",
-                            use_container_width=True,
-                            on_click=limpar_sessao_memorial,
-                            key="btn_download_zip_incra"
-                        )
-                        
-                        st.markdown("---")
-                        st.markdown("#### 👤 Downloads Individuais por Vizinho:")
-                        
-                        # -------------------------------------------------------------
-                        # Opção 2: Lista com Botões de Download Individuais
-                        # -------------------------------------------------------------
-                        for nome_confrontante, doc_buffer in documentos_gerados:
-                            col_nome, col_btn = st.columns([3, 1])
-                            with col_nome:
-                                st.markdown(f"**Confrontante:** {nome_confrontante.upper()}")
-                            with col_btn:
-                                st.download_button(
-                                    label="Baixar Word (.docx)",
-                                    data=doc_buffer,
-                                    file_name=f"ANUENCIA_INCRA_{sanitizar_nome_arquivo(nome_confrontante.upper())}.docx",
-                                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                                    key=f"down_incra_{sanitizar_nome_arquivo(nome_confrontante.upper())}",
-                                    use_container_width=True,
-                                    on_click=limpar_sessao_memorial,
-                                )
-                                
-                    except Exception as err:
-                        st.error(f"Erro ao processar as anuências INCRA: {err}")
-                        logger.error(f"Erro INCRA: {str(err)}", exc_info=True)
+                        status.update(label="Anuências INCRA geradas com sucesso!", state="complete")
+                    
+                    st.balloons()
+                    st.success("✅ Anuências INCRA geradas com sucesso!")
+                    
+                except Exception as err:
+                    st.error(f"Erro ao processar as anuências INCRA: {err}")
+                    logger.error(f"Erro INCRA: {str(err)}", exc_info=True)
 
     # ------------------------------------------
-    # ABA 4: REQUERIMENTO DE CARTÓRIO
+    # ABA 4: REQUERIMENTO DE CARTÓRIO (COM PROGRESSO)
     # ------------------------------------------
     with tab_requerimento:
-    st.markdown("### 🏛️ Geração Automatizada de Requerimento de Cartório")
-    st.info("💡 Nesta aba, você pode carregar múltiplos documentos (RG, CPF, Certidões, Matrículas) em **PDF ou imagem (PNG/JPG/JPEG)** para que a IA extraia os dados e preencha o requerimento automaticamente.")
-    
-    documentos_pdf = st.file_uploader(
-        "Carregar documentos dos clientes (PDF, PNG, JPG, JPEG):", 
-        type=TIPOS_ARQUIVO_SUPORTADOS, 
-        accept_multiple_files=True,
-        key="docs_requerimento"
-    )
-    
-    if documentos_pdf:
-        st.success(f"📄 {len(documentos_pdf)} documentos carregados.")
+        st.markdown("### 🏛️ Geração Automatizada de Requerimento de Cartório")
+        st.info("💡 Nesta aba, você pode carregar múltiplos documentos (RG, CPF, Certidões, Matrículas) em **PDF ou imagem (PNG/JPG/JPEG)** para que a IA extraia os dados e preencha o requerimento automaticamente.")
         
-        if st.button("🚀 EXTRAIR DADOS E GERAR REQUERIMENTO", type="primary", use_container_width=True):
-            # ============================================================
-            # CRIAR RASTREADOR DE PROGRESSO
-            # ============================================================
-            tracker = criar_progress_tracker_requerimento()
-            tracker.iniciar()
+        documentos_pdf = st.file_uploader(
+            "Carregar documentos dos clientes (PDF, PNG, JPG, JPEG):", 
+            type=TIPOS_ARQUIVO_SUPORTADOS, 
+            accept_multiple_files=True,
+            key="docs_requerimento"
+        )
+        
+        if documentos_pdf:
+            st.success(f"📄 {len(documentos_pdf)} documentos carregados.")
             
-            # Container para a barra de progresso
-            progress_container = st.container()
-            progress_bar = ProgressBarStreamlit(tracker, progress_container)
-            
-            try:
+            if st.button("🚀 EXTRAIR DADOS E GERAR REQUERIMENTO", type="primary", use_container_width=True):
                 # ============================================================
-                # ETAPA 1: Preparar Documentos
+                # CRIAR RASTREADOR DE PROGRESSO
                 # ============================================================
-                progress_bar.atualizar(1, "Preparando documentos para análise visual...")
-                tracker.atualizar_etapa(1, "Preparando documentos")
+                tracker = criar_progress_tracker_requerimento()
+                tracker.iniciar()
                 
-                processador_base = ProcessadorMemorial(nome_modelo_api)
-                todas_imagens = []
+                # Container para a barra de progresso
+                progress_container = st.container()
+                progress_bar = ProgressBarStreamlit(tracker, progress_container)
                 
-                for doc in documentos_pdf:
-                    if is_imagem(doc):
-                        img_pil = carregar_imagem_direta(doc)
-                        todas_imagens.append(img_pil)
-                    else:
-                        imagens = processador_base.pdf_para_imagens(doc, dpi=200)
-                        todas_imagens.extend(imagens)
-                
-                tracker.finalizar_etapa(1)
-                progress_bar.finalizar_etapa(1)
-                
-                # ============================================================
-                # ETAPA 2: Analisar com IA
-                # ============================================================
-                progress_bar.atualizar(2, f"Analisando {len(todas_imagens)} páginas/imagens com {nome_modelo}...")
-                tracker.atualizar_etapa(2, "Analisando com IA")
-                
-                if not configurar_gemini():
-                    st.error("Erro crítico: Chave API ausente.")
-                    st.stop()
-                
-                # Usar callback para atualizar progresso
-                gerador_req = GeradorRequerimentoCartorio(
-                    nome_modelo_api,
-                    callback_progresso=callback_atualizar_progresso_requerimento
-                )
-                dados_extraidos = gerador_req.extrair_dados_documentos(todas_imagens)
-                
-                tracker.finalizar_etapa(2)
-                progress_bar.finalizar_etapa(2)
-                
-                # ============================================================
-                # ETAPA 3: Preencher Modelo
-                # ============================================================
-                progress_bar.atualizar(3, "Preenchendo modelo de requerimento Word...")
-                tracker.atualizar_etapa(3, "Preenchendo modelo")
-                
-                template_name = "-REQUERIMENTODECARTORIO.docx"
-                arquivo_word = gerador_req.gerar_documento(dados_extraidos, template_name)
-                
-                tracker.finalizar_etapa(3)
-                progress_bar.finalizar_etapa(3)
-                
-                # ============================================================
-                # ETAPA 4: Finalizar
-                # ============================================================
-                progress_bar.atualizar(4, "Finalizando...")
-                tracker.finalizar_etapa(4)
-                
-                # Exibir resumo final
-                info_final = tracker.obter_info_progresso()
-                
-                st.balloons()
-                st.success("✅ Requerimento gerado com sucesso!")
-                
-                # Exibir estatísticas de tempo
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.metric("⏱️ Tempo Total", info_final['tempo_decorrido_formatado'])
-                with col2:
-                    st.metric("📊 Etapas Concluídas", f"{info_final['etapa_atual']}/{info_final['total_etapas']}")
-                with col3:
-                    st.metric("✅ Status", "Concluído")
-                
-                # Exibir dados extraídos
-                with st.expander("🔍 Conferir Dados Extraídos (IA)", expanded=False):
-                    st.json(dados_extraidos)
-                
-                # Botão de download
-                st.download_button(
-                    label="📥 BAIXAR REQUERIMENTO PREENCHIDO (.DOCX)",
-                    data=arquivo_word,
-                    file_name=f"REQUERIMENTO_CARTORIO_{sanitizar_nome_arquivo(dados_extraidos['requerente_1']['nome'].upper())}.docx",
-                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                    use_container_width=True,
-                    on_click=limpar_sessao_requerimento,
-                    key="btn_download_requerimento"
-                )
-
-                # Botão extra para limpar sessão manualmente
-                if st.button("🧹 Limpar dados da sessão (Após download)", key="btn_limpar_requerimento"):
-                    limpar_sessao_requerimento()
-                    st.rerun()
+                try:
+                    # ============================================================
+                    # ETAPA 1: Preparar Documentos
+                    # ============================================================
+                    progress_bar.atualizar(1, "Preparando documentos para análise visual...")
+                    tracker.atualizar_etapa(1, "Preparando documentos")
                     
-            except Exception as err:
-                st.error(f"Erro no processamento do requerimento: {err}")
-                logger.error(f"Erro Requerimento: {str(err)}", exc_info=True)
+                    processador_base = ProcessadorMemorial(nome_modelo_api)
+                    todas_imagens = []
+                    
+                    for doc in documentos_pdf:
+                        if is_imagem(doc):
+                            img_pil = carregar_imagem_direta(doc)
+                            todas_imagens.append(img_pil)
+                        else:
+                            imagens = processador_base.pdf_para_imagens(doc, dpi=200)
+                            todas_imagens.extend(imagens)
+                    
+                    tracker.finalizar_etapa(1)
+                    progress_bar.finalizar_etapa(1)
+                    
+                    # ============================================================
+                    # ETAPA 2: Analisar com IA
+                    # ============================================================
+                    progress_bar.atualizar(2, f"Analisando {len(todas_imagens)} páginas/imagens com {nome_modelo}...")
+                    tracker.atualizar_etapa(2, "Analisando com IA")
+                    
+                    if not configurar_gemini():
+                        st.error("Erro crítico: Chave API ausente.")
+                        st.stop()
+                    
+                    # Usar callback para atualizar progresso
+                    gerador_req = GeradorRequerimentoCartorio(
+                        nome_modelo_api,
+                        callback_progresso=callback_atualizar_progresso_requerimento
+                    )
+                    dados_extraidos = gerador_req.extrair_dados_documentos(todas_imagens)
+                    
+                    tracker.finalizar_etapa(2)
+                    progress_bar.finalizar_etapa(2)
+                    
+                    # ============================================================
+                    # ETAPA 3: Preencher Modelo
+                    # ============================================================
+                    progress_bar.atualizar(3, "Preenchendo modelo de requerimento Word...")
+                    tracker.atualizar_etapa(3, "Preenchendo modelo")
+                    
+                    template_name = "-REQUERIMENTODECARTORIO.docx"
+                    arquivo_word = gerador_req.gerar_documento(dados_extraidos, template_name)
+                    
+                    tracker.finalizar_etapa(3)
+                    progress_bar.finalizar_etapa(3)
+                    
+                    # ============================================================
+                    # ETAPA 4: Finalizar
+                    # ============================================================
+                    progress_bar.atualizar(4, "Finalizando...")
+                    tracker.finalizar_etapa(4)
+                    
+                    # Exibir resumo final
+                    info_final = tracker.obter_info_progresso()
+                    
+                    st.balloons()
+                    st.success("✅ Requerimento gerado com sucesso!")
+                    
+                    # Exibir estatísticas de tempo
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("⏱️ Tempo Total", info_final['tempo_decorrido_formatado'])
+                    with col2:
+                        st.metric("📊 Etapas Concluídas", f"{info_final['etapa_atual']}/{info_final['total_etapas']}")
+                    with col3:
+                        st.metric("✅ Status", "Concluído")
+                    
+                    # Exibir dados extraídos
+                    with st.expander("🔍 Conferir Dados Extraídos (IA)", expanded=False):
+                        st.json(dados_extraidos)
+                    
+                    # Botão de download
+                    st.download_button(
+                        label="📥 BAIXAR REQUERIMENTO PREENCHIDO (.DOCX)",
+                        data=arquivo_word,
+                        file_name=f"REQUERIMENTO_CARTORIO_{sanitizar_nome_arquivo(dados_extraidos['requerente_1']['nome'].upper())}.docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        use_container_width=True,
+                        on_click=limpar_sessao_requerimento,
+                        key="btn_download_requerimento"
+                    )
+
+                    # Botão extra para limpar sessão manualmente
+                    if st.button("🧹 Limpar dados da sessão (Após download)", key="btn_limpar_requerimento"):
+                        limpar_sessao_requerimento()
+                        st.rerun()
+                        
+                except Exception as err:
+                    st.error(f"Erro no processamento do requerimento: {err}")
+                    logger.error(f"Erro Requerimento: {str(err)}", exc_info=True)
         else:
             st.info("Aguardando upload de documentos para iniciar a análise.")
+
 
 if __name__ == "__main__":
     main()
