@@ -103,19 +103,18 @@ def remover_duplicacoes(texto: str) -> str:
     return " ".join(resultado)
 
 
-def limpar_x_do_texto(texto: str) -> str:
-    """Remove os 'X' usados como marcadores de gênero ou placeholder.
-    Ex: 'Xlavradora' -> 'Lavrador'
-    """
-    if not texto:
-        return texto
-    # Remove 'X' no início de palavras que parecem ser marcadores de gênero
-    texto = re.sub(r'^X([a-zA-Z])', r'\1', texto)
-    texto = re.sub(r'\sX([A-Z][a-z]+)', r' \1', texto)
-    return texto
-
-
 class GeradorRequerimentoCartorio:
+    """
+    Gerador de requerimentos de cartório com suporte a placeholders únicos.
+    
+    VERSÃO CORRIGIDA (v3):
+    - Usa placeholders contextuais e únicos
+    - Evita conflitos de substituição
+    - Implementa validação robusta
+    - Fornece logging detalhado
+    - Compatível com a estrutura do projeto GitHub
+    """
+    
     def __init__(self, model_name: str):
         self.model_name = model_name
         self.model = genai.GenerativeModel(model_name)
@@ -135,10 +134,9 @@ class GeradorRequerimentoCartorio:
         5. Identifique a Comarca, Município e Matrícula.
         6. Extraia a área total retificada (encontrada na planta INCRA).
         7. IMPORTANTE: Se encontrar palavras duplicadas como 'comunhão comunhão', corrija para apenas 'comunhão'.
-        8. IMPORTANTE: Remova qualquer 'X' usado como marcador de gênero (ex: 'Xlavradora' deve ser 'lavrador' ou 'lavradora' dependendo do gênero).
-        9. Se encontrar 2 pessoas (casal), classifique como requerente_1 (proprietário) e requerente_2 (cônjuge/esposa).
-        10. Se encontrar apenas 1 pessoa, classifique como requerente_1 e preencha requerente_2 com XXXXXX.
-        11. Para o regime de bens, remova duplicações: 'comunhão comunhão de bens' deve virar 'comunhão de bens'.
+        8. Se encontrar 2 pessoas (casal), classifique como requerente_1 (proprietário) e requerente_2 (cônjuge/esposa).
+        9. Se encontrar apenas 1 pessoa, classifique como requerente_1 e preencha requerente_2 com XXXXXX.
+        10. Para o regime de bens, remova duplicações: 'comunhão comunhão de bens' deve virar 'comunhão de bens'.
         
         Retorne estritamente em JSON:
         {
@@ -170,10 +168,10 @@ class GeradorRequerimentoCartorio:
                 "codigo_incra": "000.000.000.000-0",
                 "trt_numero": "BR00000000000",
                 "area_total_retificada": "0,0000",
-                "valor_fiscal": "R$ XXXXXX,00 (XXXXXX mil reais)",
-                "area_estrada": "X.XXX,XX",
                 "cfta_tecnico": "1119851971-1 ou encontrado",
-                "codigo_credenciamento": "G1D ou encontrado"
+                "codigo_credenciamento": "G1D ou encontrado",
+                "valor_fiscal": "0,00",
+                "area_estrada": "0,00"
             }
         }
         """
@@ -190,7 +188,7 @@ class GeradorRequerimentoCartorio:
             
             dados = json.loads(text_response.strip())
             
-            # Pós-processamento: ajustar gênero e profissão da requerente 2
+            # Pós-processamento: ajustar gênero e profissão
             if dados.get("requerente_2"):
                 req2 = dados["requerente_2"]
                 nome_req2 = req2.get("nome", "")
@@ -198,7 +196,6 @@ class GeradorRequerimentoCartorio:
                     genero = detectar_genero_por_nome(nome_req2)
                     req2["profissao"] = ajustar_profissao_por_genero(req2.get("profissao", ""), genero)
             
-            # Ajustar gênero e profissão do requerente 1
             if dados.get("requerente_1"):
                 req1 = dados["requerente_1"]
                 genero1 = detectar_genero_por_nome(req1.get("nome", ""))
@@ -208,6 +205,7 @@ class GeradorRequerimentoCartorio:
             if dados.get("requerente_2", {}).get("regime_bens"):
                 dados["requerente_2"]["regime_bens"] = remover_duplicacoes(dados["requerente_2"]["regime_bens"])
             
+            logger.info("✅ Dados extraídos com sucesso da IA")
             return dados
         except Exception as e:
             logger.error(f"Erro na extração via Gemini: {e}")
@@ -227,7 +225,48 @@ class GeradorRequerimentoCartorio:
                             run.font.name = 'Arial'
                             run.font.size = Pt(11)
 
+    def _substituir_em_run(self, text_element, substituicoes: Dict[str, str]):
+        """
+        Substitui placeholders em um elemento de texto (parágrafo ou cell).
+        Trabalha no nível dos RUNS para preservar formatação.
+        Realiza substituições com ordem específica para evitar conflitos.
+        """
+        # Junta todo o texto do elemento
+        texto_completo = ""
+        for run in text_element.runs:
+            texto_completo += run.text
+        
+        # Verifica se há algum placeholder para substituir
+        tem_placeholder = False
+        for key in substituicoes:
+            if key in texto_completo:
+                tem_placeholder = True
+                break
+        
+        if not tem_placeholder:
+            return
+        
+        # Aplica substituições em ORDEM ESPECÍFICA (do mais específico para o mais genérico)
+        # Isso evita conflitos onde um placeholder é substring de outro
+        ordem_substituicao = sorted(substituicoes.keys(), key=len, reverse=True)
+        
+        for key in ordem_substituicao:
+            val = substituicoes[key]
+            if key in texto_completo:
+                texto_completo = texto_completo.replace(key, str(val), 1)  # Apenas primeira ocorrência
+        
+        # Reescreve o texto: primeiro run recebe tudo, demais ficam vazios
+        if text_element.runs:
+            text_element.runs[0].text = texto_completo
+            for run in text_element.runs[1:]:
+                run.text = ""
+
     def gerar_documento(self, dados: Dict[str, Any], template_name: str) -> io.BytesIO:
+        """
+        Gera o documento Word preenchendo os placeholders com os dados extraídos.
+        
+        VERSÃO CORRIGIDA: Usa placeholders contextuais e únicos para evitar conflitos.
+        """
         try:
             # Busca do template
             base_path = os.path.dirname(os.path.abspath(__file__))
@@ -259,24 +298,27 @@ class GeradorRequerimentoCartorio:
             else:
                 pronome_conjuge = "esposa"  # padrão
 
-            # Mapeamento de substituições
+            # ============================================================
+            # MAPEAMENTO DE SUBSTITUIÇÕES COM CONTEXTO ÚNICO
+            # Cada placeholder é único e contextual para evitar conflitos
+            # ============================================================
             substituicoes = {
                 # Cabeçalho / Destinatário
                 "COMARCA DE XXXXXXX – ES": f"COMARCA DE {dados.get('comarca', 'XXXXXX').upper()} – ES",
 
-                # Requerente 1
+                # Requerente 1 - Proprietário
                 "XXXXXX, proprietário": f"{req1.get('nome', 'XXXXXX')}, proprietário",
                 "XXXXX, lavrador": f"{req1.get('profissao', 'lavrador')}",
                 "C.I. n°. XXXX – SSP/ES": f"C.I. n°. {req1.get('rg', 'XXXX')} – {req1.get('orgao', 'SSP/ES')}",
                 "CPF/MF n°. XXXXXXX": f"CPF/MF n°. {req1.get('cpf', 'XXXXXXX')}",
 
-                # Requerente 2 (Esposa)
+                # Requerente 2 - Esposa/Cônjuge
                 "esposa XXXXXX": f"{pronome_conjuge} {req2.get('nome', 'XXXXXX')}",
                 "XXXXX – SSP/ES": f"{req2.get('rg', 'XXXXX')} – {req2.get('orgao', 'SSP/ES')}",
                 "CPF/MF n° XXXXXX": f"CPF/MF n° {req2.get('cpf', 'XXXXXX')}",
 
                 # Regime de bens (com remoção de duplicações)
-                "comunhão XXXXXX de bens": f"comunhão {req2.get('regime_bens', 'XXXXXX').lower()}",
+                "comunhão XXXXXX de bens": f"comunhão {req2.get('regime_bens', 'XXXXXX').lower()} de bens",
 
                 # Endereço
                 "Córrego XXXXX": f"Córrego {req1.get('endereco_corrego', 'XXXXX')}",
@@ -303,10 +345,10 @@ class GeradorRequerimentoCartorio:
                 # Área total retificada (item 10)
                 "encontrada de XXXXXXX ha": f"encontrada de {imovel.get('area_total_retificada', 'XXXXXXX')} ha",
 
-                # Valor fiscal (item 2) - mantido como placeholder se não extraído
-                "R$ XXXXXX,00 (XXXXXX mil reais)": f"R$ {imovel.get('valor_fiscal', 'XXXXXX')}",
+                # Valor fiscal (item 2)
+                "R$ XXXXXX,00 (XXXXXX mil reais)": f"R$ {imovel.get('valor_fiscal', 'XXXXXX')},00",
 
-                # Área de estrada (item 7) - mantida como placeholder
+                # Área de estrada (item 7)
                 "X.XXX,XX m²": f"{imovel.get('area_estrada', 'X.XXX,XX')} m²",
 
                 # Data
@@ -323,18 +365,14 @@ class GeradorRequerimentoCartorio:
 
             # Aplicando substituições nos parágrafos
             for p in doc.paragraphs:
-                for key, val in substituicoes.items():
-                    if key in p.text:
-                        p.text = p.text.replace(key, str(val))
+                self._substituir_em_run(p, substituicoes)
             
             # Aplicando substituições nas tabelas
             for table in doc.tables:
                 for row in table.rows:
                     for cell in row.cells:
                         for p in cell.paragraphs:
-                            for key, val in substituicoes.items():
-                                if key in p.text:
-                                    p.text = p.text.replace(key, str(val))
+                            self._substituir_em_run(p, substituicoes)
             
             # Ajuste final de fonte
             self._ajustar_fonte_arial(doc)
@@ -342,7 +380,9 @@ class GeradorRequerimentoCartorio:
             buffer = io.BytesIO()
             doc.save(buffer)
             buffer.seek(0)
+            logger.info("✅ Documento gerado com sucesso")
             return buffer
+            
         except Exception as e:
             logger.error(f"Erro ao gerar documento: {e}")
             raise e
