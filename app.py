@@ -134,11 +134,12 @@ def main():
         dpi_conversao = st.slider("Resolução (DPI)", 100, 400, int(PROCESSAMENTO_CONFIG.DPI_PADRAO), 50)
         tamanho_max = st.slider("Upload Máximo (MB)", 10, 100, int(PROCESSAMENTO_CONFIG.TAMANHO_MAX_PDF_MB), 10)
 
-    # Abas Principais (ADIÇÃO DA ABA DE ANUÊNCIAS INCRA)
-    tab_memorial, tab_anuencias, tab_anuencias_incra = st.tabs([
+    # Abas Principais (ADIÇÃO DA ABA DE REQUERIMENTO DE CARTÓRIO)
+    tab_memorial, tab_anuencias, tab_anuencias_incra, tab_requerimento = st.tabs([
         "📝 Memorial Descritivo", 
         "🤝 Anuências Co-proprietários", 
-        "🌾 Anuências INCRA"
+        "🌾 Anuências INCRA",
+        "🏛️ Requerimento de Cartório"
     ])
 
     with tab_memorial:
@@ -397,6 +398,72 @@ def main():
                     except Exception as err:
                         st.error(f"Erro ao processar as anuências INCRA: {err}")
                         logger.error(f"Erro INCRA: {str(err)}", exc_info=True)
+
+    # ------------------------------------------
+    # ABA 4: REQUERIMENTO DE CARTÓRIO
+    # ------------------------------------------
+    with tab_requerimento:
+        st.markdown("### 🏛️ Geração Automatizada de Requerimento de Cartório")
+        st.info("💡 Nesta aba, você pode carregar múltiplos documentos (RG, CPF, Certidões, Matrículas) para que a IA extraia os dados e preencha o requerimento automaticamente.")
+        
+        documentos_pdf = st.file_uploader(
+            "Carregar documentos dos clientes (PDFs):", 
+            type=["pdf"], 
+            accept_multiple_files=True,
+            key="docs_requerimento"
+        )
+        
+        if documentos_pdf:
+            st.success(f"📄 {len(documentos_pdf)} documentos carregados.")
+            
+            if st.button("🚀 EXTRAIR DADOS E GERAR REQUERIMENTO", type="primary", use_container_width=True):
+                with st.status("Processando documentos via Gemini...", expanded=True) as status:
+                    try:
+                        from gerador_requerimento_cartorio import GeradorRequerimentoCartorio
+                        from processador import ProcessadorMemorial
+                        
+                        if not configurar_gemini():
+                            st.error("Erro crítico: Chave API ausente.")
+                            st.stop()
+                        
+                        status.update(label="Convertendo PDFs em imagens para análise visual...")
+                        processador_base = ProcessadorMemorial(nome_modelo_api)
+                        todas_imagens = []
+                        for pdf in documentos_pdf:
+                            imagens = processador_base.pdf_para_imagens(pdf, dpi=200)
+                            todas_imagens.extend(imagens)
+                        
+                        status.update(label=f"Analisando {len(todas_imagens)} páginas com {nome_modelo}...")
+                        gerador_req = GeradorRequerimentoCartorio(nome_modelo_api)
+                        dados_extraidos = gerador_req.extrair_dados_documentos(todas_imagens)
+                        
+                        status.update(label="Preenchendo modelo de requerimento Word...")
+                        template_path = "/home/ubuntu/upload/-REQUERIMENTODECARTORIO.docx"
+                        # Nota: Em produção, garanta que o caminho do template esteja correto
+                        arquivo_word = gerador_req.gerar_documento(dados_extraidos, template_path)
+                        
+                        status.update(label="Requerimento gerado com sucesso!", state="complete")
+                        
+                        st.balloons()
+                        st.success("✅ Dados extraídos e requerimento preenchido!")
+                        
+                        # Exibe os dados extraídos para conferência
+                        with st.expander("🔍 Conferir Dados Extraídos (IA)", expanded=False):
+                            st.json(dados_extraidos)
+                        
+                        st.download_button(
+                            label="📥 BAIXAR REQUERIMENTO PREENCHIDO (.DOCX)",
+                            data=arquivo_word,
+                            file_name=f"REQUERIMENTO_CARTORIO_{sanitizar_nome_arquivo(dados_extraidos['requerente_1']['nome'].upper())}.docx",
+                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            use_container_width=True
+                        )
+                        
+                    except Exception as err:
+                        st.error(f"Erro no processamento do requerimento: {err}")
+                        logger.error(f"Erro Requerimento: {str(err)}", exc_info=True)
+        else:
+            st.info("Aguardando upload de documentos para iniciar a análise.")
 
 if __name__ == "__main__":
     main()
