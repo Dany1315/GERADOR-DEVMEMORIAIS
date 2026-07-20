@@ -1,10 +1,12 @@
-# GERADOR DE MEMORIAL DESCRITIVO - Versão 6.2 (UI/UX Premium All-Green Edition)
+# GERADOR DE MEMORIAL DESCRITIVO - Versão 6.3 (Segurança + UI/UX Premium)
 import io
 import logging
 import time
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 import json
+import hmac
+import hashlib
 
 from PIL import Image
 import streamlit as st
@@ -74,7 +76,148 @@ def configurar_gemini() -> bool:
         logger.error(f"Erro ao configurar Gemini: {str(e)}")
         return False
 
+
+# ============================================================
+# SEGURANÇA: FORÇAR HTTPS
+# ============================================================
+def verificar_https():
+    """Redireciona para HTTPS se a conexão não for segura.
+    Usa o header X-Forwarded-Proto fornecido pelo proxy do Streamlit Cloud.
+    """
+    try:
+        from streamlit.web.server.websocket_headers import _get_websocket_headers
+        headers = _get_websocket_headers()
+        if headers:
+            proto = headers.get("X-Forwarded-Proto", "")
+            if proto.lower() == "http":
+                # Tenta redirecionar para HTTPS
+                from urllib.parse import urlparse
+                current_url = st.query_params.get("url", "")
+                st.markdown("""
+                    <script>
+                        if (window.location.protocol !== 'https:') {
+                            window.location.href = window.location.href.replace('http://', 'https://');
+                        }
+                    </script>
+                """, unsafe_allow_html=True)
+    except Exception:
+        pass  # Streamlit pode não ter headers disponíveis localmente
+
+
+# ============================================================
+# SEGURANÇA: SISTEMA DE LOGIN
+# ============================================================
+def tela_login():
+    """Exibe a tela de login com verificação de usuário e senha.
+    As credenciais são definidas via st.secrets para segurança.
+    """
+    st.markdown("""
+        <style>
+            .login-container {
+                max-width: 400px;
+                margin: 80px auto;
+                padding: 40px;
+                background: linear-gradient(135deg, #064e3b 0%, #022c22 100%);
+                border-radius: 16px;
+                color: #ffffff;
+                text-align: center;
+                border-left: 6px solid #10b981;
+            }
+            .login-title { font-size: 1.8rem; font-weight: 700; margin-bottom: 0.5rem; }
+            .login-subtitle { font-size: 1rem; color: #a7f3d0; margin-bottom: 2rem; }
+            .login-warning { color: #fbbf24; font-size: 0.85rem; margin-top: 1rem; }
+        </style>
+    """, unsafe_allow_html=True)
+
+    st.markdown("""
+        <div class="login-container">
+            <div class="login-title">🔐 Acesso Restrito</div>
+            <div class="login-subtitle">Gerador de Memorial - Portal de Engenharia</div>
+        </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("---")
+    st.markdown("### Inicie sessão para continuar")
+
+    usuario = st.text_input("Usuário", key="login_usuario")
+    senha = st.text_input("Senha", type="password", key="login_senha")
+
+    if st.button("🔓 Entrar", type="primary", use_container_width=True):
+        # Verifica credenciais contra os secrets do Streamlit
+        usuario_correto = st.secrets.get("USUARIO", "")
+        senha_correta = st.secrets.get("SENHA", "")
+
+        # Verificação segura com comparação constante (prevenção contra timing attack)
+        if hmac.compare_digest(usuario, usuario_correto) and hmac.compare_digest(senha, senha_correta):
+            st.session_state["autenticado"] = True
+            st.session_state["usuario_logado"] = usuario
+            st.rerun()
+        else:
+            st.error("❌ Usuário ou senha incorretos.")
+            logger.warning(f"Tentativa de login falha para usuário: {usuario}")
+
+    st.markdown("<p class='login-warning'>⚠️ Sistema de uso exclusivo da equipe técnica. Acesso não autorizado será registrado.</p>", unsafe_allow_html=True)
+
+    return False
+
+
+def verificar_autenticacao() -> bool:
+    """Verifica se o usuário está autenticado. Exibe tela de login se não estiver."""
+    if not st.session_state.get("autenticado", False):
+        return tela_login()
+    return True
+
+
+# ============================================================
+# SEGURANÇA: LIMPAR SESSION STATE APÓS DOWNLOAD
+# ============================================================
+def limpar_sessao_memorial():
+    """Limpa dados sensíveis do memorial após geração."""
+    chaves_para_limpar = [
+        "dados_memoriais_processados",
+        "segmentos",
+        "confrontantes",
+    ]
+    for chave in chaves_para_limpar:
+        if chave in st.session_state:
+            del st.session_state[chave]
+    st.info("🧹 Dados da sessão foram limpos por segurança.")
+
+
+def limpar_sessao_requerimento():
+    """Limpa dados sensíveis do requerimento após geração."""
+    chaves_para_limpar = [
+        "dados_extraidos_requerimento",
+        "requerente_1",
+        "requerente_2",
+    ]
+    for chave in chaves_para_limpar:
+        if chave in st.session_state:
+            del st.session_state[chave]
+    st.info("🧹 Dados da sessão foram limpos por segurança.")
+
+
+# ============================================================
+# APLICAÇÃO PRINCIPAL
+# ============================================================
 def main():
+    # Forçar HTTPS
+    verificar_https()
+
+    # Verificar autenticação
+    if not verificar_autenticacao():
+        return
+
+    # Botão de logout na sidebar
+    with st.sidebar:
+        if st.button("🚪 Sair (Logout)", type="secondary", use_container_width=True):
+            st.session_state["autenticado"] = False
+            st.session_state["usuario_logado"] = ""
+            # Limpar toda a sessão
+            for chave in list(st.session_state.keys()):
+                del st.session_state[chave]
+            st.rerun()
+
     # Estilização CSS Interna Premium
     st.markdown("""
         <style>
@@ -117,6 +260,10 @@ def main():
             <div class="hero-subtitle">Gerador Inteligente de Memoriais Descritivos & Gestão de Anuências</div>
         </div>
     """, unsafe_allow_html=True)
+
+    # Indicador de usuário logado
+    usuario_logado = st.session_state.get("usuario_logado", "Usuário")
+    st.caption(f"🔒 Sessão ativa: **{usuario_logado}** | Conexão segura")
 
     # Painel de Controle (Sidebar)
     with st.sidebar:
@@ -297,8 +444,16 @@ def main():
                         data=arquivo_docx,
                         file_name=f"MEMORIAL_{sanitizar_nome_arquivo(cliente_proprietario.upper())}.docx",
                         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                        use_container_width=True
+                        use_container_width=True,
+                        on_click=limpar_sessao_memorial,
+                        key="btn_download_memorial"
                     )
+
+                    # Botão extra para limpar sessão manualmente
+                    if st.button("🧹 Limpar dados da sessão (Após download)", key="btn_limpar_memorial"):
+                        limpar_sessao_memorial()
+                        st.rerun()
+
                 except Exception as e:
                     st.error(f"Erro no processamento: {str(e)}")
                     logger.error(f"Erro: {str(e)}", exc_info=True)
@@ -362,7 +517,8 @@ def main():
                                         data=arq_anuencia,
                                         file_name=f"ANUENCIA_{sanitizar_nome_arquivo(conf)}.docx",
                                         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                                        key=f"down_{idx}"
+                                        key=f"down_{idx}",
+                                        on_click=limpar_sessao_memorial,
                                     )
                                 except Exception as err:
                                     st.error(f"Falha na compilação: {err}")
@@ -437,7 +593,9 @@ def main():
                             data=zip_buffer,
                             file_name=f"ANUENCIAS_INCRA_LOTE_{sanitizar_nome_arquivo(cliente_proprietario.upper())}.zip",
                             mime="application/zip",
-                            use_container_width=True
+                            use_container_width=True,
+                            on_click=limpar_sessao_memorial,
+                            key="btn_download_zip_incra"
                         )
                         
                         st.markdown("---")
@@ -457,7 +615,8 @@ def main():
                                     file_name=f"ANUENCIA_INCRA_{sanitizar_nome_arquivo(nome_confrontante.upper())}.docx",
                                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                                     key=f"down_incra_{sanitizar_nome_arquivo(nome_confrontante.upper())}",
-                                    use_container_width=True
+                                    use_container_width=True,
+                                    on_click=limpar_sessao_memorial,
                                 )
                                 
                     except Exception as err:
@@ -526,8 +685,15 @@ def main():
                             data=arquivo_word,
                             file_name=f"REQUERIMENTO_CARTORIO_{sanitizar_nome_arquivo(dados_extraidos['requerente_1']['nome'].upper())}.docx",
                             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                            use_container_width=True
+                            use_container_width=True,
+                            on_click=limpar_sessao_requerimento,
+                            key="btn_download_requerimento"
                         )
+
+                        # Botão extra para limpar sessão manualmente
+                        if st.button("🧹 Limpar dados da sessão (Após download)", key="btn_limpar_requerimento"):
+                            limpar_sessao_requerimento()
+                            st.rerun()
                         
                     except Exception as err:
                         st.error(f"Erro no processamento do requerimento: {err}")
