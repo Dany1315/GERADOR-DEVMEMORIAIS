@@ -109,6 +109,7 @@ def limpar_x_do_texto(texto: str) -> str:
     """
     if not texto:
         return texto
+    # Remove 'X' no início de palavras que parecem ser marcadores de gênero
     texto = re.sub(r'^X([a-zA-Z])', r'\1', texto)
     texto = re.sub(r'\sX([A-Z][a-z]+)', r' \1', texto)
     return texto
@@ -169,6 +170,8 @@ class GeradorRequerimentoCartorio:
                 "codigo_incra": "000.000.000.000-0",
                 "trt_numero": "BR00000000000",
                 "area_total_retificada": "0,0000",
+                "valor_fiscal": "R$ XXXXXX,00 (XXXXXX mil reais)",
+                "area_estrada": "X.XXX,XX",
                 "cfta_tecnico": "1119851971-1 ou encontrado",
                 "codigo_credenciamento": "G1D ou encontrado"
             }
@@ -187,7 +190,7 @@ class GeradorRequerimentoCartorio:
             
             dados = json.loads(text_response.strip())
             
-            # Pós-processamento: ajustar gênero e profissão
+            # Pós-processamento: ajustar gênero e profissão da requerente 2
             if dados.get("requerente_2"):
                 req2 = dados["requerente_2"]
                 nome_req2 = req2.get("nome", "")
@@ -195,6 +198,7 @@ class GeradorRequerimentoCartorio:
                     genero = detectar_genero_por_nome(nome_req2)
                     req2["profissao"] = ajustar_profissao_por_genero(req2.get("profissao", ""), genero)
             
+            # Ajustar gênero e profissão do requerente 1
             if dados.get("requerente_1"):
                 req1 = dados["requerente_1"]
                 genero1 = detectar_genero_por_nome(req1.get("nome", ""))
@@ -222,37 +226,6 @@ class GeradorRequerimentoCartorio:
                         for run in paragraph.runs:
                             run.font.name = 'Arial'
                             run.font.size = Pt(11)
-
-    def _substituir_em_run(self, text_element, substituicoes: Dict[str, str]):
-        """
-        Substitui placeholders em um elemento de texto (parágrafo ou cell).
-        Trabalha no nível dos RUNS para preservar formatação.
-        Faz substituições ÚNICAS (só a primeira ocorrência de cada placeholder).
-        """
-        # Junta todo o texto do elemento
-        texto_completo = ""
-        for run in text_element.runs:
-            texto_completo += run.text
-        
-        # Verifica se há algum placeholder para substituir
-        tem_placeholder = False
-        for key in substituicoes:
-            if key in texto_completo:
-                tem_placeholder = True
-                break
-        
-        if not tem_placeholder:
-            return
-        
-        # Aplica todas as substituições no texto completo
-        for key, val in substituicoes.items():
-            texto_completo = texto_completo.replace(key, str(val))
-        
-        # Reescreve o texto: primeiro run recebe tudo, demais ficam vazios
-        if text_element.runs:
-            text_element.runs[0].text = texto_completo
-            for run in text_element.runs[1:]:
-                run.text = ""
 
     def gerar_documento(self, dados: Dict[str, Any], template_name: str) -> io.BytesIO:
         try:
@@ -286,67 +259,82 @@ class GeradorRequerimentoCartorio:
             else:
                 pronome_conjuge = "esposa"  # padrão
 
-            # ============================================================
-            # PLACEHOLDERS ÚNICOS — mapeamento exato do template
-            # Cada placeholder é único para evitar substituições erradas
-            # ============================================================
+            # Mapeamento de substituições
             substituicoes = {
                 # Cabeçalho / Destinatário
-                "(XXXXXXX)": dados.get('comarca', 'XXXXXXX'),
+                "COMARCA DE XXXXXXX – ES": f"COMARCA DE {dados.get('comarca', 'XXXXXX').upper()} – ES",
 
                 # Requerente 1
-                "(XXXXXX)": req1.get('nome', 'XXXXXX'),       # Nome do proprietário (1ª ocorrência — antes de "proprietário")
-                "(XXXXX)": req1.get('profissao', 'XXXXX'),     # Profissão do proprietário (lavrador)
-                "(XXXX)": req1.get('rg', 'XXXX'),              # RG do proprietário
-                "XXXXXXX": req1.get('cpf', 'XXXXXXX'),         # CPF do proprietário (sem parênteses, após "CPF/MF n°.")
+                "XXXXXX, proprietário": f"{req1.get('nome', 'XXXXXX')}, proprietário",
+                "XXXXX, lavrador": f"{req1.get('profissao', 'lavrador')}",
+                "C.I. n°. XXXX – SSP/ES": f"C.I. n°. {req1.get('rg', 'XXXX')} – {req1.get('orgao', 'SSP/ES')}",
+                "CPF/MF n°. XXXXXXX": f"CPF/MF n°. {req1.get('cpf', 'XXXXXXX')}",
 
-                # Requerente 2 (Esposa) — placeholders após "esposa"
-                "(XXXXXX)": req2.get('nome', 'XXXXXX'),        # Nome da esposa (2ª ocorrência)
-                "(XXXXX)": req2.get('rg', 'XXXXX'),            # RG da esposa (2ª ocorrência)
-                "(XXXXXX)": req2.get('cpf', 'XXXXXX'),         # CPF da esposa (2ª ocorrência)
+                # Requerente 2 (Esposa)
+                "esposa XXXXXX": f"{pronome_conjuge} {req2.get('nome', 'XXXXXX')}",
+                "XXXXX – SSP/ES": f"{req2.get('rg', 'XXXXX')} – {req2.get('orgao', 'SSP/ES')}",
+                "CPF/MF n° XXXXXX": f"CPF/MF n° {req2.get('cpf', 'XXXXXX')}",
 
-                # Regime de bens
-                "(XXXXXX)": req2.get('regime_bens', 'XXXXXX'), # Após "comunhão" — regime de bens
+                # Regime de bens (com remoção de duplicações)
+                "comunhão XXXXXX de bens": f"comunhão {req2.get('regime_bens', 'XXXXXX').lower()}",
 
                 # Endereço
-                "(XXXXX)": req1.get('endereco_corrego', 'XXXXX'),  # Córrego (2ª ocorrência)
-                "(XXXXXX-ES)": f"{dados.get('municipio_cliente', 'XXXXXX')}-ES",  # Município do cliente
+                "Córrego XXXXX": f"Córrego {req1.get('endereco_corrego', 'XXXXX')}",
+                "Zona Rural, XXXXXX-ES": f"Zona Rural, {dados.get('municipio_cliente', 'XXXXXX')}-ES",
 
                 # Imóvel
-                "(XXXXX)": imovel.get('nome', 'XXXXX'),         # Nome do sítio (3ª ocorrência)
-                "(XXXXXX há)": imovel.get('area_registrada', 'XXXXXX'),  # Área registrada
-                "(XXXX – ES)": imovel.get('municipio_imovel', 'XXXX'),   # Município do imóvel
-                "(XXXXXXX – ES)": imovel.get('comarca_imovel', 'XXXXXXX'),  # Comarca do imóvel
-                "(XXXXXX)": imovel.get('matricula', 'XXXXXX'),  # Matrícula (3ª ocorrência)
-                "(XXXXX há)": imovel.get('area_encontrada', 'XXXXX'),  # Área encontrada
-                "(XXX.XXX.XXX.XXX-X)": imovel.get('codigo_incra', 'XXX.XXX.XXX.XXX-X'),  # Código INCRA
+                "Sitio XXXXX": f"Sítio {imovel.get('nome', 'XXXXX')}",
+                "registrada de XXXXXX ha": f"registrada de {imovel.get('area_registrada', 'XXXXXX')} ha",
+                "município de XXXX - ES": f"município de {imovel.get('municipio_imovel', 'XXXX')} - ES",
+                "comarca de XXXXXXX - ES": f"comarca de {imovel.get('comarca_imovel', 'XXXXXXX')} - ES",
+                "matrícula n°. XXXXXX": f"matrícula n°. {imovel.get('matricula', 'XXXXXX')}",
 
-                # Técnico / TRT
-                "(BRXXXXXXX)": imovel.get('trt_numero', 'BRXXXXXXX'),
+                # Área encontrada / levantada
+                "área de XXXXX ha": f"área de {imovel.get('area_encontrada', 'XXXXX')} ha",
+
+                # INCRA
+                "n°. XXX.XXX.XXX.XXX-X": f"n°. {imovel.get('codigo_incra', 'XXX.XXX.XXX.XXX-X')}",
+
+                # Técnico / TRT / CFTA
+                "TRT BRXXXXXXX": f"TRT {imovel.get('trt_numero', 'BRXXXXXXX')}",
+                "CFTA n°. XXXXXXXXX-X": f"CFTA n°. {imovel.get('cfta_tecnico', 'XXXXXXX')}",
+                "código XXX": f"código {imovel.get('codigo_credenciamento', 'XXX')}",
 
                 # Área total retificada (item 10)
-                "(XXXXXXX há)": imovel.get('area_total_retificada', 'XXXXXXX'),
+                "encontrada de XXXXXXX ha": f"encontrada de {imovel.get('area_total_retificada', 'XXXXXXX')} ha",
+
+                # Valor fiscal (item 2) - mantido como placeholder se não extraído
+                "R$ XXXXXX,00 (XXXXXX mil reais)": f"R$ {imovel.get('valor_fiscal', 'XXXXXX')}",
+
+                # Área de estrada (item 7) - mantida como placeholder
+                "X.XXX,XX m²": f"{imovel.get('area_estrada', 'X.XXX,XX')} m²",
 
                 # Data
-                "(XX de XXX de XXXX)": data_formatada,
+                "XX de XXX de XXXX": data_formatada,
 
                 # Assinaturas
-                "(XXXXXXXXXXXXXXXX)": req1.get('nome', 'XXXXXXXXXXXXXXXX'),        # Nome proprietário assinatura
-                "(XXXXXXXXXXXXXXXXXX)": req2.get('nome', 'XXXXXXXXXXXXXXXXXX'),     # Nome esposa assinatura
-                "XXX.XXX.XXX-XX": req1.get('cpf', 'XXX.XXX.XXX-XX'),               # CPF assinatura proprietário
-                "XXX.XXX.XXX-XX": req2.get('cpf', 'XXX.XXX.XXX-XX'),               # CPF assinatura esposa
+                "XXXXXXXXXXXXXXXX": req1.get('nome', 'XXXXXXXXXXXXXXXX'),
+                "XXXXXXXXXXXXXXXXXX": req2.get('nome', 'XXXXXXXXXXXXXXXXXX'),
+                "CPF: XXX.XXX.XXX-XX": f"CPF: {req1.get('cpf', 'XXX.XXX.XXX-XX')}",
+
+                # CPF da esposa na assinatura
+                "CPF: XXXXXX": f"CPF: {req2.get('cpf', 'XXXXXX')}",
             }
 
-            # Aplicando substituições nos parágrafos (nível de run)
+            # Aplicando substituições nos parágrafos
             for p in doc.paragraphs:
-                self._substituir_em_run(p, substituicoes)
+                for key, val in substituicoes.items():
+                    if key in p.text:
+                        p.text = p.text.replace(key, str(val))
             
             # Aplicando substituições nas tabelas
             for table in doc.tables:
                 for row in table.rows:
                     for cell in row.cells:
                         for p in cell.paragraphs:
-                            self._substituir_em_run(p, substituicoes)
+                            for key, val in substituicoes.items():
+                                if key in p.text:
+                                    p.text = p.text.replace(key, str(val))
             
             # Ajuste final de fonte
             self._ajustar_fonte_arial(doc)
