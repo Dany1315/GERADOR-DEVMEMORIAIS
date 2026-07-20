@@ -4,11 +4,12 @@ import logging
 import os
 import re
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional, Callable
 from docx import Document
 from docx.shared import Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 import google.generativeai as genai
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +61,7 @@ def ajustar_profissao_por_genero(profissao: str, genero: str) -> str:
         return profissao
     if genero == "feminino":
         conjugacoes = {
-            "lavrador": "lavrador",  # neutra no Brasil
+            "lavrador": "lavrador",
             "agricultor": "agricultora",
             "pecuarista": "pecuarista",
             "engenheiro": "engenheira",
@@ -90,9 +91,7 @@ def ajustar_profissao_por_genero(profissao: str, genero: str) -> str:
 
 
 def remover_duplicacoes(texto: str) -> str:
-    """Remove palavras duplicadas consecutivas no texto.
-    Ex: 'Comunhão Comunhão de Bens' -> 'Comunhão de Bens'
-    """
+    """Remove palavras duplicadas consecutivas no texto."""
     if not texto:
         return texto
     palavras = texto.split()
@@ -105,24 +104,43 @@ def remover_duplicacoes(texto: str) -> str:
 
 class GeradorRequerimentoCartorio:
     """
-    Gerador de requerimentos de cartório com suporte a placeholders únicos.
+    Gerador de requerimentos de cartório com suporte a barra de progresso.
     
-    VERSÃO CORRIGIDA (v3):
+    VERSÃO COM PROGRESSO (v4):
     - Usa placeholders contextuais e únicos
     - Evita conflitos de substituição
-    - Implementa validação robusta
+    - Implementa barra de progresso com tempo estimado
     - Fornece logging detalhado
     - Compatível com a estrutura do projeto GitHub
     """
     
-    def __init__(self, model_name: str):
+    def __init__(self, model_name: str, callback_progresso: Optional[Callable] = None):
+        """
+        Inicializa o gerador.
+        
+        Args:
+            model_name: Nome do modelo Gemini
+            callback_progresso: Função callback para atualizar progresso (opcional)
+        """
         self.model_name = model_name
         self.model = genai.GenerativeModel(model_name)
+        self.callback_progresso = callback_progresso
+        self.tempo_inicio = None
+        
+    def _atualizar_progresso(self, etapa: int, descricao: str, percentual: float = None):
+        """Atualiza o progresso via callback."""
+        if self.callback_progresso:
+            try:
+                self.callback_progresso(etapa, descricao, percentual)
+            except Exception as e:
+                logger.warning(f"Erro ao atualizar progresso: {e}")
 
     def extrair_dados_documentos(self, imagens: List[Any]) -> Dict[str, Any]:
         """
         Envia as imagens dos documentos para o Gemini e extrai os dados estruturados.
         """
+        self._atualizar_progresso(1, "Analisando documentos com IA Gemini...", 25)
+        
         prompt = """
         Analise as imagens dos documentos fornecidos e extraia as informações para um requerimento de cartório.
         REGRAS IMPORTANTES:
@@ -180,6 +198,8 @@ class GeradorRequerimentoCartorio:
             conteudo = [prompt] + imagens
             response = self.model.generate_content(conteudo)
             
+            self._atualizar_progresso(1, "Processando resposta da IA...", 50)
+            
             text_response = response.text
             if "```json" in text_response:
                 text_response = text_response.split("```json")[1].split("```")[0]
@@ -205,6 +225,7 @@ class GeradorRequerimentoCartorio:
             if dados.get("requerente_2", {}).get("regime_bens"):
                 dados["requerente_2"]["regime_bens"] = remover_duplicacoes(dados["requerente_2"]["regime_bens"])
             
+            self._atualizar_progresso(1, "Dados extraídos com sucesso!", 75)
             logger.info("✅ Dados extraídos com sucesso da IA")
             return dados
         except Exception as e:
@@ -247,13 +268,12 @@ class GeradorRequerimentoCartorio:
             return
         
         # Aplica substituições em ORDEM ESPECÍFICA (do mais específico para o mais genérico)
-        # Isso evita conflitos onde um placeholder é substring de outro
         ordem_substituicao = sorted(substituicoes.keys(), key=len, reverse=True)
         
         for key in ordem_substituicao:
             val = substituicoes[key]
             if key in texto_completo:
-                texto_completo = texto_completo.replace(key, str(val), 1)  # Apenas primeira ocorrência
+                texto_completo = texto_completo.replace(key, str(val), 1)
         
         # Reescreve o texto: primeiro run recebe tudo, demais ficam vazios
         if text_element.runs:
@@ -265,9 +285,11 @@ class GeradorRequerimentoCartorio:
         """
         Gera o documento Word preenchendo os placeholders com os dados extraídos.
         
-        VERSÃO CORRIGIDA: Usa placeholders contextuais e únicos para evitar conflitos.
+        VERSÃO COM PROGRESSO: Exibe barra de progresso durante a geração.
         """
         try:
+            self._atualizar_progresso(2, "Carregando template de requerimento...", 10)
+            
             # Busca do template
             base_path = os.path.dirname(os.path.abspath(__file__))
             template_path = os.path.join(base_path, template_name)
@@ -277,6 +299,8 @@ class GeradorRequerimentoCartorio:
                 raise FileNotFoundError(f"Modelo {template_name} não encontrado.")
 
             doc = Document(template_path)
+            
+            self._atualizar_progresso(2, "Preparando dados para preenchimento...", 30)
             
             # Data de hoje formatada
             hoje = datetime.now()
@@ -296,90 +320,76 @@ class GeradorRequerimentoCartorio:
             elif genero_req2 == "masculino":
                 pronome_conjuge = "esposo"
             else:
-                pronome_conjuge = "esposa"  # padrão
+                pronome_conjuge = "esposa"
 
             # ============================================================
             # MAPEAMENTO DE SUBSTITUIÇÕES COM CONTEXTO ÚNICO
-            # Cada placeholder é único e contextual para evitar conflitos
             # ============================================================
             substituicoes = {
-                # Cabeçalho / Destinatário
                 "COMARCA DE XXXXXXX – ES": f"COMARCA DE {dados.get('comarca', 'XXXXXX').upper()} – ES",
-
-                # Requerente 1 - Proprietário
                 "XXXXXX, proprietário": f"{req1.get('nome', 'XXXXXX')}, proprietário",
                 "XXXXX, lavrador": f"{req1.get('profissao', 'lavrador')}",
                 "C.I. n°. XXXX – SSP/ES": f"C.I. n°. {req1.get('rg', 'XXXX')} – {req1.get('orgao', 'SSP/ES')}",
                 "CPF/MF n°. XXXXXXX": f"CPF/MF n°. {req1.get('cpf', 'XXXXXXX')}",
-
-                # Requerente 2 - Esposa/Cônjuge
                 "esposa XXXXXX": f"{pronome_conjuge} {req2.get('nome', 'XXXXXX')}",
                 "XXXXX – SSP/ES": f"{req2.get('rg', 'XXXXX')} – {req2.get('orgao', 'SSP/ES')}",
                 "CPF/MF n° XXXXXX": f"CPF/MF n° {req2.get('cpf', 'XXXXXX')}",
-
-                # Regime de bens (com remoção de duplicações)
                 "comunhão XXXXXX de bens": f"comunhão {req2.get('regime_bens', 'XXXXXX').lower()} de bens",
-
-                # Endereço
                 "Córrego XXXXX": f"Córrego {req1.get('endereco_corrego', 'XXXXX')}",
                 "Zona Rural, XXXXXX-ES": f"Zona Rural, {dados.get('municipio_cliente', 'XXXXXX')}-ES",
-
-                # Imóvel
                 "Sitio XXXXX": f"Sítio {imovel.get('nome', 'XXXXX')}",
                 "registrada de XXXXXX ha": f"registrada de {imovel.get('area_registrada', 'XXXXXX')} ha",
                 "município de XXXX - ES": f"município de {imovel.get('municipio_imovel', 'XXXX')} - ES",
                 "comarca de XXXXXXX - ES": f"comarca de {imovel.get('comarca_imovel', 'XXXXXXX')} - ES",
                 "matrícula n°. XXXXXX": f"matrícula n°. {imovel.get('matricula', 'XXXXXX')}",
-
-                # Área encontrada / levantada
                 "área de XXXXX ha": f"área de {imovel.get('area_encontrada', 'XXXXX')} ha",
-
-                # INCRA
                 "n°. XXX.XXX.XXX.XXX-X": f"n°. {imovel.get('codigo_incra', 'XXX.XXX.XXX.XXX-X')}",
-
-                # Técnico / TRT / CFTA
                 "TRT BRXXXXXXX": f"TRT {imovel.get('trt_numero', 'BRXXXXXXX')}",
                 "CFTA n°. XXXXXXXXX-X": f"CFTA n°. {imovel.get('cfta_tecnico', 'XXXXXXX')}",
                 "código XXX": f"código {imovel.get('codigo_credenciamento', 'XXX')}",
-
-                # Área total retificada (item 10)
                 "encontrada de XXXXXXX ha": f"encontrada de {imovel.get('area_total_retificada', 'XXXXXXX')} ha",
-
-                # Valor fiscal (item 2)
                 "R$ XXXXXX,00 (XXXXXX mil reais)": f"R$ {imovel.get('valor_fiscal', 'XXXXXX')},00",
-
-                # Área de estrada (item 7)
                 "X.XXX,XX m²": f"{imovel.get('area_estrada', 'X.XXX,XX')} m²",
-
-                # Data
                 "XX de XXX de XXXX": data_formatada,
-
-                # Assinaturas
                 "XXXXXXXXXXXXXXXX": req1.get('nome', 'XXXXXXXXXXXXXXXX'),
                 "XXXXXXXXXXXXXXXXXX": req2.get('nome', 'XXXXXXXXXXXXXXXXXX'),
                 "CPF: XXX.XXX.XXX-XX": f"CPF: {req1.get('cpf', 'XXX.XXX.XXX-XX')}",
-
-                # CPF da esposa na assinatura
                 "CPF: XXXXXX": f"CPF: {req2.get('cpf', 'XXXXXX')}",
             }
 
+            self._atualizar_progresso(2, "Preenchendo parágrafos...", 50)
+            
             # Aplicando substituições nos parágrafos
-            for p in doc.paragraphs:
+            for i, p in enumerate(doc.paragraphs):
                 self._substituir_em_run(p, substituicoes)
+                # Atualizar progresso a cada 10 parágrafos
+                if i % 10 == 0:
+                    self._atualizar_progresso(2, f"Preenchendo parágrafos ({i}/{len(doc.paragraphs)})...", 50)
+            
+            self._atualizar_progresso(2, "Preenchendo tabelas...", 70)
             
             # Aplicando substituições nas tabelas
-            for table in doc.tables:
+            for table_idx, table in enumerate(doc.tables):
                 for row in table.rows:
                     for cell in row.cells:
                         for p in cell.paragraphs:
                             self._substituir_em_run(p, substituicoes)
+                # Atualizar progresso
+                if table_idx % 5 == 0:
+                    self._atualizar_progresso(2, f"Preenchendo tabelas ({table_idx}/{len(doc.tables)})...", 70)
+            
+            self._atualizar_progresso(2, "Ajustando formatação...", 85)
             
             # Ajuste final de fonte
             self._ajustar_fonte_arial(doc)
 
+            self._atualizar_progresso(2, "Salvando documento...", 95)
+            
             buffer = io.BytesIO()
             doc.save(buffer)
             buffer.seek(0)
+            
+            self._atualizar_progresso(2, "Documento gerado com sucesso!", 100)
             logger.info("✅ Documento gerado com sucesso")
             return buffer
             
