@@ -94,8 +94,8 @@ class GeradorRequerimentoCartorio:
     """
     Gerador de requerimentos de cartório seguindo o modelo CORRETO.
     
-    VERSÃO FINAL CORRIGIDA (v8):
-    - Segue estrutura exata do modelo correto
+    VERSÃO FINAL (v9):
+    - Índices de parágrafos CORRETOS (parágrafos PARES com conteúdo)
     - Dados separados em parágrafos distintos
     - Nomes corretos nas assinantes
     - Todos os placeholders substituídos
@@ -219,7 +219,7 @@ class GeradorRequerimentoCartorio:
         """
         Gera o documento Word seguindo EXATAMENTE o modelo correto.
         
-        VERSÃO CORRIGIDA: Estrutura idêntica ao modelo enviado.
+        VERSÃO FINAL: Índices de parágrafos CORRETOS (PARES com conteúdo).
         """
         try:
             self._atualizar_progresso(2, "Carregando template de requerimento...", 10)
@@ -250,17 +250,21 @@ class GeradorRequerimentoCartorio:
             self._atualizar_progresso(2, "Preenchendo documento...", 50)
             
             # ============================================================
-            # SUBSTITUIÇÃO SEGUINDO O MODELO CORRETO
+            # SUBSTITUIÇÃO COM ÍNDICES CORRETOS (PARÁGRAFOS PARES)
             # ============================================================
             
-            # Parágrafo 0: Cabeçalho (já está no template)
-            # Parágrafo 3: Dados do requerente (PRINCIPAL)
-            self._substituir_paragrafo_exato(doc, 3, 
+            # Parágrafo 0: Cabeçalho
+            self._substituir_paragrafo_exato(doc, 0,
+                f"ILMO. SR. OFICIAL DO CARTÓRIO DE REGISTRO DE IMÓVEIS COMARCA DE {imovel.get('comarca_imovel', 'XXXXXX')} – ES."
+            )
+            
+            # Parágrafo 2: Dados do requerente (PRINCIPAL)
+            self._substituir_paragrafo_exato(doc, 2, 
                 f"{req1.get('nome', 'XXXXXX')}, proprietário, brasileiro, {req1.get('estado_civil', 'casado')}, "
-                f"{req1.get('profissao', 'lavrador')}, C.I. n° {req1.get('rg', 'XXXXXX')} {req1.get('orgao', 'SSP/ES')}, "
-                f"CPF/MF n°. {req1.get('cpf', 'XXXXXX')}, e sua esposa "
+                f"{req1.get('profissao', 'lavrador')}, C.I. n°. {req1.get('rg', 'XXXXXX')} – {req1.get('orgao', 'SSP/ES')}, "
+                f"CPF/MF n°. {req1.get('cpf', 'XXXXXX')} e sua esposa "
                 f"{req2.get('nome', 'XXXXXX')}, {req2.get('profissao', 'XXXXXX')}, "
-                f"C.I. n° {req2.get('rg', 'XXXXXX')} {req2.get('orgao', 'XXXXXX')}, "
+                f"C.I. n°. {req2.get('rg', 'XXXXXX')} – {req2.get('orgao', 'XXXXXX')}, "
                 f"CPF/MF n°. {req2.get('cpf', 'XXXXXX')}, brasileiros, casados sob o regime de "
                 f"{req2.get('regime_bens', 'XXXXXX')} de bens, residentes e domiciliados no Córrego "
                 f"{req1.get('endereco_corrego', 'XXXXXX')}, Zona Rural, "
@@ -270,8 +274,8 @@ class GeradorRequerimentoCartorio:
                 f"vem expor e requerer o que segue:"
             )
             
-            # Parágrafo 5: Descrição do imóvel
-            self._substituir_paragrafo_exato(doc, 5,
+            # Parágrafo 4: Descrição do imóvel
+            self._substituir_paragrafo_exato(doc, 4,
                 f"Que são senhores e legítimos proprietários de uma área de terras denominada "
                 f"\"{imovel.get('nome', 'XXXXXX')}\", com área registrada de {imovel.get('area_registrada', 'XXXXXX')} ha "
                 f"situada no município de {imovel.get('municipio_imovel', 'XXXXXX')}-ES e registrada na comarca de "
@@ -279,60 +283,59 @@ class GeradorRequerimentoCartorio:
                 f"caracterizada na matrícula n°. {imovel.get('matricula', 'XXXXXX')}, dessa circunscrição imobiliária."
             )
             
-            # Parágrafo 7: Valor fiscal
-            self._substituir_paragrafo_exato(doc, 7,
+            # Parágrafo 6: Valor fiscal
+            self._substituir_paragrafo_exato(doc, 6,
                 f"Que o imóvel acima mencionado está avaliado pelos proprietários para fins fiscais no valor de "
                 f"R$ {imovel.get('valor_fiscal', 'XXXXXX')}, conforme item 8 das Notas, da Tabela 11 de Emolumentos "
                 f"editada pela CGJ/ES, bem como o artigo 98, do Código de Normas da Corregedoria Geral da Justiça deste "
                 f"Estado do ES;"
             )
             
-            # Parágrafo 9: Levantamento perimetral
-            self._substituir_paragrafo_exato(doc, 9,
+            # Parágrafo 8: Levantamento perimetral
+            self._substituir_paragrafo_exato(doc, 8,
                 f"Que foi procedido o levantamento perimetral do imóvel, sendo encontrado a área de "
                 f"{imovel.get('area_encontrada', 'XXXXXX')} ha;"
             )
             
-            # Parágrafo 11: Certificação INCRA
-            self._substituir_paragrafo_exato(doc, 11,
+            # Parágrafo 10: Certificação INCRA
+            self._substituir_paragrafo_exato(doc, 10,
                 f"Que referido levantamento foi certificado pelo Instituto Nacional de Colonização e Reforma Agrária – INCRA, "
                 f"sob o n°. {imovel.get('codigo_incra', 'XXXXXX')}."
             )
             
-            # Parágrafo 14: Técnico
-            self._substituir_paragrafo_exato(doc, 14,
+            # Parágrafo 12: Técnico
+            self._substituir_paragrafo_exato(doc, 12,
                 f"Que os trabalhos topográficos foram elaborados pelo técnico em agropecuária, Regis Campo da Silva, "
                 f"CFTA n°. {imovel.get('cfta_tecnico', 'XXXXXX')}, credenciamento no INCRA sob o código "
                 f"{imovel.get('codigo_credenciamento', 'XXXXXX')} da TRT {imovel.get('trt_numero', 'XXXXXX')}."
             )
             
-            # Parágrafo 16: Glebas
+            # Parágrafo 14: Glebas
+            self._substituir_paragrafo_exato(doc, 14,
+                f"Que se trata de um imóvel dividido por uma estrada municipal formando 2 glebas distintas, autônomas e "
+                f"independentes, sendo elas: Uma gleba denominada (\"Gleba 1\") com área de {imovel.get('area_registrada', 'XXXXXX')} ha; "
+                f"uma gleba denominada (\"Gleba 2\") com área de {imovel.get('area_encontrada', 'XXXXXX')} ha."
+            )
+            
+            # Parágrafo 16: Estrada
             self._substituir_paragrafo_exato(doc, 16,
-                f"Que se trata de um imóvel dividido por uma estrada municipal formando duas glebas distintas, autônomas e "
-                f"independentes, sendo elas: Uma gleba denominada \"Gleba 1\" com área de {imovel.get('area_registrada', 'XXXXXX')} ha; "
-                f"uma gleba denominada \"Gleba 2\" com área de {imovel.get('area_encontrada', 'XXXXXX')} ha."
+                f"Que foi encontrada uma área de Estrada Municipal de {imovel.get('area_estrada', 'XXXXXX')} m²."
             )
             
-            # Parágrafo 18: Estrada
-            self._substituir_paragrafo_exato(doc, 18,
-                f"Que foi encontrada uma área de Estrada Municipal de {imovel.get('area_estrada', 'XXXXXX')} m². "
-                f"Sendo assim requerida a averbação de afetação por finalidade pública."
-            )
-            
-            # Parágrafo 32: Data
-            self._substituir_paragrafo_exato(doc, 32,
+            # Parágrafo 29: Data
+            self._substituir_paragrafo_exato(doc, 29,
                 f"Vila Valério – ES, {data_formatada}."
             )
             
-            # Parágrafo 38: Nomes dos assinantes (CORRETO!)
-            self._substituir_paragrafo_exato(doc, 38,
+            # Parágrafo 35: Nomes dos assinantes (CORRETO!)
+            self._substituir_paragrafo_exato(doc, 35,
                 f"                       {req1.get('nome', 'XXXXXX')}                    "
                 f"{req2.get('nome', 'XXXXXX')}"
             )
             
-            # Parágrafo 39: CPFs dos assinantes (CORRETO!)
-            self._substituir_paragrafo_exato(doc, 39,
-                f"                   CPF:{req1.get('cpf', 'XXXXXX')}                    "
+            # Parágrafo 36: CPFs dos assinantes (CORRETO!)
+            self._substituir_paragrafo_exato(doc, 36,
+                f"                   CPF: {req1.get('cpf', 'XXXXXX')}                    "
                 f"CPF: {req2.get('cpf', 'XXXXXX')}"
             )
 
