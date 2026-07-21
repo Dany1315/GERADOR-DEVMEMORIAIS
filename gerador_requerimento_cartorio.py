@@ -1,4 +1,3 @@
-import io
 import json
 import logging
 import os
@@ -60,7 +59,7 @@ def ajustar_profissao_por_genero(profissao: str, genero: str) -> str:
         return profissao
     if genero == "feminino":
         conjugacoes = {
-            "lavrador": "lavradora",  # neutra no Brasil
+            "lavrador": "lavradora",
             "agricultor": "agricultora",
             "pecuarista": "pecuarista",
             "engenheiro": "engenheira",
@@ -80,38 +79,25 @@ def ajustar_profissao_por_genero(profissao: str, genero: str) -> str:
             "autonomo": "autônoma",
             "autônomo": "autônoma",
         }
+        profissao_lower = profissao.lower()
         for masc, fem in conjugacoes.items():
-            if masc in profissao.lower():
-                profissao = profissao.replace(masc.title(), fem.title())
-                profissao = profissao.replace(masc.capitalize(), fem.title())
-                profissao = profissao.replace(masc, fem)
+            if masc in profissao_lower:
+                # Substituição única e cuidadosa
+                profissao = re.sub(re.escape(masc), fem, profissao, flags=re.IGNORECASE, count=1)
                 return profissao
     return profissao
 
 
 def remover_duplicacoes(texto: str) -> str:
-    """Remove palavras duplicadas consecutivas no texto.
-    Ex: 'Comunhão Comunhão de Bens' -> 'Comunhão de Bens'
-    """
+    """Remove palavras duplicadas consecutivas no texto."""
     if not texto:
         return texto
     palavras = texto.split()
     resultado = [palavras[0]]
     for i in range(1, len(palavras)):
-        if palavras[i].lower() != palavras[i - 1].lower():
+        if palavras[i].lower() != palavras[i-1].lower():
             resultado.append(palavras[i])
     return " ".join(resultado)
-
-
-def limpar_x_do_texto(texto: str) -> str:
-    """Remove os 'X' usados como marcadores de gênero ou placeholder.
-    Ex: 'Xlavradora' -> 'Lavrador'
-    """
-    if not texto:
-        return texto
-    texto = re.sub(r'^X([a-zA-Z])', r'\1', texto)
-    texto = re.sub(r'\sX([A-Z][a-z]+)', r' \1', texto)
-    return texto
 
 
 class GeradorRequerimentoCartorio:
@@ -187,7 +173,7 @@ class GeradorRequerimentoCartorio:
             
             logger.info(f"Resposta recebida do Gemini. Tamanho: {len(response.text)} caracteres")
             text_response = response.text
-            logger.debug(f"Texto bruto da resposta: {text_response[:500]}...")  # Primeiros 500 caracteres
+            logger.debug(f"Texto bruto da resposta: {text_response[:500]}...")
             if "```json" in text_response:
                 text_response = text_response.split("```json")[1].split("```")[0]
             elif "```" in text_response:
@@ -238,7 +224,6 @@ class GeradorRequerimentoCartorio:
         """
         Substitui placeholders em um elemento de texto (parágrafo ou cell).
         Trabalha no nível dos RUNS para preservar formatação.
-        Faz substituições ÚNICAS (só a primeira ocorrência de cada placeholder).
         """
         # Junta todo o texto do elemento
         texto_completo = ""
@@ -265,7 +250,7 @@ class GeradorRequerimentoCartorio:
             for run in text_element.runs[1:]:
                 run.text = ""
 
-    def gerar_documento(self, dados: Dict[str, Any], template_name: str) -> io.BytesIO:
+    def gerar_documento(self, dados: Dict[str, Any], template_name: str) -> bytes:
         try:
             # Busca do template
             base_path = os.path.dirname(os.path.abspath(__file__))
@@ -288,65 +273,63 @@ class GeradorRequerimentoCartorio:
             req2 = dados.get("requerente_2", {})
             imovel = dados.get("imovel", {})
 
-            # Detecção de gênero da requerente 2 para ajustar pronome
-            genero_req2 = detectar_genero_por_nome(req2.get("nome", ""))
-            if genero_req2 == "feminino":
-                pronome_conjuge = "esposa"
-            elif genero_req2 == "masculino":
-                pronome_conjuge = "esposo"
-            else:
-                pronome_conjuge = "esposa"  # padrão
+            # Determinar estado civil
+            nome_req2 = req2.get("nome", "").strip().lower()
+            tem_conjuge = nome_req2 not in ("", "xxxxx", "x", "n/a", "-")
+            estado_civil_req1 = "casado" if tem_conjuge else "solteiro"
+
+            logger.info(f"Gerando documento com estado civil: {estado_civil_req1}, tem cônjuge: {tem_conjuge}")
 
             # ============================================================
-            # PLACEHOLDERS ÚNICOS — mapeamento exato do template
-            # Cada placeholder é único para evitar substituições erradas
+            # MAPEAMENTO COMPLETO DE PLACEHOLDERS
+            # Usando os placeholders exatos do template Word atualizado
             # ============================================================
             substituicoes = {
-                # Cabeçalho / Destinatário
-                "(XXXXXXX)": dados.get('comarca', 'XXXXXXX'),
-
-                # Requerente 1
-                "(XXXXXX)": req1.get('nome', 'XXXXXX'),       # Nome do proprietário (1ª ocorrência — antes de "proprietário")
-                "(XXXXX)": req1.get('profissao', 'XXXXX'),     # Profissão do proprietário (lavrador)
-                "(XXXX)": req1.get('rg', 'XXXX'),              # RG do proprietário
-                "XXXXXXX": req1.get('cpf', 'XXXXXXX'),         # CPF do proprietário (sem parênteses, após "CPF/MF n°.")
-
-                # Requerente 2 (Esposa) — placeholders após "esposa"
-                "(XXXXXX)": req2.get('nome', 'XXXXXX'),        # Nome da esposa (2ª ocorrência)
-                "(XXXXX)": req2.get('rg', 'XXXXX'),            # RG da esposa (2ª ocorrência)
-                "(XXXXXX)": req2.get('cpf', 'XXXXXX'),         # CPF da esposa (2ª ocorrência)
-
-                # Regime de bens
-                "(XXXXXX)": req2.get('regime_bens', 'XXXXXX'), # Após "comunhão" — regime de bens
-
-                # Endereço
-                "(XXXXX)": req1.get('endereco_corrego', 'XXXXX'),  # Córrego (2ª ocorrência)
-                "(XXXXXX-ES)": f"{dados.get('municipio_cliente', 'XXXXXX')}-ES",  # Município do cliente
-
-                # Imóvel
-                "(XXXXX)": imovel.get('nome', 'XXXXX'),         # Nome do sítio (3ª ocorrência)
-                "(XXXXXX há)": imovel.get('area_registrada', 'XXXXXX'),  # Área registrada
-                "(XXXX – ES)": imovel.get('municipio_imovel', 'XXXX'),   # Município do imóvel
-                "(XXXXXXX – ES)": imovel.get('comarca_imovel', 'XXXXXXX'),  # Comarca do imóvel
-                "(XXXXXX)": imovel.get('matricula', 'XXXXXX'),  # Matrícula (3ª ocorrência)
-                "(XXXXX há)": imovel.get('area_encontrada', 'XXXXX'),  # Área encontrada
-                "(XXX.XXX.XXX.XXX-X)": imovel.get('codigo_incra', 'XXX.XXX.XXX.XXX-X'),  # Código INCRA
-
-                # Técnico / TRT
-                "(BRXXXXXXX)": imovel.get('trt_numero', 'BRXXXXXXX'),
-
-                # Área total retificada (item 10)
-                "(XXXXXXX há)": imovel.get('area_total_retificada', 'XXXXXXX'),
-
-                # Data
+                # CABEÇALHO / DESTINATÁRIO
+                "(XXXXX)": imovel.get('comarca_imovel', 'XXXXX'),
+                
+                # REQUERENTE 1 - Dados principais
+                "(NOME_REQUERENTE_1)": req1.get('nome', 'XXXXXX'),
+                "(ESTADO_CIVIL_REQUERENTE_1)": estado_civil_req1,
+                "(PROFISSAO_REQUERENTE_1)": req1.get('profissao', 'XXXXX'),
+                "(RG_REQUERENTE_1)": req1.get('rg', 'XXXX'),
+                "(ORGAO_RG_REQUERENTE_1)": req1.get('orgao', 'SSP/ES'),
+                "(CPF_REQUERENTE_1)": req1.get('cpf', 'XXXXXXX'),
+                "(ENDERECO_CORREGO_REQUERENTE_1)": req1.get('endereco_corrego', 'XXXXX'),
+                
+                # REQUERENTE 2 - Dados principais
+                "(NOME_REQUERENTE_2)": req2.get('nome', 'XXXXXX'),
+                "(PROFISSAO_REQUERENTE_2)": req2.get('profissao', 'XXXXX'),
+                "(RG_REQUERENTE_2)": req2.get('rg', 'XXXXX'),
+                "(ORGAO_RG_REQUERENTE_2)": req2.get('orgao', 'SSP/ES'),
+                "(CPF_REQUERENTE_2)": req2.get('cpf', 'XXXXXX'),
+                "(REGIME_BENS)": req2.get('regime_bens', 'XXXXXX'),
+                
+                # LOCALIZAÇÃO
+                "(CIDADE DO REQUERENTE -ES)": f"{dados.get('municipio_cliente', 'XXXXXX')}-ES",
+                
+                # IMÓVEL - Identificação
+                "(NOME_IMOVEL)": imovel.get('nome', 'XXXXX'),
+                "(AREA DO IMOVEL há)": imovel.get('area_registrada', 'XXXXXX'),
+                "(CIDADE ONDE O IMOVEL ESTÁ REGISTRADO – ES)": f"{imovel.get('municipio_imovel', 'XXXX')}-ES",
+                "(COMARCA ONDE O IMOVEL ESTÁ REGISTRADO – ES)": imovel.get('comarca_imovel', 'XXXXXXX'),
+                "(MATRICULA DO IMOVEL)": imovel.get('matricula', 'XXXXXX'),
+                
+                # IMÓVEL - Áreas
+                "(ÁREA ENCONTRADA NA PLANTA DO IMOVEL há)": imovel.get('area_encontrada', 'XXXXX'),
+                
+                # IMÓVEL - Certificações
+                "(CÓDIGO DO IMÓVEL RURAL DISPONIVEL NO CCIR)": imovel.get('codigo_incra', 'XXX.XXX.XXX.XXX-X'),
+                "(BRXXXXXXX(TRT ENCONTRADA EM TRT))": imovel.get('trt_numero', 'BRXXXXXXX'),
+                
+                # IMÓVEL - Retificação (aparece novamente no texto)
+                "(ÁREA DO IMOVEL há)": imovel.get('area_total_retificada', 'XXXXXXX'),
+                
+                # DATA
                 "(XX de XXX de XXXX)": data_formatada,
-
-                # Assinaturas
-                "(XXXXXXXXXXXXXXXX)": req1.get('nome', 'XXXXXXXXXXXXXXXX'),        # Nome proprietário assinatura
-                "(XXXXXXXXXXXXXXXXXX)": req2.get('nome', 'XXXXXXXXXXXXXXXXXX'),     # Nome esposa assinatura
-                "XXX.XXX.XXX-XX": req1.get('cpf', 'XXX.XXX.XXX-XX'),               # CPF assinatura proprietário
-                "XXX.XXX.XXX-XX": req2.get('cpf', 'XXX.XXX.XXX-XX'),               # CPF assinatura esposa
             }
+
+            logger.info(f"Aplicando {len(substituicoes)} substituições no documento...")
 
             # Aplicando substituições nos parágrafos (nível de run)
             for p in doc.paragraphs:
@@ -362,10 +345,14 @@ class GeradorRequerimentoCartorio:
             # Ajuste final de fonte
             self._ajustar_fonte_arial(doc)
 
+            logger.info(f"Salvando documento em buffer...")
             buffer = io.BytesIO()
             doc.save(buffer)
             buffer.seek(0)
-            return buffer
+            
+            # Retornar bytes (não BytesIO)
+            return buffer.getvalue()
+            
         except Exception as e:
-            logger.error(f"Erro ao gerar documento: {e}")
-            raise e
+            logger.error(f"Erro ao gerar documento: {e}", exc_info=True)
+            raise Exception(f"Falha ao gerar documento: {str(e)}")
