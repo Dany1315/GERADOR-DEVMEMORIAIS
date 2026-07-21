@@ -302,6 +302,8 @@ def main():
             st.session_state["painel_cliente_comarca"] = "N/A"
         if "painel_cliente_matricula" not in st.session_state:
             st.session_state["painel_cliente_matricula"] = "N/A"
+        if "painel_tecnico_trt" not in st.session_state:
+            st.session_state["painel_tecnico_trt"] = "N/A"
 
         with tab_side_empresa:
             st.markdown("### Configurações Institucionais")
@@ -314,6 +316,7 @@ def main():
             st.session_state["painel_tecnico_nome"] = st.text_input("Nome do Técnico", value=st.session_state["painel_tecnico_nome"], key="input_tecnico_nome")
             st.session_state["painel_tecnico_cfta"] = st.text_input("CFTA", value=st.session_state["painel_tecnico_cfta"], key="input_tecnico_cfta")
             st.session_state["painel_cpf_tecnico"] = st.text_input("CPF do Responsável Técnico", value=st.session_state["painel_cpf_tecnico"], key="input_cpf_tecnico")
+            st.session_state["painel_tecnico_trt"] = st.text_input("TRT", value=st.session_state["painel_tecnico_trt"], key="input_tecnico_trt")
 
         with tab_side_cliente:
             st.markdown("### Especificações do Projeto")
@@ -484,6 +487,7 @@ def main():
                                 "nome": st.session_state["painel_tecnico_nome"],
                                 "cfta": st.session_state["painel_tecnico_cfta"],
                                 "cpf": st.session_state["painel_cpf_tecnico"],
+                                "trt": st.session_state["painel_tecnico_trt"],
                             },
                             "segmentos": processador.segmentos,
                         }
