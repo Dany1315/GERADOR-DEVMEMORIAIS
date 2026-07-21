@@ -285,32 +285,49 @@ class GeradorRequerimentoCartorio:
             # MAPEAMENTO DE PLACEHOLDERS - Template com ( )
             # Usando os placeholders exatos do template Word
             # ============================================================
+            # Preparar profissão com vírgula
+            profissao_req1 = req1.get('profissao', 'XXXXX')
+            profissao_req2 = req2.get('profissao', 'XXXXX')
+            
+            # Preparar regime de bens (remover duplicações)
+            regime_bens = remover_duplicacoes(req2.get('regime_bens', 'XXXXXX'))
+            
+            # Preparar endereço (remover duplicações)
+            endereco_corrego = remover_duplicacoes(req1.get('endereco_corrego', 'XXXXX'))
+            
+            # Preparar nome do imóvel (remover duplicações)
+            nome_imovel = remover_duplicacoes(imovel.get('nome', 'XXXXX'))
+            
+            # Áreas das glebas
+            area_gleba_1 = imovel.get('area_registrada', 'XXXXXX')  # Gleba 1 = área registrada
+            area_gleba_2 = imovel.get('area_encontrada', 'XXXXX')   # Gleba 2 = área encontrada
+            
             substituicoes = {
                 # CABEÇALHO / DESTINATÁRIO
                 "(XXXXX)": imovel.get('comarca_imovel', 'XXXXX'),
                 
                 # REQUERENTE 1 - Dados principais
                 "(NOME_REQUERENTE_1)": req1.get('nome', 'XXXXXX'),
-                "(ESTADO_CIVIL_REQUERENTE_1)": estado_civil_req1,
-                "(PROFISSAO_REQUERENTE_1)": req1.get('profissao', 'XXXXX'),
+                "(ESTADO_CIVIL_REQUERENTE_1)": f"{estado_civil_req1},",  # Adicionar vírgula
+                "(PROFISSAO_REQUERENTE_1)": profissao_req1,
                 "(RG_REQUERENTE_1)": req1.get('rg', 'XXXX'),
                 "(ORGAO_RG_REQUERENTE_1)": req1.get('orgao', 'SSP/ES'),
                 "(CPF_REQUERENTE_1)": req1.get('cpf', 'XXXXXXX'),
-                "(ENDERECO_CORREGO_REQUERENTE_1)": req1.get('endereco_corrego', 'XXXXX'),
+                "(ENDERECO_CORREGO_REQUERENTE_1)": endereco_corrego,
                 
                 # REQUERENTE 2 - Dados principais
                 "(NOME_REQUERENTE_2)": req2.get('nome', 'XXXXXX'),
-                "(PROFISSAO_REQUERENTE_2)": req2.get('profissao', 'XXXXX'),
+                "(PROFISSAO_REQUERENTE_2)": profissao_req2,
                 "(RG_REQUERENTE_2)": req2.get('rg', 'XXXXX'),
                 "(ORGAO_RG_REQUERENTE_2)": req2.get('orgao', 'SSP/ES'),
                 "(CPF_REQUERENTE_2)": req2.get('cpf', 'XXXXXX'),
-                "(REGIME_BENS)": req2.get('regime_bens', 'XXXXXX'),
+                "(REGIME_BENS)": regime_bens,
                 
                 # LOCALIZAÇÃO
                 "(CIDADE DO REQUERENTE -ES)": f"{dados.get('municipio_cliente', 'XXXXXX')}-ES",
                 
                 # IMÓVEL - Identificação
-                "(NOME_IMOVEL)": imovel.get('nome', 'XXXXX'),
+                "(NOME_IMOVEL)": nome_imovel,
                 "(AREA DO IMOVEL há)": imovel.get('area_registrada', 'XXXXXX'),
                 "(CIDADE ONDE O IMOVEL ESTÁ REGISTRADO – ES)": f"{imovel.get('municipio_imovel', 'XXXX')}-ES",
                 "(COMARCA ONDE O IMOVEL ESTÁ REGISTRADO – ES)": imovel.get('comarca_imovel', 'XXXXXXX'),
@@ -322,13 +339,13 @@ class GeradorRequerimentoCartorio:
                 
                 # IMÓVEL - Áreas
                 "(ÁREA ENCONTRADA NA PLANTA DO IMOVEL há)": imovel.get('area_encontrada', 'XXXXX'),
-                "(XXXXXX há)": imovel.get('area_encontrada', 'XXXXXX'),  # Gleba 1
-                "(XXXXX há)": imovel.get('area_total_retificada', 'XXXXX'),  # Gleba 2
+                "(XXXXXX há)": area_gleba_1,  # Gleba 1 = área registrada
+                "(XXXXX há)": area_gleba_2,   # Gleba 2 = área encontrada
                 "(ÁREA DO IMOVEL há)": imovel.get('area_total_retificada', 'XXXXXXX'),  # Retificação
                 
                 # IMÓVEL - Certificações
                 "(CÓDIGO DO IMÓVEL RURAL DISPONIVEL NO CCIR)": imovel.get('codigo_incra', 'XXX.XXX.XXX.XXX-X'),
-                "(BRXXXXXXX(TRT ENCONTRADA EM TRT)": imovel.get('trt_numero', 'BRXXXXXXX'),
+                "(BRXXXXXXX(TRT ENCONTRADA EM TRT)": imovel.get('trt_numero', 'BRXXXXXXX').rstrip(')'),  # Remover parêntese extra
                 
                 # DATA
                 "(XX de XXX de XXXX)": data_formatada,
