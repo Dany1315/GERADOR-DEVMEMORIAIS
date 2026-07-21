@@ -432,7 +432,7 @@ def main():
                     
                     # Exibição dos resultados em Tabela
                     df_data = [{
-                        "De": s['de'], "Para": s['para'], "N": s['n_y'], "E": s['e_x'],
+                        "De": s['de'], "Para": s['para'], "N": s['coord_y'], "E": s['coord_x'],
                         "Azimute": s['azimute'], "Distância (m)": s['distancia'], "Confrontante": s['confrontante']
                     } for s in dados_finais["segmentos"]]
                     st.dataframe(pd.DataFrame(df_data), use_container_width=True, hide_index=True)
