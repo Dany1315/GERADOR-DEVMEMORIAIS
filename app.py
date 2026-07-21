@@ -442,7 +442,7 @@ def main():
                     
                     st.download_button(
                         label="📥 BAIXAR MEMORIAL DESCRITIVO (.DOCX)",
-                        data=arquivo_docx.getvalue(),
+                        data=arquivo_docx,
                         file_name=f"MEMORIAL_{sanitizar_nome_arquivo(cliente_proprietario.upper())}.docx",
                         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                         use_container_width=True,
