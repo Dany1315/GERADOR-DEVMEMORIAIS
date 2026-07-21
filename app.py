@@ -644,7 +644,6 @@ def main():
                 with st.status("Processando documentos via Gemini...", expanded=True) as status:
                     try:
                         from gerador_requerimento_cartorio import GeradorRequerimentoCartorio
-                        from processador import ProcessadorMemorial
                         
                         if not configurar_gemini():
                             st.error("Erro crítico: Chave API ausente.")
