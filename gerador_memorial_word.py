@@ -112,11 +112,11 @@ class GeradorMemorialWord:
         # Extrair dados
         proprietario = dados_finais.get("cliente", {}).get("proprietario", "N/A")
         municipio = dados_finais.get("cliente", {}).get("local", "N/A")
-        comarca = dados_finais.get("comarca", "N/A")
-        trt = dados_finais.get("trt", "N/A")
+        comarca = dados_finais.get("cliente", {}).get("comarca", "N/A")
+        trt = dados_finais.get("tecnico", {}).get("trt", "N/A")
         perimetro = dados_finais.get("cliente", {}).get("perimetro", "0,00")
         area = dados_finais.get("cliente", {}).get("area", "0,00")
-        matricula = dados_finais.get("matricula", "N/A")
+        matricula = dados_finais.get("cliente", {}).get("matricula", "N/A")
         segmentos = dados_finais.get("segmentos", [])
         
         # ============================================================
