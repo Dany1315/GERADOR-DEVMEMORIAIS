@@ -418,8 +418,12 @@ def main():
 
                     dados_finais = {
                         "imovel": cliente_imovel, "proprietario": cliente_proprietario,
-                        "local": cliente_local, "area": cliente_area, "perimetro": cliente_perimetro,
-                        "segmentos": segmentos_vinculados
+                        "local": cliente_local, "municipio": cliente_local,
+                        "comarca": "N/A", "trt": "N/A", "matricula": "N/A",
+                        "area": cliente_area, "perimetro": cliente_perimetro,
+                        "segmentos": segmentos_vinculados,
+                        "empresa": {"nome": empresa_nome, "endereco": empresa_endereco, "telefone": empresa_telefone, "email": empresa_email},
+                        "tecnico": {"nome": technico_nome, "cfta": tecnico_cfta, "cpf": cpf_tecnico}
                     }
                     st.session_state["dados_memoriais_processados"] = dados_finais
 
@@ -434,10 +438,7 @@ def main():
                     st.dataframe(pd.DataFrame(df_data), use_container_width=True, hide_index=True)
 
                     # Exportadores (.docx)
-                    dados_empresa = {"nome": empresa_nome, "endereco": empresa_endereco, "telefone": empresa_telefone, "email": empresa_email}
-                    dados_tecnico = {"nome": technico_nome, "cfta": tecnico_cfta, "cpf": cpf_tecnico}
-                    
-                    gerador = GeradorMemorialWord(dados_empresa, dados_tecnico)
+                    gerador = GeradorMemorialWord(dados_finais["empresa"], dados_finais["tecnico"])
                     arquivo_docx = gerador.gerar_documento(dados_finais)
                     
                     st.download_button(
@@ -446,7 +447,6 @@ def main():
                         file_name=f"MEMORIAL_{sanitizar_nome_arquivo(cliente_proprietario.upper())}.docx",
                         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                         use_container_width=True,
-                        on_click=limpar_sessao_memorial,
                         key="btn_download_memorial"
                     )
 
@@ -518,8 +518,7 @@ def main():
                                         data=arq_anuencia.getvalue(),
                                         file_name=f"ANUENCIA_{sanitizar_nome_arquivo(conf)}.docx",
                                         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                                        key=f"down_{idx}",
-                                        on_click=limpar_sessao_memorial,
+                                        key=f"down_{idx}"
                                     )
                                 except Exception as err:
                                     st.error(f"Falha na compilação: {err}")
@@ -595,7 +594,6 @@ def main():
                             file_name=f"ANUENCIAS_INCRA_LOTE_{sanitizar_nome_arquivo(cliente_proprietario.upper())}.zip",
                             mime="application/zip",
                             use_container_width=True,
-                            on_click=limpar_sessao_memorial,
                             key="btn_download_zip_incra"
                         )
                         
@@ -616,8 +614,7 @@ def main():
                                     file_name=f"ANUENCIA_INCRA_{sanitizar_nome_arquivo(nome_confrontante.upper())}.docx",
                                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                                     key=f"down_incra_{sanitizar_nome_arquivo(nome_confrontante.upper())}",
-                                    use_container_width=True,
-                                    on_click=limpar_sessao_memorial,
+                                    use_container_width=True
                                 )
                                 
                     except Exception as err:
@@ -686,7 +683,6 @@ def main():
                             file_name=f"REQUERIMENTO_CARTORIO_{sanitizar_nome_arquivo(dados_extraidos['requerente_1']['nome'].upper())}.docx",
                             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                             use_container_width=True,
-                            on_click=limpar_sessao_requerimento,
                             key="btn_download_requerimento"
                         )
 
