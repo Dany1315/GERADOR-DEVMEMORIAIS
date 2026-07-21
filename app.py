@@ -682,7 +682,7 @@ def main():
                         
                         st.download_button(
                             label="📥 BAIXAR REQUERIMENTO PREENCHIDO (.DOCX)",
-                            data=arquivo_word.getvalue(),
+                            data=arquivo_word,
                             file_name=f"REQUERIMENTO_CARTORIO_{sanitizar_nome_arquivo(dados_extraidos['requerente_1']['nome'].upper())}.docx",
                             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                             use_container_width=True,
