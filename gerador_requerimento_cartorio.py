@@ -207,62 +207,6 @@ class GeradorRequerimentoCartorio:
             logger.error(f"Erro na extração via Gemini: {e}", exc_info=True)
             raise Exception(f"Falha ao extrair dados: {str(e)}")
 
-    def _aplicar_negrito_informacoes(self, doc, dados: Dict[str, Any]):
-        """Aplica negrito em todos os dados importantes do documento."""
-        req1 = dados.get("requerente_1", {})
-        req2 = dados.get("requerente_2", {})
-        imovel = dados.get("imovel", {})
-        
-        # Lista completa de dados a colocar em negrito
-        dados_negrito = [
-            # Requerente 1
-            req1.get('nome', ''),
-            req1.get('profissao', ''),
-            req1.get('rg', ''),
-            req1.get('cpf', ''),
-            # Requerente 2
-            req2.get('nome', ''),
-            req2.get('profissao', ''),
-            req2.get('rg', ''),
-            req2.get('cpf', ''),
-            req2.get('regime_bens', ''),
-            req1.get('endereco_corrego', ''),
-            # Imóvel
-            imovel.get('nome', ''),
-            imovel.get('area_registrada', ''),
-            imovel.get('area_encontrada', ''),
-            imovel.get('area_total_retificada', ''),
-            imovel.get('matricula', ''),
-            imovel.get('municipio_imovel', ''),
-            imovel.get('comarca_imovel', ''),
-            imovel.get('codigo_incra', ''),
-            imovel.get('trt_numero', ''),
-        ]
-        
-        # Remover strings vazias
-        dados_negrito = [str(d).strip() for d in dados_negrito if d and str(d).strip() not in ('XXXXXX', 'XXXXX', 'XXX', '')]
-        
-        # Aplicar negrito em parágrafos
-        for para in doc.paragraphs:
-            for run in para.runs:
-                # Verificar se o texto do run é uma informação importante
-                for info in dados_negrito:
-                    if info and info.lower() in run.text.lower():
-                        # Aplicar negrito apenas neste run
-                        run.font.bold = True
-                        break
-        
-        # Aplicar negrito em tabelas
-        for table in doc.tables:
-            for row in table.rows:
-                for cell in row.cells:
-                    for para in cell.paragraphs:
-                        for run in para.runs:
-                            for info in dados_negrito:
-                                if info and info.lower() in run.text.lower():
-                                    run.font.bold = True
-                                    break
-
 
 
     def _ajustar_fonte_arial(self, doc):
@@ -424,10 +368,6 @@ class GeradorRequerimentoCartorio:
             
             # Ajuste final de fonte
             self._ajustar_fonte_arial(doc)
-            
-            # Aplicar negrito nas informações importantes
-            logger.info(f"Aplicando negrito nas informações importantes...")
-            self._aplicar_negrito_informacoes(doc, dados)
 
             logger.info(f"Salvando documento em buffer...")
             buffer = io.BytesIO()
