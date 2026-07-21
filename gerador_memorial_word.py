@@ -1,6 +1,7 @@
 # ============================================================
 # GERADOR DE MEMORIAL DESCRITIVO EM WORD
 # Formato: Parágrafo Contínuo com Cabeçalho da Empresa
+# Versão Corrigida: Sem duplicação de cabeçalho e matrícula
 # ============================================================
 
 from docx import Document
@@ -15,7 +16,7 @@ from typing import Dict, List, Any
 class GeradorMemorialWord:
     """
     Gera memorial descritivo em formato Word com:
-    - Cabeçalho da empresa
+    - Cabeçalho da empresa (sem duplicação)
     - Dados do imóvel
     - Descrição contínua (um parágrafo único)
     - Assinatura do técnico com CPF
@@ -64,20 +65,18 @@ class GeradorMemorialWord:
             run.font.bold = True
 
     def _adicionar_cabecalho_empresa(self, doc: Document):
-        """Adiciona o cabeçalho com dados da empresa."""
-        # Nome da empresa (em verde)
-        self._formatar_nome_empresa(doc, self.dados_empresa.get('nome', 'EMPRESA'))
+        """Adiciona o cabeçalho com dados da empresa (SEM DUPLICAÇÃO)."""
+        # Nome da empresa (em verde) - APENAS "TopoGeo"
+        self._formatar_nome_empresa(doc, 'TopoGeo')
         
         # Tipo de empresa
         self._formatar_texto_centralizado(doc, 'Topografia e Consultoria LTDA', tamanho=11)
         
-        # Endereço
+        # Endereço + Telefone em uma linha
         endereco = self.dados_empresa.get('endereco', '')
-        self._formatar_texto_centralizado(doc, endereco, tamanho=11)
-        
-        # Telefone
         telefone = self.dados_empresa.get('telefone', '')
-        self._formatar_texto_centralizado(doc, f'Fone {telefone}', tamanho=11)
+        endereco_telefone = f'{endereco} Fone {telefone}'
+        self._formatar_texto_centralizado(doc, endereco_telefone, tamanho=11)
         
         # Email
         email = self.dados_empresa.get('email', '')
