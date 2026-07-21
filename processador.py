@@ -241,7 +241,7 @@ class ProcessadorMemorial:
                 ),
             )
 
-            conteudo = list(imagens_roteiro) + [prompt]
+            conteudo = [prompt] + list(imagens_roteiro)
             response = model.generate_content(conteudo)
             
             tempo_gemini = time.time() - tempo_inicio_gemini
@@ -372,7 +372,7 @@ class ProcessadorMemorial:
                 ),
             )
 
-            conteudo = list(imagens_planta or []) + [prompt]
+            conteudo = [prompt] + list(imagens_planta or [])
             response = model.generate_content(conteudo)
             
             tempo_gemini = time.time() - tempo_inicio_gemini
