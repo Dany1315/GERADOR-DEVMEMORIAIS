@@ -211,28 +211,6 @@ class GeradorRequerimentoCartorio:
             logger.error(f"Erro na extração: {e}")
             raise Exception(f"Falha ao extrair dados: {str(e)}")
 
-    def _substituir_paragrafo_exato(self, doc, indice_paragrafo: int, novo_texto: str, alinhamento=None):
-        """
-        Substitui o conteúdo EXATO de um parágrafo específico.
-        Preserva a formatação e o alinhamento.
-        """
-        if indice_paragrafo < len(doc.paragraphs):
-            para = doc.paragraphs[indice_paragrafo]
-            
-            # Limpar todos os runs existentes
-            for run in para.runs:
-                run.text = ""
-            
-            # Adicionar novo texto
-            if para.runs:
-                para.runs[0].text = novo_texto
-            else:
-                para.add_run(novo_texto)
-            
-            # Aplicar alinhamento se especificado
-            if alinhamento:
-                para.alignment = alinhamento
-
     def gerar_documento(self, dados: Dict[str, Any], template_name: str) -> io.BytesIO:
         """Gera o documento Word preenchido com os dados extraídos."""
         try:
@@ -258,63 +236,63 @@ class GeradorRequerimentoCartorio:
             imovel = dados.get("imovel", {})
 
             # ============================================================
-            # USAR PLACEHOLDERS ÚNICOS - CADA CAMPO TEM UM PLACEHOLDER DIFERENTE
+            # MAPEAMENTO EXATO DOS PLACEHOLDERS DO TEMPLATE
             # ============================================================
             substituicoes = {
-                # Cabeçalho
-                "COMARCA DE (XXXXXXX)": f"COMARCA DE {dados.get('comarca', 'XXXXXXX')}",
+                # Linha 0: Cabeçalho
+                "COMARCA DE (XXXXX) – ES": f"COMARCA DE {dados.get('comarca', 'XXXXX')} – ES",
 
-                # Requerente 1 - PLACEHOLDERS ÚNICOS
-                "XXXXXX, proprietário": f"{req1.get('nome', 'XXXXXX')}, proprietário",
-                "XXXXX lavrador": f"{req1.get('profissao', 'XXXXX')} lavrador" if 'lavrador' in req1.get('profissao', '').lower() else f"{req1.get('profissao', 'XXXXX')}",
-                "C.I. n°. (NUMERO DA IDENTIDADE)": f"C.I. n°. {req1.get('rg', 'NUMERO DA IDENTIDADE')}",
-                "CPF/MF n°. XXXXXXX": f"CPF/MF n°. {req1.get('cpf', 'XXXXXXX')}",
-
-                # Requerente 2 - PLACEHOLDERS ÚNICOS
-                "e sua esposa (XXXXXX)": f"e sua esposa {req2.get('nome', 'XXXXXX')}",
-                "C.I. n° (XXXXX)": f"C.I. n° {req2.get('rg', 'XXXXX')}",
-                "CPF/MF n°. (XXXXXX)": f"CPF/MF n°. {req2.get('cpf', 'XXXXXX')}",
+                # Linha 2: Requerente 1 e 2
+                "(XXXXX), proprietário, brasileiro, (XXXXX) lavrador": 
+                    f"{req1.get('nome', 'XXXXX')}, proprietário, brasileiro, {req1.get('profissao', 'XXXXX')} lavrador",
+                
+                "(NUMERO DA IDENTIDADE)": req1.get('rg', 'NUMERO DA IDENTIDADE'),
+                "(XXXX) e sua esposa": f"{req1.get('cpf', 'XXXX')} e sua esposa",
+                "esposa (XXXXXX), (XXXXX)": f"esposa {req2.get('nome', 'XXXXXX')}, {req2.get('profissao', 'XXXXX')}",
+                "C.I. n°. (XXXXX) – SSP/ES, CPF/MF n°. (XXXXXX)": 
+                    f"C.I. n°. {req2.get('rg', 'XXXXX')} – SSP/ES, CPF/MF n°. {req2.get('cpf', 'XXXXXX')}",
                 "regime de (XXXXXX)": f"regime de {req2.get('regime_bens', 'XXXXXX')}",
 
-                # Endereço
-                "córrego (XXXXX)": f"córrego {req1.get('endereco_corrego', 'XXXXX')}",
-
-                # Imóvel - PLACEHOLDERS ÚNICOS
+                # Linha 4: Imóvel
                 "Sitio (XXXXX)": f"Sítio {imovel.get('nome', 'XXXXX')}",
-                "área de (XXXXXX há)": f"área de {imovel.get('area_registrada', 'XXXXXX')} ha",
-                "(XXXXXX-ES)": f"{dados.get('municipio_cliente', 'XXXXXX')}-ES",
-                "(XXXXXXX – ES)": f"{imovel.get('comarca_imovel', 'XXXXXXX')} – ES",
-                "matrícula (XXXXXX)": f"matrícula {imovel.get('matricula', 'XXXXXX')}",
-                "área de (XXXXX há)": f"área de {imovel.get('area_encontrada', 'XXXXX')} ha",
-                "Código INCRA (XXX.XXX.XXX.XXX-X)": f"Código INCRA {imovel.get('codigo_incra', 'XXX.XXX.XXX.XXX-X')}",
-                "TRT (BRXXXXXXX)": f"TRT {imovel.get('trt_numero', 'BRXXXXXXX')}",
-                "área de Estrada Municipal de (XXXXXX) m²": f"área de Estrada Municipal de {imovel.get('area_estrada', '0,00')} m²",
-                "R$ XX0.000,00": f"R$ {imovel.get('valor_fiscal', '0,00')}",
+                "com área registrada de (XXXXX há)": f"com área registrada de {imovel.get('area_registrada', 'XXXXX')} ha",
 
-                # Data
+                # Linha 6: Valor
+                "R$ XX0.000,00 (XXXXXX mil reais)": f"R$ {imovel.get('valor_fiscal', '0,00')} ({imovel.get('valor_fiscal', 'XXXXXX')} reais)",
+
+                # Linha 8: Área encontrada
+                "sendo encontrado a área de (XXXXX há)": f"sendo encontrado a área de {imovel.get('area_encontrada', 'XXXXX')} ha",
+
+                # Linha 10: INCRA
+                "sob o n°. (CODIGO INCRA)": f"sob o n°. {imovel.get('codigo_incra', 'CODIGO INCRA')}",
+
+                # Linha 16: Estrada
+                "Estrada Municipal de X.XXX,XX m²": f"Estrada Municipal de {imovel.get('area_estrada', 'X.XXX,XX')} m²",
+
+                # Linha 29: Data
                 "(XX de XXX de XXXX)": data_formatada,
 
-                # Assinantes - PLACEHOLDERS ÚNICOS
+                # Linhas 35-36: Assinantes
                 "(XXXXXX)": req1.get('nome', 'XXXXXX'),
                 "(XXXXXXXX)": req2.get('nome', 'XXXXXXXX'),
                 "CPF: (XXXXXX)": f"CPF: {req1.get('cpf', 'XXXXXX')}",
                 "CPF: (XXXXXXXX)": f"CPF: {req2.get('cpf', 'XXXXXXXX')}",
             }
 
-            # Aplicar substituições
-            for p in doc.paragraphs:
+            # Aplicar substituições em todos os parágrafos
+            for para in doc.paragraphs:
                 for key, val in substituicoes.items():
-                    if key in p.text:
-                        p.text = p.text.replace(key, str(val))
+                    if key in para.text:
+                        para.text = para.text.replace(key, str(val))
             
             # Aplicar em tabelas
             for table in doc.tables:
                 for row in table.rows:
                     for cell in row.cells:
-                        for p in cell.paragraphs:
+                        for para in cell.paragraphs:
                             for key, val in substituicoes.items():
-                                if key in p.text:
-                                    p.text = p.text.replace(key, str(val))
+                                if key in para.text:
+                                    para.text = para.text.replace(key, str(val))
 
             # Salvar em BytesIO
             output = io.BytesIO()
