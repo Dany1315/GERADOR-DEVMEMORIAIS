@@ -24,6 +24,7 @@ from utils import (
 )
 from processador import ProcessadorMemorial
 from gerador_word import GeradorAnuenciaIncraWord
+from gerador_memorial_word import GeradorMemorialWord
 
 # Inicializa o logger
 logger = criar_logger(__name__)
