@@ -1,6 +1,7 @@
 """
 Classe principal de processamento de memoriais descritivos.
 Encapsula toda a lógica de negócio, separada da interface Streamlit.
+VERSÃO CORRIGIDA: Campos mapeados corretamente, coordenadas do próximo vértice, matrícula separada
 """
 
 import io
@@ -60,6 +61,62 @@ class ExtracaoRoteiro(BaseModel):
 
     class Config:
         str_strip_whitespace = True
+
+
+# ==========================================
+# FUNÇÕES AUXILIARES
+# ==========================================
+
+def extrair_matricula_e_nome(texto_confrontante: str) -> Tuple[str, str]:
+    """
+    Extrai matrícula e nome do confrontante.
+    
+    Entrada: "MATRÍCULA 9448 JOSÉ ANTONIO RIBEIRO"
+    Saída: ("9448", "JOSÉ ANTONIO RIBEIRO")
+    
+    Entrada: "ESTRADA MUNICIPAL"
+    Saída: ("N/A", "ESTRADA MUNICIPAL")
+    
+    Args:
+        texto_confrontante: Texto com matrícula e nome
+        
+    Returns:
+        Tuple[str, str]: (matricula, nome)
+    """
+    if not texto_confrontante:
+        return "N/A", "N/A"
+    
+    texto = texto_confrontante.strip()
+    
+    # Se começa com "MATRÍCULA"
+    if texto.startswith("MATRÍCULA"):
+        partes = texto.split()
+        if len(partes) >= 2:
+            matricula = partes[1]
+            nome = ' '.join(partes[2:]) if len(partes) > 2 else "N/A"
+            return matricula, nome
+    
+    # Se é apenas "ESTRADA MUNICIPAL" ou similar (sem matrícula)
+    return "N/A", texto
+
+
+def limpar_unidade(valor: str) -> str:
+    """
+    Remove unidades (m, m², etc) do valor.
+    
+    Entrada: "207,12 m"
+    Saída: "207,12"
+    
+    Args:
+        valor: Valor com possível unidade
+        
+    Returns:
+        str: Valor sem unidade
+    """
+    if not valor:
+        return ""
+    
+    return valor.strip().replace(" m", "").replace(" m²", "").strip()
 
 
 # ==========================================
@@ -251,13 +308,43 @@ class ProcessadorMemorial:
             dados = json.loads(response.text)
             extracao = ExtracaoRoteiro(**dados)
 
+            # ============================================================
+            # CORREÇÃO 1: Mapear campos corretamente e adicionar coordenadas do próximo vértice
+            # ============================================================
             segmentos = []
-            for seg in extracao.segmentos:
-                item = seg.model_dump()
-                item["confrontante"] = ""
+            for idx, seg in enumerate(extracao.segmentos):
+                # Extrair dados do segmento
+                coord_y = limpar_unidade(seg.n_y)
+                coord_x = limpar_unidade(seg.e_x)
+                distancia = limpar_unidade(seg.distancia)
+                
+                # Determinar coordenadas do próximo vértice
+                if idx + 1 < len(extracao.segmentos):
+                    proximo = extracao.segmentos[idx + 1]
+                    coord_y_para = limpar_unidade(proximo.n_y)
+                    coord_x_para = limpar_unidade(proximo.e_x)
+                else:
+                    # Último segmento volta para o primeiro
+                    primeiro = extracao.segmentos[0]
+                    coord_y_para = limpar_unidade(primeiro.n_y)
+                    coord_x_para = limpar_unidade(primeiro.e_x)
+                
+                # Criar segmento com campos corretos
+                item = {
+                    'de': seg.de,
+                    'para': seg.para,
+                    'coord_y': coord_y,              # ✅ CORRIGIDO: era 'n_y'
+                    'coord_x': coord_x,              # ✅ CORRIGIDO: era 'e_x'
+                    'coord_y_para': coord_y_para,    # ✅ NOVO: coordenada Y do próximo vértice
+                    'coord_x_para': coord_x_para,    # ✅ NOVO: coordenada X do próximo vértice
+                    'azimute': seg.azimute,
+                    'distancia': distancia,          # ✅ CORRIGIDO: sem " m"
+                    'confrontante': '',              # Será preenchido depois
+                    'matricula': '',                 # ✅ NOVO: será preenchido depois
+                }
                 segmentos.append(item)
 
-            logger.info(f"✅ {len(segmentos)} segmentos extraídos via IA")
+            logger.info(f"✅ {len(segmentos)} segmentos extraídos via IA (com coordenadas do próximo vértice)")
             self.segmentos = segmentos
             return segmentos
 
@@ -288,18 +375,35 @@ class ProcessadorMemorial:
                 logger.warning("Nenhum padrão encontrou correspondências")
                 return []
             
+            # ============================================================
+            # CORREÇÃO 2: Mapear campos corretamente no parse manual
+            # ============================================================
             segmentos = []
-            for m in matches:
+            for idx, m in enumerate(matches):
                 try:
                     az = m[4].replace('$', '').replace('\\circ', '°').strip()
+                    
+                    # Coordenadas do próximo vértice
+                    if idx + 1 < len(matches):
+                        proximo = matches[idx + 1]
+                        coord_y_para = proximo[2]
+                        coord_x_para = proximo[3]
+                    else:
+                        primeiro = matches[0]
+                        coord_y_para = primeiro[2]
+                        coord_x_para = primeiro[3]
+                    
                     segmento = {
                         "de": m[0],
                         "para": m[1],
-                        "n_y": m[2] + " m",
-                        "e_x": m[3] + " m",
+                        "coord_y": m[2],                    # ✅ CORRIGIDO
+                        "coord_x": m[3],                    # ✅ CORRIGIDO
+                        "coord_y_para": coord_y_para,       # ✅ NOVO
+                        "coord_x_para": coord_x_para,       # ✅ NOVO
                         "azimute": az,
-                        "distancia": m[5].strip(),
-                        "confrontante": ""
+                        "distancia": limpar_unidade(m[5]), # ✅ CORRIGIDO: sem " m"
+                        "confrontante": "",
+                        "matricula": "",                    # ✅ NOVO
                     }
                     segmentos.append(segmento)
                 except Exception as e:
@@ -404,6 +508,8 @@ class ProcessadorMemorial:
         """
         Vincula confrontantes aos segmentos.
         
+        ✅ CORRIGIDO: Agora extrai matrícula e nome separadamente
+        
         Returns:
             Lista de segmentos com confrontantes preenchidos
         """
@@ -429,13 +535,23 @@ class ProcessadorMemorial:
                             confrontante_encontrado = regra.nome_confrontante.upper()
                             break
                 
-                seg["confrontante"] = confrontante_encontrado or "CONFRONTAÇÃO NÃO ENCONTRADA"
+                # ============================================================
+                # CORREÇÃO 3: Extrair matrícula e nome separadamente
+                # ============================================================
+                if confrontante_encontrado:
+                    matricula, nome = extrair_matricula_e_nome(confrontante_encontrado)
+                    seg["matricula"] = matricula
+                    seg["confrontante"] = nome
+                else:
+                    seg["matricula"] = "N/A"
+                    seg["confrontante"] = "CONFRONTAÇÃO NÃO ENCONTRADA"
                 
             except (ValueError, IndexError) as e:
                 logger.warning(f"Erro ao vincular segmento {seg}: {str(e)}")
                 seg["confrontante"] = "ERRO NA VINCULAÇÃO"
+                seg["matricula"] = "N/A"
         
-        logger.info("✅ Vinculação concluída")
+        logger.info("✅ Vinculação concluída (com matrícula e nome separados)")
         return self.segmentos
 
     def validar_resultado(self) -> Tuple[bool, List[str]]:
@@ -457,12 +573,21 @@ class ProcessadorMemorial:
         if confrontacoes_invalidas:
             avisos.append(f"⚠️ {len(confrontacoes_invalidas)} segmento(s) com confrontação inválida")
         
+        # ✅ NOVO: Validar coordenadas do próximo vértice
         coordenadas_vazias = [
             s for s in self.segmentos
-            if not s.get("n_y") or not s.get("e_x")
+            if not s.get("coord_y") or not s.get("coord_x") or not s.get("coord_y_para") or not s.get("coord_x_para")
         ]
         if coordenadas_vazias:
             avisos.append(f"⚠️ {len(coordenadas_vazias)} segmento(s) com coordenadas faltando")
+        
+        # ✅ NOVO: Validar matrícula
+        matriculas_vazias = [
+            s for s in self.segmentos
+            if not s.get("matricula")
+        ]
+        if matriculas_vazias:
+            avisos.append(f"⚠️ {len(matriculas_vazias)} segmento(s) com matrícula faltando")
         
         return len(avisos) == 0, avisos
 
