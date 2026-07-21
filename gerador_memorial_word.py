@@ -1,174 +1,316 @@
-# ==========================================
-# ARQUIVO: gerador_memorial_word.py
-# ==========================================
-import io
-import logging
-from typing import Dict, Any, List
-from datetime import datetime
+# ============================================================
+# GERADOR DE MEMORIAL DESCRITIVO EM WORD
+# Formato: Parágrafo Contínuo com Cabeçalho da Empresa
+# ============================================================
 
 from docx import Document
-from docx.shared import Pt, Inches
+from docx.shared import Pt, RGBColor, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-
-logger = logging.getLogger(__name__)
+from docx.oxml.ns import qn
+from docx.oxml import OxmlElement
+import io
+from typing import Dict, List, Any
 
 
 class GeradorMemorialWord:
-    """Gerador de Memorial Descritivo em formato Word (.docx)"""
-    
+    """
+    Gera memorial descritivo em formato Word com:
+    - Cabeçalho da empresa
+    - Dados do imóvel
+    - Descrição contínua (um parágrafo único)
+    - Assinatura do técnico com CPF
+    """
+
     def __init__(self, dados_empresa: Dict[str, str], dados_tecnico: Dict[str, str]):
         """
         Inicializa o gerador com dados da empresa e técnico.
         
         Args:
-            dados_empresa: Dicionário com 'nome', 'endereco', 'telefone', 'email'
-            dados_tecnico: Dicionário com 'nome', 'cfta', 'cpf'
+            dados_empresa: Dict com 'nome', 'endereco', 'telefone', 'email'
+            dados_tecnico: Dict com 'nome', 'cfta', 'cpf', 'trt'
         """
         self.dados_empresa = dados_empresa
         self.dados_tecnico = dados_tecnico
-    
-    def _formatar_data(self, municipio: str) -> str:
-        """Formata a data em português"""
-        data_atual = datetime.now()
-        meses = [
-            "janeiro", "fevereiro", "março", "abril", "maio", "junho",
-            "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"
-        ]
-        return f"{municipio}, {data_atual.day} de {meses[data_atual.month - 1]} de {data_atual.year}."
-    
-    def gerar_documento(self, dados_finais: Dict[str, Any]) -> bytes:
+
+    def _adicionar_linha_separadora(self, doc: Document):
+        """Adiciona uma linha separadora no documento."""
+        paragraph = doc.add_paragraph()
+        pPr = paragraph._element.get_or_add_pPr()
+        pBdr = OxmlElement('w:pBdr')
+        bottom = OxmlElement('w:bottom')
+        bottom.set(qn('w:val'), 'single')
+        bottom.set(qn('w:sz'), '12')
+        bottom.set(qn('w:space'), '1')
+        bottom.set(qn('w:color'), '000000')
+        pBdr.append(bottom)
+        pPr.append(pBdr)
+
+    def _formatar_nome_empresa(self, doc: Document, nome: str):
+        """Adiciona o nome da empresa em verde e centralizado."""
+        p = doc.add_paragraph(nome)
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = p.runs[0]
+        run.font.size = Pt(12)
+        run.font.bold = True
+        run.font.color.rgb = RGBColor(0, 128, 0)  # Verde
+
+    def _formatar_texto_centralizado(self, doc: Document, texto: str, tamanho: int = 11, negrito: bool = False):
+        """Adiciona texto centralizado ao documento."""
+        p = doc.add_paragraph(texto)
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = p.runs[0]
+        run.font.size = Pt(tamanho)
+        if negrito:
+            run.font.bold = True
+
+    def _adicionar_cabecalho_empresa(self, doc: Document):
+        """Adiciona o cabeçalho com dados da empresa."""
+        # Nome da empresa (em verde)
+        self._formatar_nome_empresa(doc, self.dados_empresa.get('nome', 'EMPRESA'))
+        
+        # Tipo de empresa
+        self._formatar_texto_centralizado(doc, 'Topografia e Consultoria LTDA', tamanho=11)
+        
+        # Endereço
+        endereco = self.dados_empresa.get('endereco', '')
+        self._formatar_texto_centralizado(doc, endereco, tamanho=11)
+        
+        # Telefone
+        telefone = self.dados_empresa.get('telefone', '')
+        self._formatar_texto_centralizado(doc, f'Fone {telefone}', tamanho=11)
+        
+        # Email
+        email = self.dados_empresa.get('email', '')
+        self._formatar_texto_centralizado(doc, email, tamanho=11)
+        
+        # Linha separadora
+        self._adicionar_linha_separadora(doc)
+
+    def _adicionar_titulo(self, doc: Document):
+        """Adiciona o título 'MEMORIAL DESCRITIVO' centralizado e negrito."""
+        p = doc.add_paragraph('MEMORIAL DESCRITIVO')
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = p.runs[0]
+        run.font.size = Pt(12)
+        run.font.bold = True
+
+    def _adicionar_dados_imovel(self, doc: Document, dados: Dict[str, Any]):
+        """Adiciona os dados do imóvel (proprietário, município, etc)."""
+        # Proprietário
+        proprietario = dados.get('proprietario', 'N/A')
+        p = doc.add_paragraph(f'Proprietário: {proprietario}')
+        p.paragraph_format.left_indent = Inches(0)
+        
+        # Município
+        municipio = dados.get('municipio', 'N/A')
+        p = doc.add_paragraph(f'Município: {municipio}')
+        
+        # Comarca
+        comarca = dados.get('comarca', 'N/A')
+        p = doc.add_paragraph(f'Comarca: {comarca}')
+        
+        # TRT
+        trt = dados.get('trt', 'N/A')
+        p = doc.add_paragraph(f'TRT: {trt}')
+        
+        # Perímetro
+        perimetro = dados.get('perimetro', 'N/A')
+        p = doc.add_paragraph(f'Perímetro: {perimetro} m')
+        
+        # Área
+        area = dados.get('area', 'N/A')
+        p = doc.add_paragraph(f'Area: {area} m²')
+        
+        # Matrícula
+        matricula = dados.get('matricula', 'N/A')
+        p = doc.add_paragraph(f'MAT. {matricula}')
+
+    def _construir_descricao_continua(self, segmentos: List[Dict[str, Any]]) -> str:
         """
-        Gera o memorial descritivo em formato Word com estrutura descritiva.
+        Constrói a descrição como um parágrafo único e contínuo.
         
         Args:
-            dados_finais: Dicionário com dados do memorial
-        
+            segmentos: Lista de dicionários com dados dos segmentos
+            
         Returns:
-            bytes: Conteúdo do documento em bytes
+            String com a descrição completa e contínua
         """
-        doc = Document()
+        if not segmentos:
+            return "Nenhum segmento disponível."
         
-        # Configurar estilo padrão
-        style = doc.styles['Normal']
-        font = style.font
-        font.name = 'Arial'
-        font.size = Pt(11)
+        # Inicia com o primeiro segmento
+        primeiro = segmentos[0]
+        confrontante_inicial = primeiro.get('confrontante', 'N/A')
+        matricula_inicial = primeiro.get('matricula', 'N/A')
+        coord_y_1 = primeiro.get('coord_y', 'N/A')
+        coord_x_1 = primeiro.get('coord_x', 'N/A')
         
-        # Extrair dados
-        proprietario = dados_finais.get("proprietario", "N/A")
-        municipio = dados_finais.get("municipio", "N/A")
-        comarca = dados_finais.get("comarca", "N/A")
-        trt = dados_finais.get("trt", "N/A")
-        perimetro = dados_finais.get("perimetro", "0,00")
-        area = dados_finais.get("area", "0,00")
-        matricula = dados_finais.get("matricula", "N/A")
-        segmentos = dados_finais.get("segmentos", [])
-        
-        # ============================================================
-        # TÍTULO DO MEMORIAL
-        # ============================================================
-        p_titulo = doc.add_paragraph()
-        p_titulo.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run_titulo = p_titulo.add_run("MEMORIAL DESCRITIVO")
-        run_titulo.bold = True
-        run_titulo.font.size = Pt(14)
-        
-        # ============================================================
-        # DADOS DO IMÓVEL
-        # ============================================================
-        p_prop = doc.add_paragraph()
-        p_prop.add_run("Proprietário: ").bold = False
-        p_prop.add_run(proprietario)
-        
-        p_mun = doc.add_paragraph()
-        p_mun.add_run("Município: ").bold = False
-        p_mun.add_run(municipio)
-        
-        p_com = doc.add_paragraph()
-        p_com.add_run("Comarca: ").bold = False
-        p_com.add_run(comarca)
-        
-        p_trt = doc.add_paragraph()
-        p_trt.add_run("TRT: ").bold = False
-        p_trt.add_run(trt)
-        
-        p_perim = doc.add_paragraph()
-        p_perim.add_run("Perímetro: ").bold = False
-        p_perim.add_run(f"{perimetro} m")
-        
-        p_area = doc.add_paragraph()
-        p_area.add_run("Área: ").bold = False
-        p_area.add_run(f"{area} m²")
-        
-        if matricula and matricula != "N/A":
-            p_mat = doc.add_paragraph()
-            p_mat.add_run("MAT. ").bold = False
-            p_mat.add_run(matricula)
-        
-        # ============================================================
-        # SEÇÃO DE DESCRIÇÃO
-        # ============================================================
-        p_desc_titulo = doc.add_paragraph()
-        run_desc = p_desc_titulo.add_run("DESCRIÇÃO")
-        run_desc.bold = True
-        
-        # Gerar parágrafos descritivos para cada segmento
-        if segmentos:
-            # Primeiro segmento
-            primeiro = segmentos[0]
-            p_inicio = doc.add_paragraph()
-            p_inicio.add_run(
-                f"Inicia-se a descrição deste perímetro no vértice {primeiro.get('de', '1')}, "
-                f"de coordenadas N(Y) {primeiro.get('n_y', 'N/A')} e E(X) {primeiro.get('e_x', 'N/A')}, "
-                f"situado na divisa com {primeiro.get('confrontante', 'N/A')}"
-            )
-            
-            # Segmentos intermediários
-            for seg in segmentos[1:]:
-                p_seg = doc.add_paragraph()
-                p_seg.add_run(
-                    f"Segue-se pela divisa com {seg.get('confrontante', 'N/A')} "
-                    f"até o vértice {seg.get('para', 'N/A')}, "
-                    f"de coordenadas N(Y) {seg.get('n_y', 'N/A')} e E(X) {seg.get('e_x', 'N/A')}, "
-                    f"com azimute {seg.get('azimute', 'N/A')} e distância de {seg.get('distancia', 'N/A')} m"
-                )
-            
-            # Parágrafo de fechamento
-            p_fechamento = doc.add_paragraph()
-            p_fechamento.add_run(
-                f"Fechando o perímetro no vértice 1 de origem, totalizando uma área de {area} m²."
-            )
-        
-        # ============================================================
-        # DATA E LOCAL
-        # ============================================================
-        p_data = doc.add_paragraph()
-        p_data.add_run(self._formatar_data(municipio))
-        
-        # ============================================================
-        # ASSINATURA DO TÉCNICO
-        # ============================================================
-        doc.add_paragraph()  # Espaço
-        
-        p_assinatura = doc.add_paragraph()
-        p_assinatura.add_run("_" * 50)
-        
-        p_nome = doc.add_paragraph()
-        p_nome.add_run(self.dados_tecnico.get("nome", "TÉCNICO"))
-        
-        p_profissao = doc.add_paragraph()
-        p_profissao.add_run("Técnico em Agropecuária")
-        
-        p_dados_tecnico = doc.add_paragraph()
-        p_dados_tecnico.add_run(
-            f"CFTA: {self.dados_tecnico.get('cfta', '')} | "
-            f"TRT: {trt}"
+        # Começa a descrição
+        descricao = (
+            f"Inicia-se a descrição deste perímetro no vértice 1, de coordenadas N(Y) {coord_y_1} m e "
+            f"E(X) {coord_x_1} m, situado na divisa com {confrontante_inicial} (MAT. {matricula_inicial}); "
+            f"deste, segue confrontando com {confrontante_inicial} (MAT. {matricula_inicial}), "
+            f"com o(s) seguinte(s) azimute(s) e distância(s): "
         )
         
-        # Salvar em buffer
+        # Adiciona cada segmento
+        for idx, segmento in enumerate(segmentos):
+            azimute = segmento.get('azimute', 'N/A')
+            distancia = segmento.get('distancia', 'N/A')
+            vértice_para = idx + 2  # Próximo vértice
+            coord_y_para = segmento.get('coord_y_para', 'N/A')
+            coord_x_para = segmento.get('coord_x_para', 'N/A')
+            confrontante = segmento.get('confrontante', 'N/A')
+            matricula = segmento.get('matricula', 'N/A')
+            
+            # Adiciona o segmento
+            if idx < len(segmentos) - 1:
+                # Não é o último segmento
+                descricao += (
+                    f"{azimute} e {distancia} m até o vértice {vértice_para}, de coordenadas "
+                    f"N(Y) {coord_y_para} m e E(X) {coord_x_para} m; "
+                )
+                
+                # Verifica se o próximo segmento tem confrontante diferente
+                proximo_segmento = segmentos[idx + 1]
+                proximo_confrontante = proximo_segmento.get('confrontante', 'N/A')
+                proximo_matricula = proximo_segmento.get('matricula', 'N/A')
+                
+                if proximo_confrontante != confrontante or proximo_matricula != matricula:
+                    descricao += (
+                        f"deste, segue confrontando com {proximo_confrontante} (MAT. {proximo_matricula}), "
+                        f"com o(s) seguinte(s) azimute(s) e distância(s): "
+                    )
+            else:
+                # Último segmento - fecha o perímetro
+                descricao += (
+                    f"{azimute} e {distancia} m até o vértice 1, ponto inicial da descrição deste perímetro."
+                )
+        
+        return descricao
+
+    def _adicionar_secao_descricao(self, doc: Document):
+        """Adiciona a seção 'DESCRIÇÃO' centralizada e negrita."""
+        p = doc.add_paragraph('DESCRIÇÃO')
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = p.runs[0]
+        run.font.size = Pt(11)
+        run.font.bold = True
+
+    def _adicionar_descricao_continua(self, doc: Document, texto_descricao: str):
+        """Adiciona a descrição como um parágrafo único e contínuo."""
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        
+        # Adiciona o texto
+        run = p.add_run(texto_descricao)
+        run.font.size = Pt(11)
+        
+        # Espaçamento entre linhas
+        p.paragraph_format.line_spacing = 1.5
+
+    def _adicionar_data_local(self, doc: Document, local: str, data: str):
+        """Adiciona data e local no final do documento."""
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = p.add_run(f'{local}, {data}')
+        run.font.size = Pt(11)
+
+    def _adicionar_assinatura(self, doc: Document):
+        """Adiciona a assinatura do técnico com CPF."""
+        # Espaço em branco
+        doc.add_paragraph()
+        
+        # Linha de assinatura
+        p = doc.add_paragraph('_____________________________')
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        
+        # Nome do técnico
+        nome_tecnico = self.dados_tecnico.get('nome', 'N/A')
+        p = doc.add_paragraph(nome_tecnico)
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = p.runs[0]
+        run.font.size = Pt(11)
+        
+        # Profissão
+        p = doc.add_paragraph('Técnico em Agropecuária')
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = p.runs[0]
+        run.font.size = Pt(11)
+        
+        # CFTA, CPF e TRT
+        cfta = self.dados_tecnico.get('cfta', 'N/A')
+        cpf = self.dados_tecnico.get('cpf', 'N/A')
+        trt = self.dados_tecnico.get('trt', 'N/A')
+        
+        p = doc.add_paragraph(f'CFTA: {cfta} | CPF: {cpf} | TRT: {trt}')
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run = p.runs[0]
+        run.font.size = Pt(11)
+
+    def gerar_documento(self, dados_finais: Dict[str, Any]) -> bytes:
+        """
+        Gera o documento Word completo com memorial descritivo.
+        
+        Args:
+            dados_finais: Dicionário com todos os dados necessários
+            
+        Returns:
+            Bytes do documento Word gerado
+        """
+        # Cria novo documento
+        doc = Document()
+        
+        # Define margens padrão
+        sections = doc.sections
+        for section in sections:
+            section.top_margin = Inches(1)
+            section.bottom_margin = Inches(1)
+            section.left_margin = Inches(1)
+            section.right_margin = Inches(1)
+        
+        # 1. Adiciona cabeçalho da empresa
+        self._adicionar_cabecalho_empresa(doc)
+        
+        # 2. Adiciona espaço
+        doc.add_paragraph()
+        
+        # 3. Adiciona título
+        self._adicionar_titulo(doc)
+        
+        # 4. Adiciona espaço
+        doc.add_paragraph()
+        
+        # 5. Adiciona dados do imóvel
+        self._adicionar_dados_imovel(doc, dados_finais)
+        
+        # 6. Adiciona espaço
+        doc.add_paragraph()
+        
+        # 7. Adiciona seção DESCRIÇÃO
+        self._adicionar_secao_descricao(doc)
+        
+        # 8. Adiciona espaço
+        doc.add_paragraph()
+        
+        # 9. Constrói e adiciona descrição contínua
+        segmentos = dados_finais.get('segmentos', [])
+        texto_descricao = self._construir_descricao_continua(segmentos)
+        self._adicionar_descricao_continua(doc, texto_descricao)
+        
+        # 10. Adiciona espaço
+        doc.add_paragraph()
+        
+        # 11. Adiciona data e local
+        local = dados_finais.get('municipio', 'Local')
+        data = dados_finais.get('data', '21 de julho de 2026')
+        self._adicionar_data_local(doc, local, data)
+        
+        # 12. Adiciona assinatura
+        self._adicionar_assinatura(doc)
+        
+        # Salva em BytesIO e retorna
         buffer = io.BytesIO()
         doc.save(buffer)
         buffer.seek(0)
-        
-        logger.info("Memorial descritivo gerado com sucesso")
         return buffer.getvalue()
