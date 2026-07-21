@@ -524,24 +524,32 @@ def main():
         else:
             segmentos = st.session_state["dados_memoriais_processados"]
             
-            # Extrair confrontantes únicos
-            confrontantes_unicos = list(set([s.get("confrontante", "N/A") for s in segmentos if s.get("confrontante")]))
+            # Validar se segmentos é uma lista
+            if not isinstance(segmentos, list) or len(segmentos) == 0:
+                st.warning("⚠️ Nenhum segmento foi processado. Verifique o memorial descritivo.")
+                confrontantes_unicos = []
+            else:
+                # Extrair confrontantes únicos
+                confrontantes_unicos = list(set([s.get("confrontante", "N/A") for s in segmentos if isinstance(s, dict) and s.get("confrontante")]))
             
-            st.markdown(f"**Confrontantes encontrados:** {len(confrontantes_unicos)}")
-            
-            for idx, confrontante in enumerate(confrontantes_unicos, 1):
-                with st.expander(f"👤 {idx}. {confrontante}"):
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        nome_anuencia = st.text_input(f"Nome completo ({confrontante}):", value=confrontante, key=f"nome_anu_{idx}")
-                    with col2:
-                        cpf_anuencia = st.text_input(f"CPF ({confrontante}):", key=f"cpf_anu_{idx}")
-                    
-                    endereco_anuencia = st.text_area(f"Endereço ({confrontante}):", key=f"end_anu_{idx}")
-                    
-                    if st.button(f"📄 Gerar Anuência para {confrontante}", key=f"btn_anu_{idx}"):
-                        # Lógica para gerar anuência
-                        st.success(f"✅ Anuência gerada para {nome_anuencia}")
+            if confrontantes_unicos:
+                st.markdown(f"**Confrontantes encontrados:** {len(confrontantes_unicos)}")
+                
+                for idx, confrontante in enumerate(confrontantes_unicos, 1):
+                    with st.expander(f"👤 {idx}. {confrontante}"):
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            nome_anuencia = st.text_input(f"Nome completo ({confrontante}):", value=confrontante, key=f"nome_anu_{idx}")
+                        with col2:
+                            cpf_anuencia = st.text_input(f"CPF ({confrontante}):", key=f"cpf_anu_{idx}")
+                        
+                        endereco_anuencia = st.text_area(f"Endereço ({confrontante}):", key=f"end_anu_{idx}")
+                        
+                        if st.button(f"📄 Gerar Anuência para {confrontante}", key=f"btn_anu_{idx}"):
+                            # Lógica para gerar anuência
+                            st.success(f"✅ Anuência gerada para {nome_anuencia}")
+            else:
+                st.info("ℹ️ Nenhum confrontante foi encontrado.")
 
     # ============================================================
     # ABA 3: ANUÊNCIAS INCRA
