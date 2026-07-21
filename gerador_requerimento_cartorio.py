@@ -208,56 +208,46 @@ class GeradorRequerimentoCartorio:
             raise Exception(f"Falha ao extrair dados: {str(e)}")
 
     def _aplicar_negrito_informacoes(self, doc, dados: Dict[str, Any]):
-        """Aplica negrito nas informações importantes do documento."""
+        """Aplica negrito APENAS nos nomes e dados principais (sem o resto do parágrafo)."""
         req1 = dados.get("requerente_1", {})
         req2 = dados.get("requerente_2", {})
         imovel = dados.get("imovel", {})
         
-        # Informações a colocar em negrito
-        informacoes_importantes = [
+        # Informações a colocar em negrito (apenas nomes e dados principais)
+        dados_negrito = {
             # Requerente 1
-            req1.get('nome', ''),
-            req1.get('profissao', ''),
-            req1.get('rg', ''),
-            req1.get('cpf', ''),
+            req1.get('nome', '').upper(): True,
+            req1.get('profissao', '').capitalize(): True,
             # Requerente 2
-            req2.get('nome', ''),
-            req2.get('profissao', ''),
-            req2.get('rg', ''),
-            req2.get('cpf', ''),
+            req2.get('nome', '').upper(): True,
+            req2.get('profissao', '').capitalize(): True,
             # Imóvel
-            imovel.get('nome', ''),
-            imovel.get('area_registrada', ''),
-            imovel.get('area_encontrada', ''),
-            imovel.get('area_total_retificada', ''),
-            imovel.get('matricula', ''),
-            imovel.get('municipio_imovel', ''),
-            imovel.get('comarca_imovel', ''),
-            imovel.get('codigo_incra', ''),
-        ]
+            imovel.get('nome', ''): True,
+        }
         
         # Remover strings vazias
-        informacoes_importantes = [info for info in informacoes_importantes if info and info not in ('XXXXXX', 'XXXXX', 'XXX', '')]
+        dados_negrito = {k: v for k, v in dados_negrito.items() if k and k not in ('XXXXXX', 'XXXXX', 'XXX', '')}
         
         # Aplicar negrito em parágrafos
         for para in doc.paragraphs:
-            for info in informacoes_importantes:
-                if info in para.text:
-                    # Procurar e colocar em negrito
-                    for run in para.runs:
-                        if info in run.text:
-                            run.font.bold = True
+            for run in para.runs:
+                # Verificar se o texto do run é uma informação importante
+                for info in dados_negrito.keys():
+                    if info.lower() in run.text.lower():
+                        # Aplicar negrito apenas neste run
+                        run.font.bold = True
+                        break
         
         # Aplicar negrito em tabelas
         for table in doc.tables:
             for row in table.rows:
                 for cell in row.cells:
                     for para in cell.paragraphs:
-                        for info in informacoes_importantes:
-                            if info in para.text:
-                                for run in para.runs:
-                                    if info in run.text:
-                                        run.font.bold = True
+                        for run in para.runs:
+                            for info in dados_negrito.keys():
+                                if info.lower() in run.text.lower():
+                                    run.font.bold = True
+                                    break
 
     def _ajustar_fonte_arial(self, doc):
         """Ajusta a fonte de todo o documento para Arial."""
