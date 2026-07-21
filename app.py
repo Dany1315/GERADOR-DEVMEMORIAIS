@@ -588,7 +588,7 @@ def main():
                                 st.success(f"✅ Anuência gerada para {nome_anuencia}")
                             except Exception as e:
                                 st.error(f"❌ Erro ao gerar anuência: {str(e)}")
-                                logger.error(f"Erro ao gerar anuência para {nome_anuencia}: {str(e)}")}
+                                logger.error(f"Erro ao gerar anuência para {nome_anuencia}: {str(e)}")
             else:
                 st.info("ℹ️ Nenhum confrontante foi encontrado.")
 
