@@ -9,8 +9,6 @@ from datetime import datetime
 from docx import Document
 from docx.shared import Pt, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.oxml import OxmlElement
-from docx.oxml.ns import qn
 
 logger = logging.getLogger(__name__)
 
@@ -29,15 +27,24 @@ class GeradorMemorialWord:
         self.dados_empresa = dados_empresa
         self.dados_tecnico = dados_tecnico
     
-    def gerar_documento(self, dados_finais: Dict[str, Any]) -> io.BytesIO:
+    def _formatar_data(self, municipio: str) -> str:
+        """Formata a data em português"""
+        data_atual = datetime.now()
+        meses = [
+            "janeiro", "fevereiro", "março", "abril", "maio", "junho",
+            "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"
+        ]
+        return f"{municipio}, {data_atual.day} de {meses[data_atual.month - 1]} de {data_atual.year}."
+    
+    def gerar_documento(self, dados_finais: Dict[str, Any]) -> bytes:
         """
-        Gera o memorial descritivo em formato Word.
+        Gera o memorial descritivo em formato Word com estrutura descritiva.
         
         Args:
-            dados_finais: Dicionário com 'imovel', 'proprietario', 'local', 'area', 'perimetro', 'segmentos'
+            dados_finais: Dicionário com dados do memorial
         
         Returns:
-            io.BytesIO: Buffer contendo o documento Word
+            bytes: Conteúdo do documento em bytes
         """
         doc = Document()
         
@@ -48,33 +55,14 @@ class GeradorMemorialWord:
         font.size = Pt(11)
         
         # Extrair dados
-        imovel = dados_finais.get("imovel", "IMÓVEL")
-        proprietario = dados_finais.get("proprietario", "PROPRIETÁRIO")
-        local = dados_finais.get("local", "LOCALIDADE")
-        area = dados_finais.get("area", "0,00")
+        proprietario = dados_finais.get("proprietario", "N/A")
+        municipio = dados_finais.get("municipio", "N/A")
+        comarca = dados_finais.get("comarca", "N/A")
+        trt = dados_finais.get("trt", "N/A")
         perimetro = dados_finais.get("perimetro", "0,00")
+        area = dados_finais.get("area", "0,00")
+        matricula = dados_finais.get("matricula", "N/A")
         segmentos = dados_finais.get("segmentos", [])
-        
-        # ============================================================
-        # CABEÇALHO COM DADOS DA EMPRESA
-        # ============================================================
-        p_empresa = doc.add_paragraph()
-        p_empresa.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        run_emp = p_empresa.add_run(self.dados_empresa.get("nome", "EMPRESA"))
-        run_emp.bold = True
-        run_emp.font.size = Pt(12)
-        
-        p_endereco = doc.add_paragraph()
-        p_endereco.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p_endereco.add_run(self.dados_empresa.get("endereco", ""))
-        
-        p_contato = doc.add_paragraph()
-        p_contato.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        telefone = self.dados_empresa.get("telefone", "")
-        email = self.dados_empresa.get("email", "")
-        p_contato.add_run(f"Tel: {telefone} | Email: {email}")
-        
-        doc.add_paragraph()  # Espaço
         
         # ============================================================
         # TÍTULO DO MEMORIAL
@@ -85,114 +73,97 @@ class GeradorMemorialWord:
         run_titulo.bold = True
         run_titulo.font.size = Pt(14)
         
-        p_subtitulo = doc.add_paragraph()
-        p_subtitulo.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        p_subtitulo.add_run(f"Imóvel: {imovel}")
-        
-        doc.add_paragraph()  # Espaço
-        
         # ============================================================
         # DADOS DO IMÓVEL
         # ============================================================
-        p_dados = doc.add_paragraph()
-        p_dados.add_run("DADOS DO IMÓVEL:").bold = True
-        
         p_prop = doc.add_paragraph()
-        p_prop.add_run(f"Proprietário: ").bold = True
+        p_prop.add_run("Proprietário: ").bold = False
         p_prop.add_run(proprietario)
         
-        p_local = doc.add_paragraph()
-        p_local.add_run(f"Localidade: ").bold = True
-        p_local.add_run(local)
+        p_mun = doc.add_paragraph()
+        p_mun.add_run("Município: ").bold = False
+        p_mun.add_run(municipio)
         
-        p_area = doc.add_paragraph()
-        p_area.add_run(f"Área: ").bold = True
-        p_area.add_run(f"{area} hectares")
+        p_com = doc.add_paragraph()
+        p_com.add_run("Comarca: ").bold = False
+        p_com.add_run(comarca)
+        
+        p_trt = doc.add_paragraph()
+        p_trt.add_run("TRT: ").bold = False
+        p_trt.add_run(trt)
         
         p_perim = doc.add_paragraph()
-        p_perim.add_run(f"Perímetro: ").bold = True
-        p_perim.add_run(f"{perimetro} metros")
+        p_perim.add_run("Perímetro: ").bold = False
+        p_perim.add_run(f"{perimetro} m")
         
-        doc.add_paragraph()  # Espaço
+        p_area = doc.add_paragraph()
+        p_area.add_run("Área: ").bold = False
+        p_area.add_run(f"{area} m²")
         
-        # ============================================================
-        # DADOS DO TÉCNICO
-        # ============================================================
-        p_tecnico_titulo = doc.add_paragraph()
-        p_tecnico_titulo.add_run("RESPONSÁVEL TÉCNICO:").bold = True
-        
-        p_tecnico_nome = doc.add_paragraph()
-        p_tecnico_nome.add_run(f"Nome: ").bold = True
-        p_tecnico_nome.add_run(self.dados_tecnico.get("nome", ""))
-        
-        p_tecnico_cfta = doc.add_paragraph()
-        p_tecnico_cfta.add_run(f"CFTA: ").bold = True
-        p_tecnico_cfta.add_run(self.dados_tecnico.get("cfta", ""))
-        
-        p_tecnico_cpf = doc.add_paragraph()
-        p_tecnico_cpf.add_run(f"CPF: ").bold = True
-        p_tecnico_cpf.add_run(self.dados_tecnico.get("cpf", ""))
-        
-        doc.add_paragraph()  # Espaço
+        if matricula and matricula != "N/A":
+            p_mat = doc.add_paragraph()
+            p_mat.add_run("MAT. ").bold = False
+            p_mat.add_run(matricula)
         
         # ============================================================
-        # TABELA DE SEGMENTOS/CONFRONTAÇÕES
+        # SEÇÃO DE DESCRIÇÃO
         # ============================================================
+        p_desc_titulo = doc.add_paragraph()
+        run_desc = p_desc_titulo.add_run("DESCRIÇÃO")
+        run_desc.bold = True
+        
+        # Gerar parágrafos descritivos para cada segmento
         if segmentos:
-            p_tabela_titulo = doc.add_paragraph()
-            p_tabela_titulo.add_run("ROTEIRO PERIMÉTRICO:").bold = True
+            # Primeiro segmento
+            primeiro = segmentos[0]
+            p_inicio = doc.add_paragraph()
+            p_inicio.add_run(
+                f"Inicia-se a descrição deste perímetro no vértice {primeiro.get('de', '1')}, "
+                f"de coordenadas N(Y) {primeiro.get('n_y', 'N/A')} e E(X) {primeiro.get('e_x', 'N/A')}, "
+                f"situado na divisa com {primeiro.get('confrontante', 'N/A')}"
+            )
             
-            # Criar tabela
-            tabela = doc.add_table(rows=1, cols=7)
-            tabela.style = 'Table Grid'
+            # Segmentos intermediários
+            for seg in segmentos[1:]:
+                p_seg = doc.add_paragraph()
+                p_seg.add_run(
+                    f"Segue-se pela divisa com {seg.get('confrontante', 'N/A')} "
+                    f"até o vértice {seg.get('para', 'N/A')}, "
+                    f"de coordenadas N(Y) {seg.get('n_y', 'N/A')} e E(X) {seg.get('e_x', 'N/A')}, "
+                    f"com azimute {seg.get('azimute', 'N/A')} e distância de {seg.get('distancia', 'N/A')} m"
+                )
             
-            # Cabeçalho
-            headers = ["De", "Para", "N (Y)", "E (X)", "Azimute", "Distância (m)", "Confrontante"]
-            row_headers = tabela.rows[0]
-            for idx, header in enumerate(headers):
-                cell = row_headers.cells[idx]
-                cell.text = header
-                # Formatar cabeçalho
-                for para in cell.paragraphs:
-                    for run in para.runs:
-                        run.bold = True
-                        run.font.size = Pt(9)
-            
-            # Adicionar dados dos segmentos
-            for seg in segmentos:
-                row = tabela.add_row()
-                row.cells[0].text = str(seg.get("de", ""))
-                row.cells[1].text = str(seg.get("para", ""))
-                row.cells[2].text = str(seg.get("n_y", ""))
-                row.cells[3].text = str(seg.get("e_x", ""))
-                row.cells[4].text = str(seg.get("azimute", ""))
-                row.cells[5].text = str(seg.get("distancia", ""))
-                row.cells[6].text = str(seg.get("confrontante", ""))
-        
-        doc.add_paragraph()  # Espaço
+            # Parágrafo de fechamento
+            p_fechamento = doc.add_paragraph()
+            p_fechamento.add_run(
+                f"Fechando o perímetro no vértice 1 de origem, totalizando uma área de {area} m²."
+            )
         
         # ============================================================
-        # RODAPÉ COM DATA E ASSINATURA
+        # DATA E LOCAL
         # ============================================================
         p_data = doc.add_paragraph()
-        data_atual = datetime.now()
-        meses = [
-            "janeiro", "fevereiro", "março", "abril", "maio", "junho",
-            "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"
-        ]
-        texto_data = f"{local}, {data_atual.day} de {meses[data_atual.month - 1]} de {data_atual.year}."
-        p_data.add_run(texto_data)
+        p_data.add_run(self._formatar_data(municipio))
         
-        doc.add_paragraph()  # Espaço
+        # ============================================================
+        # ASSINATURA DO TÉCNICO
+        # ============================================================
         doc.add_paragraph()  # Espaço
         
-        # Assinatura do técnico
         p_assinatura = doc.add_paragraph()
         p_assinatura.add_run("_" * 50)
         
-        p_nome_assinatura = doc.add_paragraph()
-        p_nome_assinatura.add_run(self.dados_tecnico.get("nome", "TÉCNICO"))
-        p_nome_assinatura.add_run(f"\nCFTA: {self.dados_tecnico.get('cfta', '')}")
+        p_nome = doc.add_paragraph()
+        p_nome.add_run(self.dados_tecnico.get("nome", "TÉCNICO"))
+        
+        p_profissao = doc.add_paragraph()
+        p_profissao.add_run("Técnico em Agropecuária")
+        
+        p_dados_tecnico = doc.add_paragraph()
+        p_dados_tecnico.add_run(
+            f"CFTA: {self.dados_tecnico.get('cfta', '')} | "
+            f"TRT: {trt}"
+        )
         
         # Salvar em buffer
         buffer = io.BytesIO()
@@ -200,4 +171,4 @@ class GeradorMemorialWord:
         buffer.seek(0)
         
         logger.info("Memorial descritivo gerado com sucesso")
-        return buffer
+        return buffer.getvalue()
