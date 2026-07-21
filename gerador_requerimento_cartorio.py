@@ -4,6 +4,7 @@ import os
 import re
 from datetime import datetime
 from typing import List, Dict, Any
+import io
 from docx import Document
 from docx.shared import Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -281,8 +282,8 @@ class GeradorRequerimentoCartorio:
             logger.info(f"Gerando documento com estado civil: {estado_civil_req1}, tem cônjuge: {tem_conjuge}")
 
             # ============================================================
-            # MAPEAMENTO COMPLETO DE PLACEHOLDERS
-            # Usando os placeholders exatos do template Word atualizado
+            # MAPEAMENTO DE PLACEHOLDERS - Template com ( )
+            # Usando os placeholders exatos do template Word
             # ============================================================
             substituicoes = {
                 # CABEÇALHO / DESTINATÁRIO
@@ -315,15 +316,19 @@ class GeradorRequerimentoCartorio:
                 "(COMARCA ONDE O IMOVEL ESTÁ REGISTRADO – ES)": imovel.get('comarca_imovel', 'XXXXXXX'),
                 "(MATRICULA DO IMOVEL)": imovel.get('matricula', 'XXXXXX'),
                 
+                # IMÓVEL - Valores
+                "(VALOR DO IMOVEL EM NUMEROS)": imovel.get('valor_fiscal', 'XX0.000,00'),
+                "(VALOR DO IMOVEL POR ESCRITO mil reais)": "XXXXXX",  # Não extraído
+                
                 # IMÓVEL - Áreas
                 "(ÁREA ENCONTRADA NA PLANTA DO IMOVEL há)": imovel.get('area_encontrada', 'XXXXX'),
+                "(XXXXXX há)": imovel.get('area_encontrada', 'XXXXXX'),  # Gleba 1
+                "(XXXXX há)": imovel.get('area_total_retificada', 'XXXXX'),  # Gleba 2
+                "(ÁREA DO IMOVEL há)": imovel.get('area_total_retificada', 'XXXXXXX'),  # Retificação
                 
                 # IMÓVEL - Certificações
                 "(CÓDIGO DO IMÓVEL RURAL DISPONIVEL NO CCIR)": imovel.get('codigo_incra', 'XXX.XXX.XXX.XXX-X'),
-                "(BRXXXXXXX(TRT ENCONTRADA EM TRT))": imovel.get('trt_numero', 'BRXXXXXXX'),
-                
-                # IMÓVEL - Retificação (aparece novamente no texto)
-                "(ÁREA DO IMOVEL há)": imovel.get('area_total_retificada', 'XXXXXXX'),
+                "(BRXXXXXXX(TRT ENCONTRADA EM TRT)": imovel.get('trt_numero', 'BRXXXXXXX'),
                 
                 # DATA
                 "(XX de XXX de XXXX)": data_formatada,
