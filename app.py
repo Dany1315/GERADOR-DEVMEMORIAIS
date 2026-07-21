@@ -25,6 +25,7 @@ from utils import (
 from processador import ProcessadorMemorial
 from gerador_word import GeradorAnuenciaIncraWord
 from gerador_memorial_word import GeradorMemorialWord
+from gerador_anuencias import GeradorAnuenciaWord
 
 # Inicializa o logger
 logger = criar_logger(__name__)
@@ -561,8 +562,33 @@ def main():
                         trt_anuencia = st.text_input(f"TRT ({confrontante}):", key=f"trt_anu_{idx}")
                         
                         if st.button(f"📄 Gerar Anuência para {confrontante}", key=f"btn_anu_{idx}"):
-                            # Lógica para gerar anuência
-                            st.success(f"✅ Anuência gerada para {nome_anuencia}")
+                            try:
+                                # Preparar dados para a anuência
+                                segmentos_confrontante = [s for s in st.session_state.get("segmentos", []) if s.get("confrontante", "").upper() == confrontante.upper()]
+                                
+                                dados_anuencia = {
+                                    "confrontante": nome_anuencia,
+                                    "proprietario": st.session_state["painel_cliente_proprietario"],
+                                    "local": st.session_state["painel_cliente_local"],
+                                    "segmentos": segmentos_confrontante
+                                }
+                                
+                                # Gerar documento
+                                gerador_anu = GeradorAnuenciaWord(st.session_state.get("dados_finais", {}).get("empresa", {}), st.session_state.get("dados_finais", {}).get("tecnico", {}))
+                                arquivo_anuencia = gerador_anu.gerar_documento(dados_anuencia)
+                                
+                                # Botão de download
+                                st.download_button(
+                                    label=f"📥 BAIXAR ANUÊNCIA - {nome_anuencia}",
+                                    data=arquivo_anuencia.getvalue(),
+                                    file_name=f"ANUENCIA_{sanitizar_nome_arquivo(nome_anuencia.upper())}.docx",
+                                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                    key=f"download_anu_{idx}"
+                                )
+                                st.success(f"✅ Anuência gerada para {nome_anuencia}")
+                            except Exception as e:
+                                st.error(f"❌ Erro ao gerar anuência: {str(e)}")
+                                logger.error(f"Erro ao gerar anuência para {nome_anuencia}: {str(e)}")}
             else:
                 st.info("ℹ️ Nenhum confrontante foi encontrado.")
 
