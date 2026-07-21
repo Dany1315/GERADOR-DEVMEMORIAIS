@@ -298,6 +298,10 @@ def main():
             st.session_state["painel_cliente_area"] = CLIENTE_CONFIG.AREA
         if "painel_cliente_perimetro" not in st.session_state:
             st.session_state["painel_cliente_perimetro"] = CLIENTE_CONFIG.PERIMETRO
+        if "painel_cliente_comarca" not in st.session_state:
+            st.session_state["painel_cliente_comarca"] = "N/A"
+        if "painel_cliente_matricula" not in st.session_state:
+            st.session_state["painel_cliente_matricula"] = "N/A"
 
         with tab_side_empresa:
             st.markdown("### Configurações Institucionais")
@@ -322,6 +326,9 @@ def main():
                 st.session_state["painel_cliente_area"] = st.text_input("📐 Área (ha)", value=st.session_state["painel_cliente_area"], key="input_cliente_area")
             with col_per:
                 st.session_state["painel_cliente_perimetro"] = st.text_input("🏃 Perímetro (m)", value=st.session_state["painel_cliente_perimetro"], key="input_cliente_perimetro")
+            
+            st.session_state["painel_cliente_comarca"] = st.text_input("⚖️ Comarca", value=st.session_state["painel_cliente_comarca"], key="input_cliente_comarca")
+            st.session_state["painel_cliente_matricula"] = st.text_input("📋 Matrícula", value=st.session_state["painel_cliente_matricula"], key="input_cliente_matricula")
 
         st.markdown("---")
         
@@ -464,6 +471,8 @@ def main():
                                 "imovel": st.session_state["painel_cliente_imovel"],
                                 "area": st.session_state["painel_cliente_area"],
                                 "perimetro": st.session_state["painel_cliente_perimetro"],
+                                "comarca": st.session_state["painel_cliente_comarca"],
+                                "matricula": st.session_state["painel_cliente_matricula"],
                             },
                             "empresa": {
                                 "nome": st.session_state["painel_empresa_nome"],
@@ -544,6 +553,8 @@ def main():
                             cpf_anuencia = st.text_input(f"CPF ({confrontante}):", key=f"cpf_anu_{idx}")
                         
                         endereco_anuencia = st.text_area(f"Endereço ({confrontante}):", key=f"end_anu_{idx}")
+                        
+                        trt_anuencia = st.text_input(f"TRT ({confrontante}):", key=f"trt_anu_{idx}")
                         
                         if st.button(f"📄 Gerar Anuência para {confrontante}", key=f"btn_anu_{idx}"):
                             # Lógica para gerar anuência
