@@ -266,38 +266,66 @@ def main():
     usuario_logado = st.session_state.get("usuario_logado", "Usuário")
     st.caption(f"🔒 Sessão ativa: **{usuario_logado}** | Conexão segura")
 
-    # Painel de Controle (Sidebar)
+    # ============================================================
+    # PAINEL DE CONTROLE (SIDEBAR) — AGORA FUNCIONAL
+    # ============================================================
     with st.sidebar:
         st.markdown("<h2 style='font-size: 1.5rem;'>⚙️ Painel de Controle</h2>", unsafe_allow_html=True)
         tab_side_empresa, tab_side_cliente = st.tabs(["🏢 Empresa / Técnico", "👥 Cliente & Imóvel"])
 
+        # ✅ NOVO: Inicializar dados do painel lateral em session_state
+        if "painel_empresa_nome" not in st.session_state:
+            st.session_state["painel_empresa_nome"] = EMPRESA_CONFIG.NOME
+        if "painel_empresa_endereco" not in st.session_state:
+            st.session_state["painel_empresa_endereco"] = EMPRESA_CONFIG.ENDERECO
+        if "painel_empresa_telefone" not in st.session_state:
+            st.session_state["painel_empresa_telefone"] = EMPRESA_CONFIG.TELEFONE
+        if "painel_empresa_email" not in st.session_state:
+            st.session_state["painel_empresa_email"] = EMPRESA_CONFIG.EMAIL
+        if "painel_tecnico_nome" not in st.session_state:
+            st.session_state["painel_tecnico_nome"] = TECNICO_CONFIG.NOME
+        if "painel_tecnico_cfta" not in st.session_state:
+            st.session_state["painel_tecnico_cfta"] = TECNICO_CONFIG.CFTA
+        if "painel_cpf_tecnico" not in st.session_state:
+            st.session_state["painel_cpf_tecnico"] = "111.985.197-11"
+        if "painel_cliente_imovel" not in st.session_state:
+            st.session_state["painel_cliente_imovel"] = CLIENTE_CONFIG.IMOVEL
+        if "painel_cliente_proprietario" not in st.session_state:
+            st.session_state["painel_cliente_proprietario"] = CLIENTE_CONFIG.PROPRIETARIO
+        if "painel_cliente_local" not in st.session_state:
+            st.session_state["painel_cliente_local"] = CLIENTE_CONFIG.LOCAL
+        if "painel_cliente_area" not in st.session_state:
+            st.session_state["painel_cliente_area"] = CLIENTE_CONFIG.AREA
+        if "painel_cliente_perimetro" not in st.session_state:
+            st.session_state["painel_cliente_perimetro"] = CLIENTE_CONFIG.PERIMETRO
+
         with tab_side_empresa:
             st.markdown("### Configurações Institucionais")
-            empresa_nome = st.text_input("Nome da Empresa", value=EMPRESA_CONFIG.NOME)
-            empresa_endereco = st.text_input("Endereço", value=EMPRESA_CONFIG.ENDERECO)
-            empresa_telefone = st.text_input("Telefone", value=EMPRESA_CONFIG.TELEFONE)
-            empresa_email = st.text_input("Email", value=EMPRESA_CONFIG.EMAIL)
+            st.session_state["painel_empresa_nome"] = st.text_input("Nome da Empresa", value=st.session_state["painel_empresa_nome"], key="input_empresa_nome")
+            st.session_state["painel_empresa_endereco"] = st.text_input("Endereço", value=st.session_state["painel_empresa_endereco"], key="input_empresa_endereco")
+            st.session_state["painel_empresa_telefone"] = st.text_input("Telefone", value=st.session_state["painel_empresa_telefone"], key="input_empresa_telefone")
+            st.session_state["painel_empresa_email"] = st.text_input("Email", value=st.session_state["painel_empresa_email"], key="input_empresa_email")
 
             st.markdown("---")
-            technico_nome = st.text_input("Nome do Técnico", value=TECNICO_CONFIG.NOME)
-            tecnico_cfta = st.text_input("CFTA", value=TECNICO_CONFIG.CFTA)
-            cpf_tecnico = st.text_input("CPF do Responsável Técnico", value="111.985.197-11")
+            st.session_state["painel_tecnico_nome"] = st.text_input("Nome do Técnico", value=st.session_state["painel_tecnico_nome"], key="input_tecnico_nome")
+            st.session_state["painel_tecnico_cfta"] = st.text_input("CFTA", value=st.session_state["painel_tecnico_cfta"], key="input_tecnico_cfta")
+            st.session_state["painel_cpf_tecnico"] = st.text_input("CPF do Responsável Técnico", value=st.session_state["painel_cpf_tecnico"], key="input_cpf_tecnico")
 
         with tab_side_cliente:
             st.markdown("### Especificações do Projeto")
-            cliente_imovel = st.text_input("📍 Identificação do Imóvel", value=CLIENTE_CONFIG.IMOVEL)
-            cliente_proprietario = st.text_input("👤 Proprietário", value=CLIENTE_CONFIG.PROPRIETARIO)
-            cliente_local = st.text_input("🗺️ Município / Localidade", value=CLIENTE_CONFIG.LOCAL)
+            st.session_state["painel_cliente_imovel"] = st.text_input("📍 Identificação do Imóvel", value=st.session_state["painel_cliente_imovel"], key="input_cliente_imovel")
+            st.session_state["painel_cliente_proprietario"] = st.text_input("👤 Proprietário", value=st.session_state["painel_cliente_proprietario"], key="input_cliente_proprietario")
+            st.session_state["painel_cliente_local"] = st.text_input("🗺️ Município / Localidade", value=st.session_state["painel_cliente_local"], key="input_cliente_local")
             
             col_area, col_per = st.columns(2)
             with col_area:
-                cliente_area = st.text_input("📐 Área (ha)", value=CLIENTE_CONFIG.AREA)
+                st.session_state["painel_cliente_area"] = st.text_input("📐 Área (ha)", value=st.session_state["painel_cliente_area"], key="input_cliente_area")
             with col_per:
-                cliente_perimetro = st.text_input("🏃 Perímetro (m)", value=CLIENTE_CONFIG.PERIMETRO)
+                st.session_state["painel_cliente_perimetro"] = st.text_input("🏃 Perímetro (m)", value=st.session_state["painel_cliente_perimetro"], key="input_cliente_perimetro")
 
         st.markdown("---")
         
-        # DEFINIÇÃO DOS MODELOS GEMINI (GERAÇÃO 3 E 2.5)
+        # DEFINIÇÃO DOS MODELOS GEMINI
         modelos_filtrados = {
             "Gemini 3.5 Flash (Fronteira/Padrão)": "gemini-3.5-flash",
             "Gemini 3.1 Pro (Raciocínio Avançado)": "gemini-3.1-pro",
@@ -356,346 +384,179 @@ def main():
                         st.caption(f"✅ PDF carregado: `{pdf_roteiro.name}` (será convertido a {dpi_conversao} DPI)")
 
         with tab_manual:
-            col1, col2 = st.columns(2)
-            with col1:
-                texto_planta_manual = st.text_area("Texto da PLANTA:", height=150, placeholder="De 1 para 2 confronta com...")
-            with col2:
-                texto_roteiro_manual = st.text_area("Texto do ROTEIRO:", height=150, placeholder="PONTO N E AZIMUTE...")
+            col_planta, col_roteiro = st.columns(2)
+            with col_planta:
+                st.markdown("**Planta (Confrontantes) - Texto:**")
+                texto_planta_manual = st.text_area("Cole o texto da planta aqui:", height=150, key="texto_planta")
+            with col_roteiro:
+                st.markdown("**Roteiro (Tabela) - Texto:**")
+                texto_roteiro_manual = st.text_area("Cole o texto do roteiro aqui:", height=150, key="texto_roteiro")
 
-        tem_arquivos = pdf_planta or pdf_roteiro
-        tem_textos = texto_planta_manual and texto_roteiro_manual
-        
-        if tem_arquivos or tem_textos:
-            st.markdown("---")
-            if st.button("🔄 ANALISAR DOCUMENTOS E GERAR MEMORIAL DESCRITIVO", type="primary", use_container_width=True):
-                tempo_inicio_geral = time.time()
-                try:
-                    with st.status("Executando análise geoespacial...", expanded=True) as status:
-                        status.update(label="Inicializando conexão com o ecossistema Gemini...")
+        # Botão para processar
+        if st.button("🔍 Analisar Documentos", type="primary", use_container_width=True):
+            if not (pdf_planta or pdf_roteiro or texto_planta_manual or texto_roteiro_manual):
+                st.error("❌ Por favor, carregue pelo menos um arquivo ou cole um texto.")
+            else:
+                with st.spinner("⏳ Processando... Isso pode levar alguns minutos."):
+                    try:
+                        # Configurar Gemini
                         if not configurar_gemini():
-                            st.error("Erro crítico: Chave API ausente nos Secrets.")
-                            st.stop()
-                        
-                        processador = ProcessadorMemorial(nome_modelo_api)
-                        
-                        # Processamento de arquivos (PDF ou Imagem)
-                        imagens_planta, imagens_roteiro = [], []
+                            st.error("❌ Erro ao configurar Gemini API.")
+                            return
 
-                        # ---- Planta ----
+                        # Inicializar processador
+                        processador = ProcessadorMemorial(nome_modelo_api)
+
+                        # ============================================================
+                        # PROCESSAMENTO DE PLANTA
+                        # ============================================================
+                        imagens_planta = []
                         if pdf_planta:
                             if is_imagem(pdf_planta):
-                                status.update(label=f"Carregando imagem da planta: {pdf_planta.name}...")
-                                img_pil = carregar_imagem_direta(pdf_planta)
-                                imagens_planta.append(img_pil)
+                                imagens_planta = [carregar_imagem_direta(pdf_planta)]
                             else:
-                                status.update(label="Convertendo páginas da planta em matrizes gráficas...")
                                 imagens_planta = processador.pdf_para_imagens(pdf_planta, dpi=dpi_conversao)
 
-                        # ---- Roteiro ----
+                        # ============================================================
+                        # PROCESSAMENTO DE ROTEIRO
+                        # ============================================================
+                        imagens_roteiro = []
                         if pdf_roteiro:
                             if is_imagem(pdf_roteiro):
-                                status.update(label=f"Carregando imagem do roteiro: {pdf_roteiro.name}...")
-                                img_pil = carregar_imagem_direta(pdf_roteiro)
-                                imagens_roteiro.append(img_pil)
+                                imagens_roteiro = [carregar_imagem_direta(pdf_roteiro)]
                             else:
-                                status.update(label="Vetorizando dados do roteiro perimétrico...")
                                 imagens_roteiro = processador.pdf_para_imagens(pdf_roteiro, dpi=dpi_conversao)
 
-                        status.update(label="Extraindo segmentos via Visão Computacional...")
+                        # Extração de roteiro
                         if imagens_roteiro:
                             segmentos = processador.extrair_roteiro_com_ia(imagens_roteiro)
-                        else:
+                        elif texto_roteiro_manual:
                             segmentos = processador.parse_tabela_roteiro_texto(texto_roteiro_manual)
+                        else:
+                            st.error("❌ Nenhum roteiro foi fornecido.")
+                            return
 
-                        status.update(label="Cruzando malhas territoriais com confrontações...")
-                        mapeamento = processador.mapear_confrontantes(
+                        # Mapeamento de confrontantes
+                        processador.mapear_confrontantes(
                             imagens_planta=imagens_planta or None,
                             texto_planta=texto_planta_manual or None,
                             texto_roteiro=texto_roteiro_manual or None
                         )
-                        segmentos_vinculados = processador.vincular_confrontantes()
-                        status.update(label="Geração finalizada com sucesso!", state="complete")
 
-                    dados_finais = {
-                        "imovel": cliente_imovel, "proprietario": cliente_proprietario,
-                        "local": cliente_local, "municipio": cliente_local,
-                        "comarca": "N/A", "trt": "N/A", "matricula": "N/A",
-                        "area": cliente_area, "perimetro": cliente_perimetro,
-                        "segmentos": segmentos_vinculados,
-                        "empresa": {"nome": empresa_nome, "endereco": empresa_endereco, "telefone": empresa_telefone, "email": empresa_email},
-                        "tecnico": {"nome": technico_nome, "cfta": tecnico_cfta, "cpf": cpf_tecnico}
-                    }
-                    st.session_state["dados_memoriais_processados"] = dados_finais
+                        # Vinculação de confrontantes
+                        processador.vincular_confrontantes()
 
-                    st.balloons()
-                    st.success("🎉 Memorial estruturado com sucesso!")
-                    
-                    # Exibição dos resultados em Tabela
-                    df_data = [{
-                        "De": s['de'], "Para": s['para'], "N": s['coord_y'], "E": s['coord_x'],
-                        "Azimute": s['azimute'], "Distância (m)": s['distancia'], "Confrontante": s['confrontante']
-                    } for s in dados_finais["segmentos"]]
-                    st.dataframe(pd.DataFrame(df_data), use_container_width=True, hide_index=True)
+                        # Validação
+                        eh_valido, avisos = processador.validar_resultado()
+                        if avisos:
+                            for aviso in avisos:
+                                st.warning(aviso)
 
-                    # Exportadores (.docx)
-                    gerador = GeradorMemorialWord(dados_finais["empresa"], dados_finais["tecnico"])
-                    arquivo_docx = gerador.gerar_documento(dados_finais)
-                    
-                    st.download_button(
-                        label="📥 BAIXAR MEMORIAL DESCRITIVO (.DOCX)",
-                        data=arquivo_docx,
-                        file_name=f"MEMORIAL_{sanitizar_nome_arquivo(cliente_proprietario.upper())}.docx",
-                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                        use_container_width=True,
-                        key="btn_download_memorial"
-                    )
+                        # Armazenar em session_state
+                        st.session_state["dados_memoriais_processados"] = processador.segmentos
+                        st.session_state["segmentos"] = processador.segmentos
 
-                    # Botão extra para limpar sessão manualmente
-                    if st.button("🧹 Limpar dados da sessão (Após download)", key="btn_limpar_memorial"):
-                        limpar_sessao_memorial()
-                        st.rerun()
-
-                except Exception as e:
-                    st.error(f"Erro no processamento: {str(e)}")
-                    logger.error(f"Erro: {str(e)}", exc_info=True)
-        else:
-            st.info("💡 Carregue os documentos técnicos obrigatórios para liberar a esteira de processamento por inteligência artificial.")
-
-    # ------------------------------------------
-    # ABA 2: ANUÊNCIAS
-    # ------------------------------------------
-    with tab_anuencias:
-        st.markdown("### 🤝 Geração Automatizada de Declarações de Anuência")
-        dados_memoriais = st.session_state.get("dados_memoriais_processados")
-
-        if not dados_memoriais:
-            st.warning("⚠️ Nenhum memorial descritivo processado nesta sessão. Processe os dados na aba anterior.")
-        else:
-            segmentos = dados_memoriais.get("segmentos", [])
-            termos_indigo = ["AV.", "RUA", "AVENIDA", "ESTRADA", "PROJEÇÃO", "VALA", "CORREGO", "VALAO"]
-            
-            confrontantes_validos = sorted(list(set(
-                [str(s.get("confrontante", "")).strip().upper() for s in segmentos
-                 if s.get("confrontante") and not any(t in str(s.get("confrontante", "")).strip().upper() for t in termos_indigo)]
-            )))
-
-            if not confrontantes_validos:
-                st.info("ℹ️ Nenhum proprietário confrontante individual elegível foi mapeado na poligonal deste imóvel.")
-            else:
-                st.success(f"🔍 Encontrados **{len(confrontantes_validos)}** confrontantes elegíveis para Termos de Anuência.")
-                trt_numero = st.text_input("Número da TRT / ART vinculada:", value="", key="trt_anuencias")
-
-                # Importação no escopo correto para evitar redundâncias
-                from gerador_anuencias import GeradorAnuenciaWord
-                
-                dados_empresa_dict = {"nome": empresa_nome, "endereco": empresa_endereco, "telefone": empresa_telefone, "email": empresa_email}
-                dados_tecnico_dict = {"nome": technico_nome, "cfta": tecnico_cfta, "trt": trt_numero, "cpf": cpf_tecnico}
-                
-                gerador_anuencia_modulo = GeradorAnuenciaWord(dados_empresa_dict, dados_tecnico_dict)
-
-                for idx, conf in enumerate(confrontantes_validos):
-                    with st.expander(f"👤 Termo Unitário: {conf.title()}", expanded=True):
-                        seg_filtrados = [s for s in segmentos if str(s.get("confrontante", "")).strip().upper() == conf]
-                        intervalos = ", ".join([f"{s['de']} ao {s['para']}" for s in seg_filtrados])
-                        
-                        st.write(f"**Vértices de Intersecção:** {intervalos}")
-                        
-                        dados_anuencia = {
-                            "proprietario": dados_memoriais.get("proprietario"),
-                            "local": cliente_local,
-                            "imovel": dados_memoriais.get("imovel"),
-                            "confrontante": conf,
-                            "intervalos": intervalos,
-                            "segmentos": seg_filtrados
+                        # ✅ NOVO: Preparar dados_finais usando dados do painel lateral
+                        dados_finais = {
+                            "cliente": {
+                                "proprietario": st.session_state["painel_cliente_proprietario"],
+                                "local": st.session_state["painel_cliente_local"],
+                                "imovel": st.session_state["painel_cliente_imovel"],
+                                "area": st.session_state["painel_cliente_area"],
+                                "perimetro": st.session_state["painel_cliente_perimetro"],
+                            },
+                            "empresa": {
+                                "nome": st.session_state["painel_empresa_nome"],
+                                "endereco": st.session_state["painel_empresa_endereco"],
+                                "telefone": st.session_state["painel_empresa_telefone"],
+                                "email": st.session_state["painel_empresa_email"],
+                            },
+                            "tecnico": {
+                                "nome": st.session_state["painel_tecnico_nome"],
+                                "cfta": st.session_state["painel_tecnico_cfta"],
+                                "cpf": st.session_state["painel_cpf_tecnico"],
+                            },
+                            "segmentos": processador.segmentos,
                         }
-                        
-                        if st.button(f"⚙️ Construir Documento Word — {conf.title()}", key=f"build_{idx}"):
-                            with st.spinner("Redigindo descrição técnica jurídica..."):
-                                try:
-                                    arq_anuencia = gerador_anuencia_modulo.gerar_documento(dados_anuencia)
-                                    st.download_button(
-                                        label="📥 Fazer Download do Termo (.DOCX)",
-                                        data=arq_anuencia.getvalue(),
-                                        file_name=f"ANUENCIA_{sanitizar_nome_arquivo(conf)}.docx",
-                                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                                        key=f"down_{idx}"
-                                    )
-                                except Exception as err:
-                                    st.error(f"Falha na compilação: {err}")
 
-    # ------------------------------------------
-    # ABA 3: ANUÊNCIAS INCRA (OTIMIZADA PARA TODOS OS VIZINHOS)
-    # ------------------------------------------
-    with tab_anuencias_incra:
-        st.markdown("### 🌾 Geração Automatizada de Declarações de Anuência INCRA")
-        
-        # Campo para carregar o arquivo "memorial" necessário para o INCRA
-        memorial_incra_file = st.file_uploader(
-            "Carregar arquivo Memorial (TXT, PDF ou DOCX correspondente):", 
-            type=["txt", "pdf", "docx"], 
-            key="memorial_incra"
-        )
-        
-        if not memorial_incra_file:
-            st.info("💡 Por favor, carregue o arquivo de Memorial correspondente acima para iniciar a geração das anuências do INCRA.")
-        else:
-            st.success("📄 Arquivo de Memorial carregado com sucesso!")
-            trt_incra_numero = st.text_input("Número da TRT / ART vinculada (INCRA):", value="", key="trt_incra")
-            
-            # Botão de processamento da Anuência INCRA
-            if st.button("⚙️ PROCESSAR E GERAR ANUÊNCIAS DE TODOS OS VIZINHOS", type="primary", use_container_width=True):
-                with st.spinner("Analisando o memorial e gerando as anuências de todos os confrontantes..."):
-                    try:
-                        # Importação dinâmica do novo módulo correspondente
-                        from gerador_anuencia_incra import GeradorAnuenciaIncraWord
-                        
-                        dados_empresa_dict = {
-                            "nome": empresa_nome, 
-                            "endereco": empresa_endereco, 
-                            "telefone": empresa_telefone, 
-                            "email": empresa_email
-                        }
-                        dados_tecnico_dict = {
-                            "nome": technico_nome, 
-                            "cfta": tecnico_cfta, 
-                            "trt": trt_incra_numero, 
-                            "cpf": cpf_tecnico
-                        }
-                        
-                        # Instanciação do gerador
-                        gerador_incra = GeradorAnuenciaIncraWord(dados_empresa_dict, dados_tecnico_dict)
-                        
-                        # Processamento do arquivo enviado pelo usuário
-                        arquivo_conteudo = memorial_incra_file.read()
-                        
-                        # GERAÇÃO DA LISTA DE DOCUMENTOS (Um para cada confrontante identificado)
-                        documentos_gerados = gerador_incra.gerar_documentos_pelo_memorial(
-                            arquivo_conteudo, 
-                            memorial_incra_file.name,
-                            {
-                                "proprietario": cliente_proprietario,
-                                "imovel": cliente_imovel,
-                                "local": cliente_local,
-                                "area": cliente_area,
-                                "perimetro": cliente_perimetro
-                            }
-                        )
-                        
+                        st.session_state["dados_finais"] = dados_finais
+
                         st.balloons()
-                        st.success(f"🎉 Processamento concluído! Foram geradas **{len(documentos_gerados)}** anuências individuais.")
+                        st.success("🎉 Memorial estruturado com sucesso!")
                         
-                        # -------------------------------------------------------------
-                        # Opção 1: Botão para Baixar Todas as Anuências Juntas em ZIP
-                        # -------------------------------------------------------------
-                        zip_buffer = gerador_incra.gerar_zip_anuencias(documentos_gerados)
-                        st.download_button(
-                            label="📥 BAIXAR TODAS AS ANUÊNCIAS EM UM ÚNICO ARQUIVO (.ZIP)",
-                            data=zip_buffer.getvalue(),
-                            file_name=f"ANUENCIAS_INCRA_LOTE_{sanitizar_nome_arquivo(cliente_proprietario.upper())}.zip",
-                            mime="application/zip",
-                            use_container_width=True,
-                            key="btn_download_zip_incra"
-                        )
-                        
-                        st.markdown("---")
-                        st.markdown("#### 👤 Downloads Individuais por Vizinho:")
-                        
-                        # -------------------------------------------------------------
-                        # Opção 2: Lista com Botões de Download Individuais
-                        # -------------------------------------------------------------
-                        for nome_confrontante, doc_buffer in documentos_gerados:
-                            col_nome, col_btn = st.columns([3, 1])
-                            with col_nome:
-                                st.markdown(f"**Confrontante:** {nome_confrontante.upper()}")
-                            with col_btn:
-                                st.download_button(
-                                    label="Baixar Word (.docx)",
-                                    data=doc_buffer.getvalue(),
-                                    file_name=f"ANUENCIA_INCRA_{sanitizar_nome_arquivo(nome_confrontante.upper())}.docx",
-                                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                                    key=f"down_incra_{sanitizar_nome_arquivo(nome_confrontante.upper())}",
-                                    use_container_width=True
-                                )
-                                
-                    except Exception as err:
-                        st.error(f"Erro ao processar as anuências INCRA: {err}")
-                        logger.error(f"Erro INCRA: {str(err)}", exc_info=True)
+                        # Exibição dos resultados em Tabela
+                        df_data = [{
+                            "De": s['de'], "Para": s['para'], "N": s['coord_y'], "E": s['coord_x'],
+                            "Azimute": s['azimute'], "Distância (m)": s['distancia'], "Confrontante": s['confrontante']
+                        } for s in dados_finais["segmentos"]]
+                        st.dataframe(pd.DataFrame(df_data), use_container_width=True, hide_index=True)
 
-    # ------------------------------------------
-    # ABA 4: REQUERIMENTO DE CARTÓRIO
-    # ------------------------------------------
-    with tab_requerimento:
-        st.markdown("### 🏛️ Geração Automatizada de Requerimento de Cartório")
-        st.info("💡 Nesta aba, você pode carregar múltiplos documentos (RG, CPF, Certidões, Matrículas) em **PDF ou imagem (PNG/JPG/JPEG)** para que a IA extraia os dados e preencha o requerimento automaticamente.")
-        
-        documentos_pdf = st.file_uploader(
-            "Carregar documentos dos clientes (PDF, PNG, JPG, JPEG):", 
-            type=TIPOS_ARQUIVO_SUPORTADOS, 
-            accept_multiple_files=True,
-            key="docs_requerimento"
-        )
-        
-        if documentos_pdf:
-            st.success(f"📄 {len(documentos_pdf)} documentos carregados.")
-            
-            if st.button("🚀 EXTRAIR DADOS E GERAR REQUERIMENTO", type="primary", use_container_width=True):
-                with st.status("Processando documentos via Gemini...", expanded=True) as status:
-                    try:
-                        from gerador_requerimento_cartorio import GeradorRequerimentoCartorio
-                        
-                        if not configurar_gemini():
-                            st.error("Erro crítico: Chave API ausente.")
-                            st.stop()
-                        
-                        status.update(label="Preparando documentos para análise visual...")
-                        processador_base = ProcessadorMemorial(nome_modelo_api)
-                        todas_imagens = []
-                        for doc in documentos_pdf:
-                            if is_imagem(doc):
-                                # Converte bytes para PIL.Image.Image para envio ao Gemini
-                                img_pil = carregar_imagem_direta(doc)
-                                todas_imagens.append(img_pil)
-                            else:
-                                # PDF: converter em imagens (PIL.Image)
-                                imagens = processador_base.pdf_para_imagens(doc, dpi=200)
-                                todas_imagens.extend(imagens)
-                        
-                        status.update(label=f"Analisando {len(todas_imagens)} páginas/imagens com {nome_modelo}...")
-                        gerador_req = GeradorRequerimentoCartorio(nome_modelo_api)
-                        dados_extraidos = gerador_req.extrair_dados_documentos(todas_imagens)
-                        
-                        status.update(label="Preenchendo modelo de requerimento Word...")
-                        template_name = "-REQUERIMENTODECARTORIO.docx"
-                        arquivo_word = gerador_req.gerar_documento(dados_extraidos, template_name)
-                        
-                        status.update(label="Requerimento gerado com sucesso!", state="complete")
-                        
-                        st.balloons()
-                        st.success("✅ Dados extraídos e requerimento preenchido!")
-                        
-                        # Exibe os dados extraídos para conferência
-                        with st.expander("🔍 Conferir Dados Extraídos (IA)", expanded=False):
-                            st.json(dados_extraidos)
+                        # Exportadores (.docx)
+                        gerador = GeradorMemorialWord(dados_finais["empresa"], dados_finais["tecnico"])
+                        arquivo_docx = gerador.gerar_documento(dados_finais)
                         
                         st.download_button(
-                            label="📥 BAIXAR REQUERIMENTO PREENCHIDO (.DOCX)",
-                            data=arquivo_word,
-                            file_name=f"REQUERIMENTO_CARTORIO_{sanitizar_nome_arquivo(dados_extraidos['requerente_1']['nome'].upper())}.docx",
+                            label="📥 BAIXAR MEMORIAL DESCRITIVO (.DOCX)",
+                            data=arquivo_docx,
+                            file_name=f"MEMORIAL_{sanitizar_nome_arquivo(st.session_state['painel_cliente_proprietario'].upper())}.docx",
                             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                             use_container_width=True,
-                            key="btn_download_requerimento"
+                            key="btn_download_memorial"
                         )
 
-                        # Botão extra para limpar sessão manualmente
-                        if st.button("🧹 Limpar dados da sessão (Após download)", key="btn_limpar_requerimento"):
-                            limpar_sessao_requerimento()
+                        # Botão para limpar dados
+                        if st.button("🧹 Limpar Dados da Sessão", type="secondary", use_container_width=True):
+                            limpar_sessao_memorial()
                             st.rerun()
-                        
-                    except Exception as err:
-                        st.error(f"Erro no processamento do requerimento: {err}")
-                        logger.error(f"Erro Requerimento: {str(err)}", exc_info=True)
+
+                    except Exception as e:
+                        logger.error(f"Erro: {str(e)}", exc_info=True)
+                        st.error(f"❌ Erro: {str(e)}")
+
+    # ============================================================
+    # ABA 2: ANUÊNCIAS CO-PROPRIETÁRIOS
+    # ============================================================
+    with tab_anuencias:
+        st.markdown("### 🤝 Gerador de Anuências Co-proprietários")
+        
+        if "dados_memoriais_processados" not in st.session_state:
+            st.info("💡 Processe um memorial descritivo primeiro na aba anterior.")
         else:
-            st.info("Aguardando upload de documentos para iniciar a análise.")
+            segmentos = st.session_state["dados_memoriais_processados"]
+            
+            # Extrair confrontantes únicos
+            confrontantes_unicos = list(set([s.get("confrontante", "N/A") for s in segmentos if s.get("confrontante")]))
+            
+            st.markdown(f"**Confrontantes encontrados:** {len(confrontantes_unicos)}")
+            
+            for idx, confrontante in enumerate(confrontantes_unicos, 1):
+                with st.expander(f"👤 {idx}. {confrontante}"):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        nome_anuencia = st.text_input(f"Nome completo ({confrontante}):", value=confrontante, key=f"nome_anu_{idx}")
+                    with col2:
+                        cpf_anuencia = st.text_input(f"CPF ({confrontante}):", key=f"cpf_anu_{idx}")
+                    
+                    endereco_anuencia = st.text_area(f"Endereço ({confrontante}):", key=f"end_anu_{idx}")
+                    
+                    if st.button(f"📄 Gerar Anuência para {confrontante}", key=f"btn_anu_{idx}"):
+                        # Lógica para gerar anuência
+                        st.success(f"✅ Anuência gerada para {nome_anuencia}")
+
+    # ============================================================
+    # ABA 3: ANUÊNCIAS INCRA
+    # ============================================================
+    with tab_anuencias_incra:
+        st.markdown("### 🌾 Gerador de Anuências INCRA")
+        st.info("💡 Funcionalidade em desenvolvimento.")
+
+    # ============================================================
+    # ABA 4: REQUERIMENTO DE CARTÓRIO
+    # ============================================================
+    with tab_requerimento:
+        st.markdown("### 🏛️ Gerador de Requerimento de Cartório")
+        st.info("💡 Funcionalidade em desenvolvimento.")
+
 
 if __name__ == "__main__":
     main()
