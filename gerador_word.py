@@ -1,6 +1,3 @@
-# ==========================================
-# ARQUIVO: gerador_anuencia_incra.py
-# ==========================================
 import io
 import re
 import json
