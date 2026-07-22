@@ -683,7 +683,7 @@ def main():
     with tab_requerimento:
         st.markdown("### 🏛️ Gerador de Requerimento de Cartório")
         
-        st.info("💡 Carregue documentos (RG, CPF, Planta INCRA) para gerar o requerimento de cartório.")
+        st.info("💡 Carregue documentos (RG, CPF, Planta INCRA, etc.) em PDF ou imagem para gerar o requerimento de cartório.")
         
         # Abas para entrada de dados
         tab_requerimento_upload, tab_requerimento_manual = st.tabs([
@@ -692,27 +692,52 @@ def main():
         ])
         
         with tab_requerimento_upload:
-            st.markdown("**Carregue as imagens dos documentos:**")
-            imagens_requerimento = st.file_uploader(
-                "Selecione as imagens dos documentos (RG, CPF, Planta INCRA, etc.):",
-                type=["png", "jpg", "jpeg"],
+            st.markdown("**Carregue os documentos (PDF ou Imagens):**")
+            documentos_requerimento = st.file_uploader(
+                "Selecione os documentos (RG, CPF, Planta INCRA, etc.) em PDF ou imagem:",
+                type=["pdf", "png", "jpg", "jpeg"],
                 accept_multiple_files=True,
                 key="upload_requerimento"
             )
             
-            if imagens_requerimento:
-                st.success(f"✅ {len(imagens_requerimento)} imagem(s) carregada(s)")
+            if documentos_requerimento:
+                st.success(f"✅ {len(documentos_requerimento)} documento(s) carregado(s)")
+                
+                # Mostrar tipos de arquivos carregados
+                tipos_arquivos = {}
+                for doc in documentos_requerimento:
+                    ext = doc.name.split('.')[-1].lower()
+                    tipos_arquivos[ext] = tipos_arquivos.get(ext, 0) + 1
+                
+                tipos_str = ", ".join([f"{count} {tipo.upper()}" for tipo, count in tipos_arquivos.items()])
+                st.info(f"📋 Arquivos: {tipos_str}")
                 
                 if st.button("🔍 Extrair Dados dos Documentos", type="primary", use_container_width=True):
                     try:
                         with st.spinner("⏳ Analisando documentos com IA..."):
                             from gerador_requerimento_cartorio import GeradorRequerimentoCartorio
+                            import fitz  # PyMuPDF para PDFs
                             
-                            # Converter imagens para formato aceito pelo Gemini
+                            # Converter documentos para formato aceito pelo Gemini
                             imagens_gemini = []
-                            for img_file in imagens_requerimento:
-                                img = Image.open(io.BytesIO(img_file.getvalue()))
-                                imagens_gemini.append(img)
+                            
+                            for doc_file in documentos_requerimento:
+                                if doc_file.name.lower().endswith('.pdf'):
+                                    # Processar PDF
+                                    pdf_bytes = doc_file.getvalue()
+                                    pdf_document = fitz.open(stream=pdf_bytes, filetype="pdf")
+                                    
+                                    # Converter cada página do PDF para imagem
+                                    for page_num in range(len(pdf_document)):
+                                        page = pdf_document[page_num]
+                                        pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))  # 2x zoom para melhor qualidade
+                                        img_bytes = pix.tobytes("ppm")
+                                        img = Image.open(io.BytesIO(img_bytes))
+                                        imagens_gemini.append(img)
+                                else:
+                                    # Processar imagem
+                                    img = Image.open(io.BytesIO(doc_file.getvalue()))
+                                    imagens_gemini.append(img)
                             
                             # Extrair dados
                             gerador_req = GeradorRequerimentoCartorio("gemini-2.5-flash")
