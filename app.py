@@ -352,11 +352,12 @@ def main():
         tamanho_max = st.slider("Upload Máximo (MB)", 10, 100, int(PROCESSAMENTO_CONFIG.TAMANHO_MAX_PDF_MB), 10)
 
     # Abas Principais
-    tab_memorial, tab_anuencias, tab_anuencias_incra, tab_requerimento = st.tabs([
+    tab_memorial, tab_anuencias, tab_anuencias_incra, tab_requerimento, tab_monitoramento = st.tabs([
         "📝 Memorial Descritivo", 
         "🤝 Anuências Co-proprietários", 
         "🌾 Anuências INCRA",
-        "🏛️ Requerimento de Cartório"
+        "🏛️ Requerimento de Cartório",
+        "📊 Monitoramento do Servidor"
     ])
 
     with tab_memorial:
@@ -854,6 +855,264 @@ def main():
                     except Exception as e:
                         st.error(f"❌ Erro ao gerar requerimento: {str(e)}")
                         logger.error(f"Erro ao gerar requerimento de cartório: {str(e)}", exc_info=True)
+
+    # ============================================================
+    # ABA 5: MONITORAMENTO DO SERVIDOR DE TOPOGRAFIA
+    # ============================================================
+    with tab_monitoramento:
+        st.markdown("### 📊 Monitoramento do Servidor de Topografia")
+        
+        st.info("💡 Monitore as pastas do servidor e identifique pendências de documentação.")
+        
+        # Seção de configuração
+        st.markdown("---")
+        st.markdown("**Configuração do Servidor:**")
+        
+        col_config1, col_config2 = st.columns(2)
+        
+        with col_config1:
+            # Opção de caminho customizado ou padrão
+            usar_caminho_customizado = st.checkbox(
+                "Usar caminho customizado",
+                value=False,
+                key="usar_caminho_custom_servidor"
+            )
+        
+        with col_config2:
+            if usar_caminho_customizado:
+                caminho_servidor = st.text_input(
+                    "Caminho do servidor (ex: \\\\REDE\\SERVIDOR\\TOPOGRAFIA):",
+                    value="",
+                    key="caminho_servidor_custom"
+                )
+            else:
+                # Caminho padrão
+                caminho_servidor = st.text_input(
+                    "Caminho do servidor (ex: \\\\REDE\\SERVIDOR\\TOPOGRAFIA):",
+                    value="\\\\REDE\\SERVIDOR\\TOPOGRAFIA",
+                    key="caminho_servidor_padrao"
+                )
+        
+        # Botão para testar conexão
+        col_teste1, col_teste2 = st.columns([3, 1])
+        
+        with col_teste1:
+            st.write("")  # Espaço vazio
+        
+        with col_teste2:
+            if st.button("🔗 Testar Conexão", type="secondary", use_container_width=True):
+                from analisador_servidor_topografia import testar_conexao_servidor
+                sucesso, mensagem = testar_conexao_servidor(caminho_servidor)
+                if sucesso:
+                    st.success(mensagem)
+                else:
+                    st.error(mensagem)
+        
+        st.markdown("---")
+        
+        # Botão principal para análise
+        if st.button("🔍 Analisar Servidor", type="primary", use_container_width=True):
+            try:
+                with st.spinner("⏳ Analisando servidor... Isso pode levar alguns minutos."):
+                    from analisador_servidor_topografia import AnalisadorServidorTopografia, AnalisadorComGemini
+                    
+                    # Executar análise
+                    analisador = AnalisadorServidorTopografia(caminho_servidor)
+                    resultado_analise = analisador.executar_analise_completa()
+                    
+                    # Armazenar em session_state
+                    st.session_state["resultado_analise_servidor"] = resultado_analise
+                    st.session_state["analisador_servidor"] = analisador
+                    
+                    if resultado_analise["status"] == "sucesso":
+                        st.success("✅ Análise concluída com sucesso!")
+                    else:
+                        st.error(f"❌ Erro na análise: {resultado_analise.get('mensagem', 'Erro desconhecido')}")
+            
+            except Exception as e:
+                st.error(f"❌ Erro ao analisar servidor: {str(e)}")
+                logger.error(f"Erro ao analisar servidor: {str(e)}", exc_info=True)
+        
+        # Exibir resultados se disponível
+        if "resultado_analise_servidor" in st.session_state:
+            resultado = st.session_state["resultado_analise_servidor"]
+            
+            if resultado["status"] == "sucesso":
+                st.markdown("---")
+                st.markdown("## 📊 Resultados da Análise")
+                
+                # Métricas principais
+                col_metricas1, col_metricas2, col_metricas3, col_metricas4 = st.columns(4)
+                
+                with col_metricas1:
+                    st.metric(
+                        "📁 Pastas Analisadas",
+                        resultado["pastas_analisadas"]
+                    )
+                
+                with col_metricas2:
+                    st.metric(
+                        "✅ Pastas Completas",
+                        resultado["pastas_completas"]
+                    )
+                
+                with col_metricas3:
+                    st.metric(
+                        "⚠️ Pastas Incompletas",
+                        resultado["pastas_incompletas"]
+                    )
+                
+                with col_metricas4:
+                    st.metric(
+                        "📊 Taxa de Conclusão",
+                        resultado["taxa_conclusao"]
+                    )
+                
+                st.markdown("---")
+                
+                # Abas de visualização
+                tab_pendencias, tab_json, tab_gemini = st.tabs([
+                    "📋 Pendências Formatadas",
+                    "📊 JSON",
+                    "🤖 Análise com Gemini"
+                ])
+                
+                with tab_pendencias:
+                    analisador = st.session_state.get("analisador_servidor")
+                    if analisador:
+                        texto_pendencias = analisador.obter_pendencias_formatadas()
+                        st.text_area(
+                            "Pendências encontradas:",
+                            value=texto_pendencias,
+                            height=400,
+                            disabled=True,
+                            key="pendencias_texto"
+                        )
+                        
+                        # Botão para download
+                        st.download_button(
+                            label="📥 BAIXAR RELATÓRIO DE PENDÊNCIAS (TXT)",
+                            data=texto_pendencias,
+                            file_name=f"PENDENCIAS_SERVIDOR_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
+                            mime="text/plain",
+                            use_container_width=True
+                        )
+                
+                with tab_json:
+                    analisador = st.session_state.get("analisador_servidor")
+                    if analisador:
+                        json_pendencias = analisador.obter_pendencias_json()
+                        st.json(json.loads(json_pendencias))
+                        
+                        # Botão para download
+                        st.download_button(
+                            label="📥 BAIXAR RELATÓRIO (JSON)",
+                            data=json_pendencias,
+                            file_name=f"PENDENCIAS_SERVIDOR_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                            mime="application/json",
+                            use_container_width=True
+                        )
+                
+                with tab_gemini:
+                    st.markdown("**Análise Inteligente com Gemini 3.5 Flash:**")
+                    
+                    if st.button("🤖 Gerar Análise com Gemini", type="primary", use_container_width=True):
+                        try:
+                            with st.spinner("⏳ Gerando análise com Gemini..."):
+                                from analisador_servidor_topografia import AnalisadorComGemini
+                                
+                                # Obter chave da API
+                                api_key = os.environ.get("GEMINI_API_KEY")
+                                if not api_key:
+                                    st.error("❌ Chave da API Gemini não configurada")
+                                else:
+                                    analisador_gemini = AnalisadorComGemini(api_key)
+                                    analise_gemini = analisador_gemini.analisar_com_gemini(resultado)
+                                    
+                                    st.markdown("### 📊 Análise Inteligente")
+                                    st.markdown(analise_gemini)
+                                    
+                                    # Botão para copiar
+                                    st.text_area(
+                                        "Análise em texto:",
+                                        value=analise_gemini,
+                                        height=300,
+                                        disabled=True,
+                                        key="analise_gemini_texto"
+                                    )
+                        
+                        except Exception as e:
+                            st.error(f"❌ Erro ao gerar análise: {str(e)}")
+                            logger.error(f"Erro ao gerar análise com Gemini: {str(e)}", exc_info=True)
+                
+                st.markdown("---")
+                
+                # Detalhes de pendências
+                if resultado["pastas_incompletas"] > 0:
+                    st.markdown("## 📋 Detalhes das Pendências")
+                    
+                    # Filtros
+                    col_filtro1, col_filtro2 = st.columns(2)
+                    
+                    with col_filtro1:
+                        ano_filtro = st.selectbox(
+                            "Filtrar por ano:",
+                            options=["Todos"] + sorted(list(set([p["ano"] for p in resultado["pendencias"]]))),
+                            key="filtro_ano_pendencias"
+                        )
+                    
+                    with col_filtro2:
+                        percentual_filtro = st.slider(
+                            "Mostrar pastas com até X% de conclusão:",
+                            0, 100, 100,
+                            key="filtro_percentual_pendencias"
+                        )
+                    
+                    # Aplicar filtros
+                    pendencias_filtradas = resultado["pendencias"]
+                    
+                    if ano_filtro != "Todos":
+                        pendencias_filtradas = [p for p in pendencias_filtradas if p["ano"] == int(ano_filtro)]
+                    
+                    pendencias_filtradas = [p for p in pendencias_filtradas if p["percentual_conclusao"] <= percentual_filtro]
+                    
+                    # Exibir em tabela
+                    if pendencias_filtradas:
+                        df_pendencias = pd.DataFrame([
+                            {
+                                "Ano": p["ano"],
+                                "Pasta": p["pasta"],
+                                "Conclusão": f"{p['percentual_conclusao']}%",
+                                "Faltam": len(p["faltam"]),
+                                "Encontrados": len(p["encontrados"])
+                            }
+                            for p in pendencias_filtradas
+                        ])
+                        
+                        st.dataframe(df_pendencias, use_container_width=True)
+                        
+                        # Expandir para ver detalhes
+                        st.markdown("### 🔍 Detalhes Completos")
+                        
+                        for idx, pendencia in enumerate(pendencias_filtradas):
+                            with st.expander(f"📅 {pendencia['ano']} - {pendencia['pasta']} ({pendencia['percentual_conclusao']}%)"):
+                                col_det1, col_det2 = st.columns(2)
+                                
+                                with col_det1:
+                                    st.markdown("**✅ Encontrados:**")
+                                    for item in pendencia["encontrados"]:
+                                        st.write(item)
+                                
+                                with col_det2:
+                                    st.markdown("**❌ Faltam:**")
+                                    for item in pendencia["faltam"]:
+                                        st.write(item)
+                                
+                                st.markdown(f"**📍 Caminho:** `{pendencia['caminho']}`")
+                    else:
+                        st.info("ℹ️ Nenhuma pendência encontrada com os filtros selecionados")
+            else:
+                st.error(f"❌ Erro: {resultado.get('mensagem', 'Erro desconhecido')}")
 
 
 if __name__ == "__main__":
