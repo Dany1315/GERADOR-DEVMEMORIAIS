@@ -597,14 +597,14 @@ def main():
     # ============================================================
     with tab_anuencias_incra:
         st.markdown("### 🌾 Gerador de Anuências INCRA")
-        st.info("💡 Funcionalidade em desenvolvimento.")
+        # Funcionalidade INCRA removida conforme solicitado
 
     # ============================================================
     # ABA 4: REQUERIMENTO DE CARTÓRIO
     # ============================================================
     with tab_requerimento:
         st.markdown("### 🏛️ Gerador de Requerimento de Cartório")
-        st.info("💡 Funcionalidade em desenvolvimento.")
+        # Funcionalidade Cartório removida conforme solicitado
 
 
 if __name__ == "__main__":
