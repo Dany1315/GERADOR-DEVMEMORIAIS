@@ -2,6 +2,7 @@
 import io
 import logging
 import time
+import os
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 import json
@@ -23,7 +24,7 @@ from utils import (
     gerar_relatorio_processamento, sanitizar_nome_arquivo, formatar_tempo_decorrido
 )
 from processador import ProcessadorMemorial
-from gerador_word import GeradorAnuenciaIncraWord
+from gerador_anuencia_incra import GeradorAnuenciaIncraWord
 from gerador_memorial_word import GeradorMemorialWord
 from gerador_anuencias import GeradorAnuenciaWord
 
@@ -588,7 +589,7 @@ def main():
                                 st.success(f"✅ Anuência gerada para {nome_anuencia}")
                             except Exception as e:
                                 st.error(f"❌ Erro ao gerar anuência: {str(e)}")
-                                logger.error(f"Erro ao gerar anuência para {nome_anuencia}: {str(e)}")}
+                                logger.error(f"Erro ao gerar anuência para {nome_anuencia}: {str(e)}")
             else:
                 st.info("ℹ️ Nenhum confrontante foi encontrado.")
 
@@ -597,14 +598,217 @@ def main():
     # ============================================================
     with tab_anuencias_incra:
         st.markdown("### 🌾 Gerador de Anuências INCRA")
-        st.info("💡 Funcionalidade em desenvolvimento.")
+        
+        st.info("💡 Carregue um memorial descritivo na aba anterior para gerar anuências INCRA.")
+        
+        if "dados_finais" not in st.session_state:
+            st.warning("⚠️ Processe um memorial descritivo primeiro na aba 'Memorial Descritivo'.")
+        else:
+            st.markdown("---")
+            st.markdown("**Gerar Anuências INCRA a partir do Memorial Descritivo**")
+            
+            if st.button("🌾 Gerar Anuências INCRA", type="primary", use_container_width=True):
+                try:
+                    with st.spinner("⏳ Gerando anuências INCRA... Isso pode levar alguns minutos."):
+                        # Preparar dados para o gerador INCRA
+                        dados_projeto = {
+                            "proprietario": st.session_state["painel_cliente_proprietario"],
+                            "cpf_proprietario": st.session_state.get("painel_cpf_tecnico", "092.653.737-76"),
+                            "local": st.session_state["painel_cliente_local"],
+                            "imovel": st.session_state["painel_cliente_imovel"],
+                            "area": st.session_state["painel_cliente_area"],
+                            "perimetro": st.session_state["painel_cliente_perimetro"],
+                            "comarca": st.session_state["painel_cliente_comarca"],
+                            "matricula": st.session_state["painel_cliente_matricula"],
+                        }
+                        
+                        # Usar o gerador INCRA
+                        gerador_incra = GeradorAnuenciaIncraWord(
+                            st.session_state["dados_finais"]["empresa"],
+                            st.session_state["dados_finais"]["tecnico"]
+                        )
+                        
+                        # Se houver arquivo de memorial processado, usar; caso contrário, usar dados estruturados
+                        # Aqui assumimos que temos dados já processados
+                        documentos_incra = gerador_incra.gerar_documentos_pelo_memorial(
+                            conteudo_arquivo=b"",  # Será substituído por dados estruturados
+                            nome_arquivo="memorial.docx",
+                            dados_projeto=dados_projeto
+                        )
+                        
+                        # Gerar ZIP com os documentos
+                        zip_buffer = GeradorAnuenciaIncraWord.gerar_zip_anuencias(
+                            documentos_incra,
+                            prefixo_arquivo="ANUENCIA_INCRA"
+                        )
+                        
+                        st.download_button(
+                            label="📥 BAIXAR ANUÊNCIAS INCRA (ZIP)",
+                            data=zip_buffer.getvalue(),
+                            file_name=f"ANUENCIAS_INCRA_{sanitizar_nome_arquivo(st.session_state['painel_cliente_proprietario'].upper())}.zip",
+                            mime="application/zip",
+                            use_container_width=True,
+                            key="download_incra_zip"
+                        )
+                        
+                        st.success(f"✅ {len(documentos_incra)} anuência(s) INCRA gerada(s) com sucesso!")
+                        
+                except Exception as e:
+                    st.error(f"❌ Erro ao gerar anuências INCRA: {str(e)}")
+                    logger.error(f"Erro ao gerar anuências INCRA: {str(e)}", exc_info=True)
 
     # ============================================================
     # ABA 4: REQUERIMENTO DE CARTÓRIO
     # ============================================================
     with tab_requerimento:
         st.markdown("### 🏛️ Gerador de Requerimento de Cartório")
-        st.info("💡 Funcionalidade em desenvolvimento.")
+        
+        st.info("💡 Carregue documentos (RG, CPF, Planta INCRA) para gerar o requerimento de cartório.")
+        
+        # Abas para entrada de dados
+        tab_requerimento_upload, tab_requerimento_manual = st.tabs([
+            "📁 Upload de Documentos",
+            "📝 Preenchimento Manual"
+        ])
+        
+        with tab_requerimento_upload:
+            st.markdown("**Carregue as imagens dos documentos:**")
+            imagens_requerimento = st.file_uploader(
+                "Selecione as imagens dos documentos (RG, CPF, Planta INCRA, etc.):",
+                type=["png", "jpg", "jpeg"],
+                accept_multiple_files=True,
+                key="upload_requerimento"
+            )
+            
+            if imagens_requerimento:
+                st.success(f"✅ {len(imagens_requerimento)} imagem(s) carregada(s)")
+                
+                if st.button("🔍 Extrair Dados dos Documentos", type="primary", use_container_width=True):
+                    try:
+                        with st.spinner("⏳ Analisando documentos com IA..."):
+                            from gerador_requerimento_cartorio import GeradorRequerimentoCartorio
+                            
+                            # Converter imagens para formato aceito pelo Gemini
+                            imagens_gemini = []
+                            for img_file in imagens_requerimento:
+                                img = Image.open(io.BytesIO(img_file.getvalue()))
+                                imagens_gemini.append(img)
+                            
+                            # Extrair dados
+                            gerador_req = GeradorRequerimentoCartorio("gemini-2.5-flash")
+                            dados_extraidos = gerador_req.extrair_dados_documentos(imagens_gemini)
+                            
+                            # Armazenar em session_state
+                            st.session_state["dados_extraidos_requerimento"] = dados_extraidos
+                            
+                            st.success("✅ Dados extraídos com sucesso!")
+                            st.json(dados_extraidos)
+                    except Exception as e:
+                        st.error(f"❌ Erro ao extrair dados: {str(e)}")
+                        logger.error(f"Erro ao extrair dados do requerimento: {str(e)}", exc_info=True)
+        
+        with tab_requerimento_manual:
+            st.markdown("**Preencha os dados manualmente:**")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown("**Requerente 1 (Proprietário):**")
+                nome_req1 = st.text_input("Nome Completo", key="manual_nome_req1")
+                cpf_req1 = st.text_input("CPF", key="manual_cpf_req1")
+                rg_req1 = st.text_input("RG", key="manual_rg_req1")
+                profissao_req1 = st.text_input("Profissão", key="manual_prof_req1")
+            
+            with col2:
+                st.markdown("**Requerente 2 (Cônjuge - Opcional):**")
+                nome_req2 = st.text_input("Nome Completo", key="manual_nome_req2")
+                cpf_req2 = st.text_input("CPF", key="manual_cpf_req2")
+                rg_req2 = st.text_input("RG", key="manual_rg_req2")
+                profissao_req2 = st.text_input("Profissão", key="manual_prof_req2")
+            
+            st.markdown("---")
+            st.markdown("**Dados do Imóvel:**")
+            
+            col_imovel1, col_imovel2 = st.columns(2)
+            with col_imovel1:
+                nome_imovel = st.text_input("Nome do Imóvel", key="manual_nome_imovel")
+                area_imovel = st.text_input("Área (hectares)", key="manual_area_imovel")
+                matricula_imovel = st.text_input("Matrícula", key="manual_matricula_imovel")
+            
+            with col_imovel2:
+                municipio_imovel = st.text_input("Município", key="manual_municipio_imovel")
+                comarca_imovel = st.text_input("Comarca", key="manual_comarca_imovel")
+                trt_imovel = st.text_input("TRT", key="manual_trt_imovel")
+            
+            if st.button("💾 Salvar Dados Manualmente", type="primary", use_container_width=True):
+                dados_manual = {
+                    "requerente_1": {
+                        "nome": nome_req1,
+                        "cpf": cpf_req1,
+                        "rg": rg_req1,
+                        "profissao": profissao_req1,
+                    },
+                    "requerente_2": {
+                        "nome": nome_req2 or "XXXXXX",
+                        "cpf": cpf_req2 or "XXXXXX",
+                        "rg": rg_req2 or "XXXXXX",
+                        "profissao": profissao_req2 or "XXXXXX",
+                    },
+                    "imovel": {
+                        "nome": nome_imovel,
+                        "area_registrada": area_imovel,
+                        "matricula": matricula_imovel,
+                        "municipio_imovel": municipio_imovel,
+                        "comarca_imovel": comarca_imovel,
+                        "trt_numero": trt_imovel,
+                    },
+                    "comarca": comarca_imovel,
+                    "municipio_cliente": municipio_imovel,
+                }
+                st.session_state["dados_extraidos_requerimento"] = dados_manual
+                st.success("✅ Dados salvos com sucesso!")
+        
+        # Seção de geração do requerimento
+        st.markdown("---")
+        st.markdown("**Gerar Requerimento de Cartório:**")
+        
+        if "dados_extraidos_requerimento" not in st.session_state:
+            st.info("💡 Extraia ou preencha os dados acima para gerar o requerimento.")
+        else:
+            # Buscar template
+            template_path = os.path.join(os.path.dirname(__file__), "template_requerimento.docx")
+            
+            if not os.path.exists(template_path):
+                st.warning(f"⚠️ Template não encontrado em {template_path}. Verifique se o arquivo 'template_requerimento.docx' existe.")
+            else:
+                if st.button("🏛️ Gerar Requerimento de Cartório", type="primary", use_container_width=True):
+                    try:
+                        with st.spinner("⏳ Gerando requerimento..."):
+                            from gerador_requerimento_cartorio import GeradorRequerimentoCartorio
+                            
+                            gerador_req = GeradorRequerimentoCartorio("gemini-2.5-flash")
+                            documento_bytes = gerador_req.gerar_documento(
+                                st.session_state["dados_extraidos_requerimento"],
+                                template_path
+                            )
+                            
+                            st.download_button(
+                                label="📥 BAIXAR REQUERIMENTO DE CARTÓRIO",
+                                data=documento_bytes,
+                                file_name=f"REQUERIMENTO_CARTORIO_{sanitizar_nome_arquivo(st.session_state['dados_extraidos_requerimento'].get('requerente_1', {}).get('nome', 'REQUERENTE').upper())}.docx",
+                                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                use_container_width=True,
+                                key="download_requerimento"
+                            )
+                            
+                            st.success("✅ Requerimento de cartório gerado com sucesso!")
+                            
+                            # Botão para limpar dados
+                            if st.button("🧹 Limpar Dados da Sessão", type="secondary", use_container_width=True):
+                                limpar_sessao_requerimento()
+                                st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Erro ao gerar requerimento: {str(e)}")
+                        logger.error(f"Erro ao gerar requerimento de cartório: {str(e)}", exc_info=True)
 
 
 if __name__ == "__main__":
