@@ -599,18 +599,25 @@ def main():
     with tab_anuencias_incra:
         st.markdown("### 🌾 Gerador de Anuências INCRA")
         
-        st.info("💡 Carregue um memorial descritivo na aba anterior para gerar anuências INCRA.")
+        st.info("💡 Carregue um PDF do memorial INCRA para gerar as anuências automaticamente.")
         
-        if "dados_finais" not in st.session_state:
-            st.warning("⚠️ Processe um memorial descritivo primeiro na aba 'Memorial Descritivo'.")
-        else:
-            st.markdown("---")
-            st.markdown("**Gerar Anuências INCRA a partir do Memorial Descritivo**")
+        # Upload do memorial INCRA em PDF
+        pdf_memorial_incra = st.file_uploader(
+            "Carregue o PDF do Memorial INCRA:",
+            type=["pdf"],
+            key="upload_memorial_incra"
+        )
+        
+        if pdf_memorial_incra:
+            st.success(f"✅ PDF carregado: `{pdf_memorial_incra.name}`")
             
             if st.button("🌾 Gerar Anuências INCRA", type="primary", use_container_width=True):
                 try:
-                    with st.spinner("⏳ Gerando anuências INCRA... Isso pode levar alguns minutos."):
-                        # Preparar dados para o gerador INCRA
+                    with st.spinner("⏳ Analisando memorial INCRA e gerando anuências... Isso pode levar alguns minutos."):
+                        # Ler o conteúdo do PDF
+                        conteudo_pdf = pdf_memorial_incra.getvalue()
+                        
+                        # Preparar dados do projeto
                         dados_projeto = {
                             "proprietario": st.session_state["painel_cliente_proprietario"],
                             "cpf_proprietario": st.session_state.get("painel_cpf_tecnico", "092.653.737-76"),
@@ -624,15 +631,24 @@ def main():
                         
                         # Usar o gerador INCRA
                         gerador_incra = GeradorAnuenciaIncraWord(
-                            st.session_state["dados_finais"]["empresa"],
-                            st.session_state["dados_finais"]["tecnico"]
+                            {
+                                "nome": st.session_state["painel_empresa_nome"],
+                                "endereco": st.session_state["painel_empresa_endereco"],
+                                "telefone": st.session_state["painel_empresa_telefone"],
+                                "email": st.session_state["painel_empresa_email"],
+                            },
+                            {
+                                "nome": st.session_state["painel_tecnico_nome"],
+                                "cfta": st.session_state["painel_tecnico_cfta"],
+                                "cpf": st.session_state["painel_cpf_tecnico"],
+                                "trt": st.session_state["painel_tecnico_trt"],
+                            }
                         )
                         
-                        # Se houver arquivo de memorial processado, usar; caso contrário, usar dados estruturados
-                        # Aqui assumimos que temos dados já processados
+                        # Gerar documentos a partir do PDF do memorial INCRA
                         documentos_incra = gerador_incra.gerar_documentos_pelo_memorial(
-                            conteudo_arquivo=b"",  # Será substituído por dados estruturados
-                            nome_arquivo="memorial.docx",
+                            conteudo_arquivo=conteudo_pdf,
+                            nome_arquivo=pdf_memorial_incra.name,
                             dados_projeto=dados_projeto
                         )
                         
@@ -652,10 +668,14 @@ def main():
                         )
                         
                         st.success(f"✅ {len(documentos_incra)} anuência(s) INCRA gerada(s) com sucesso!")
+                        st.info(f"ℹ️ O sistema identificou {len(documentos_incra)} confrontante(s) no memorial.")
                         
                 except Exception as e:
                     st.error(f"❌ Erro ao gerar anuências INCRA: {str(e)}")
                     logger.error(f"Erro ao gerar anuências INCRA: {str(e)}", exc_info=True)
+        else:
+            st.info("💡 Carregue um arquivo PDF do memorial INCRA para começar.")
+
 
     # ============================================================
     # ABA 4: REQUERIMENTO DE CARTÓRIO

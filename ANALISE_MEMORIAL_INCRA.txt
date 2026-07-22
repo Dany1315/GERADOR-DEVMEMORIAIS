@@ -1,0 +1,23 @@
+Análise do arquivo /home/ubuntu/upload/memorial.pdf em 22/07/2026.
+
+Resumo visual do documento:
+- PDF de 6 páginas.
+- É um memorial descritivo do SIGEF/INCRA, não o memorial gerado internamente pela aba principal do sistema.
+- Contém duas parcelas/partes do imóvel: 'Sitio Izoton Ii - Parte 2' e 'Sitio Izoton Ii - Parte 1'.
+- Proprietário identificado visualmente: AGOSTINHO IZOTON.
+- Matrículas visíveis: 4433 (2 de 2) e 4433 (1 de 2).
+- Município/UF: Vila Valério-ES.
+- Responsável técnico: REGIS CAMPO DA SILVA.
+- Código de credenciamento: G1D.
+- O documento contém tabelas de vértices, azimutes, distâncias e confrontações em múltiplas páginas.
+- Os confrontantes aparecem na coluna 'Confrontações', incluindo exemplos visíveis como Estrada Municipal, Sitio Alegre / Docar Passamani, Sitio Boa Vista / Oswaldo Lagassi, Sitio Sete Quedas / Elias Moro / Luiz Valentim Moro, Sitio Moro / Alea Moro e Fazenda Maria Bonita / Evaldo Kuffler.
+- Há uma página de certificação SIGEF.
+
+Conclusão funcional:
+- A aba 'Anuências INCRA' deve aceitar upload direto desse PDF do memorial INCRA.
+- O fluxo correto é: carregar PDF -> enviar o texto do PDF para análise por IA -> estruturar confrontantes e vértices -> gerar as anuências INCRA.
+- Não deve depender do memorial gerado na aba 'Memorial Descritivo'.
+- O módulo gerador_anuencia_incra.py já possui método gerar_documentos_pelo_memorial(conteudo_arquivo, nome_arquivo, dados_projeto), adequado para esse fluxo.
+- Portanto a correção principal deve ser feita no app.py, restaurando a aba INCRA para upload de PDF e chamada direta ao gerador com os bytes do arquivo enviado.
+
+Fonte: visualização direta do PDF memorial.pdf.
