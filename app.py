@@ -820,10 +820,10 @@ def main():
             st.info("💡 Extraia ou preencha os dados acima para gerar o requerimento.")
         else:
             # Buscar template
-            template_path = os.path.join(os.path.dirname(__file__), "template_requerimento.docx")
+            template_path = os.path.join(os.path.dirname(__file__), "-REQUERIMENTODECARTORIO.docx")
             
             if not os.path.exists(template_path):
-                st.warning(f"⚠️ Template não encontrado em {template_path}. Verifique se o arquivo 'template_requerimento.docx' existe.")
+                st.warning(f"⚠️ Template não encontrado em {template_path}. Verifique se o arquivo '-REQUERIMENTODECARTORIO.docx' existe.")
             else:
                 if st.button("🏛️ Gerar Requerimento de Cartório", type="primary", use_container_width=True):
                     try:
